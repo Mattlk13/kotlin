@@ -104,12 +104,10 @@ class AndroidComponentRegistrar : ComponentRegistrar {
     companion object {
         fun registerParcelExtensions(project: Project) {
             ExpressionCodegenExtension.registerExtension(project, ParcelableCodegenExtension())
-            @Suppress("DEPRECATION_ERROR")
-            org.jetbrains.kotlin.backend.common.extensions.PureIrGenerationExtension.registerExtension(
-                project, ParcelableIrGeneratorExtension()
-            )
+            IrGenerationExtension.registerExtension(project, ParcelableIrGeneratorExtension())
             SyntheticResolveExtension.registerExtension(project, ParcelableResolveExtension())
             ClassBuilderInterceptorExtension.registerExtension(project, ParcelableClinitClassBuilderInterceptorExtension())
+            StorageComponentContainerContributor.registerExtension(project, ParcelizeDeclarationCheckerComponentContainerContributor())
         }
 
         private fun parseVariant(s: String): AndroidVariant? {
@@ -171,10 +169,19 @@ class AndroidExtensionPropertiesComponentContainerContributor : StorageComponent
     override fun registerModuleComponents(
         container: StorageComponentContainer, platform: TargetPlatform, moduleDescriptor: ModuleDescriptor
     ) {
-        if (!platform.isJvm()) return
+        if (platform.isJvm()) {
+            container.useInstance(AndroidExtensionPropertiesCallChecker())
+        }
+    }
+}
 
-        container.useInstance(AndroidExtensionPropertiesCallChecker())
-        container.useInstance(ParcelableDeclarationChecker())
-        container.useInstance(ParcelableAnnotationChecker())
+class ParcelizeDeclarationCheckerComponentContainerContributor : StorageComponentContainerContributor {
+    override fun registerModuleComponents(
+        container: StorageComponentContainer, platform: TargetPlatform, moduleDescriptor: ModuleDescriptor
+    ) {
+        if (platform.isJvm()) {
+            container.useInstance(ParcelableDeclarationChecker())
+            container.useInstance(ParcelableAnnotationChecker())
+        }
     }
 }

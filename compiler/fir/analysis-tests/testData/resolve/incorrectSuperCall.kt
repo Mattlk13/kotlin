@@ -11,11 +11,11 @@ open class B {
     open fun baz() {}
 }
 
-class C : A, B() {
+<!MANY_IMPL_MEMBER_NOT_IMPLEMENTED!>class C<!> : A, B() {
     override fun foo() {
         super.foo()
 
-        super.<!AMBIGUITY!>bar<!>() // should be ambiguity (NB: really we should have overridden bar in C)
+        super.<!UNRESOLVED_REFERENCE!>bar<!>() // should be ambiguity (NB: really we should have overridden bar in C)
 
         super.baz() // Ok
         baz()       // Ok

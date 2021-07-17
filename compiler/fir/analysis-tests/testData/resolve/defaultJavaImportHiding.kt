@@ -1,3 +1,4 @@
+// FULL_JDK
 // FILE: util/HashMap.java
 
 package util;
@@ -20,7 +21,7 @@ class LinkedList<T> : java.util.LinkedList<T>()
 
 package util
 
-class HashSet<T> : java.util.HashSet<T>
+class HashSet<T> : <!SUPERTYPE_NOT_INITIALIZED!>java.util.HashSet<T><!>
 
 // FILE: main.kt
 

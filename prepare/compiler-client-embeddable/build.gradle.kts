@@ -1,11 +1,16 @@
 description = "Kotlin compiler client embeddable"
 
 plugins {
-    maven
     kotlin("jvm")
 }
 
-val testCompilerClasspath by configurations.creating
+val testCompilerClasspath by configurations.creating {
+    attributes {
+        attribute(Usage.USAGE_ATTRIBUTE, objects.named(Usage.JAVA_RUNTIME))
+        attribute(Category.CATEGORY_ATTRIBUTE, objects.named(Category.LIBRARY))
+    }
+}
+
 val testCompilationClasspath by configurations.creating
 
 dependencies {
@@ -22,6 +27,7 @@ dependencies {
     testCompile(project(":kotlin-test:kotlin-test-jvm"))
     testCompile(project(":kotlin-test:kotlin-test-junit"))
     testCompilerClasspath(project(":kotlin-compiler"))
+    testCompilerClasspath(commonDep("org.jetbrains.intellij.deps", "trove4j"))
     testCompilerClasspath(project(":kotlin-scripting-compiler"))
     testCompilerClasspath(project(":kotlin-daemon"))
     testCompilationClasspath(kotlinStdlib())
@@ -34,10 +40,12 @@ sourceSets {
 }
 
 projectTest {
+    systemProperty("kotlin.test.script.classpath", testSourceSet.output.classesDirs.joinToString(File.pathSeparator))
+    val testCompilerClasspathProvider = project.provider { testCompilerClasspath.asPath }
+    val testCompilationClasspathProvider = project.provider { testCompilationClasspath.asPath }
     doFirst {
-        systemProperty("kotlin.test.script.classpath", testSourceSet.output.classesDirs.joinToString(File.pathSeparator))
-        systemProperty("compilerClasspath", testCompilerClasspath.asPath)
-        systemProperty("compilationClasspath", testCompilationClasspath.asPath)
+        systemProperty("compilerClasspath", testCompilerClasspathProvider.get())
+        systemProperty("compilationClasspath", testCompilationClasspathProvider.get())
     }
 }
 

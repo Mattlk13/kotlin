@@ -347,127 +347,127 @@ class ArraysTest {
 
 
 
-    @Test fun min() {
-        expect(null, { arrayOf<Int>().min() })
-        expect(1, { arrayOf(1).min() })
-        expect(2, { arrayOf(2, 3).min() })
-        expect(2000000000000, { arrayOf(3000000000000, 2000000000000).min() })
-        expect('a', { arrayOf('a', 'b').min() })
-        expect("a", { arrayOf("a", "b").min() })
+    @Test fun minOrNull() {
+        expect(null, { arrayOf<Int>().minOrNull() })
+        expect(1, { arrayOf(1).minOrNull() })
+        expect(2, { arrayOf(2, 3).minOrNull() })
+        expect(2000000000000, { arrayOf(3000000000000, 2000000000000).minOrNull() })
+        expect('a', { arrayOf('a', 'b').minOrNull() })
+        expect("a", { arrayOf("a", "b").minOrNull() })
     }
 
-    @Test fun minInPrimitiveArrays() {
-        expect(null, { intArrayOf().min() })
-        expect(1, { intArrayOf(1).min() })
-        expect(2, { intArrayOf(2, 3).min() })
-        expect(2000000000000, { longArrayOf(3000000000000, 2000000000000).min() })
-        expect(1, { byteArrayOf(1, 3, 2).min() })
-        expect(2, { shortArrayOf(3, 2).min() })
-        expect(2.0F, { floatArrayOf(3.0F, 2.0F).min() })
-        expect(2.0, { doubleArrayOf(2.0, 3.0).min() })
-        expect('a', { charArrayOf('a', 'b').min() })
+    @Test fun minOrNullInPrimitiveArrays() {
+        expect(null, { intArrayOf().minOrNull() })
+        expect(1, { intArrayOf(1).minOrNull() })
+        expect(2, { intArrayOf(2, 3).minOrNull() })
+        expect(2000000000000, { longArrayOf(3000000000000, 2000000000000).minOrNull() })
+        expect(1, { byteArrayOf(1, 3, 2).minOrNull() })
+        expect(2, { shortArrayOf(3, 2).minOrNull() })
+        expect(2.0F, { floatArrayOf(3.0F, 2.0F).minOrNull() })
+        expect(2.0, { doubleArrayOf(2.0, 3.0).minOrNull() })
+        expect('a', { charArrayOf('a', 'b').minOrNull() })
     }
 
-    @Test fun max() {
-        expect(null, { arrayOf<Int>().max() })
-        expect(1, { arrayOf(1).max() })
-        expect(3, { arrayOf(2, 3).max() })
-        expect(3000000000000, { arrayOf(3000000000000, 2000000000000).max() })
-        expect('b', { arrayOf('a', 'b').max() })
-        expect("b", { arrayOf("a", "b").max() })
+    @Test fun maxOrNull() {
+        expect(null, { arrayOf<Int>().maxOrNull() })
+        expect(1, { arrayOf(1).maxOrNull() })
+        expect(3, { arrayOf(2, 3).maxOrNull() })
+        expect(3000000000000, { arrayOf(3000000000000, 2000000000000).maxOrNull() })
+        expect('b', { arrayOf('a', 'b').maxOrNull() })
+        expect("b", { arrayOf("a", "b").maxOrNull() })
     }
 
-    @Test fun maxInPrimitiveArrays() {
-        expect(null, { intArrayOf().max() })
-        expect(1, { intArrayOf(1).max() })
-        expect(3, { intArrayOf(2, 3).max() })
-        expect(3000000000000, { longArrayOf(3000000000000, 2000000000000).max() })
-        expect(3, { byteArrayOf(1, 3, 2).max() })
-        expect(3, { shortArrayOf(3, 2).max() })
-        expect(3.0F, { floatArrayOf(3.0F, 2.0F).max() })
-        expect(3.0, { doubleArrayOf(2.0, 3.0).max() })
-        expect('b', { charArrayOf('a', 'b').max() })
+    @Test fun maxOrNullInPrimitiveArrays() {
+        expect(null, { intArrayOf().maxOrNull() })
+        expect(1, { intArrayOf(1).maxOrNull() })
+        expect(3, { intArrayOf(2, 3).maxOrNull() })
+        expect(3000000000000, { longArrayOf(3000000000000, 2000000000000).maxOrNull() })
+        expect(3, { byteArrayOf(1, 3, 2).maxOrNull() })
+        expect(3, { shortArrayOf(3, 2).maxOrNull() })
+        expect(3.0F, { floatArrayOf(3.0F, 2.0F).maxOrNull() })
+        expect(3.0, { doubleArrayOf(2.0, 3.0).maxOrNull() })
+        expect('b', { charArrayOf('a', 'b').maxOrNull() })
     }
 
-    @Test fun minWith() {
-        assertEquals(null, arrayOf<Int>().minWith(naturalOrder()) )
-        assertEquals("a", arrayOf("a", "B").minWith(STRING_CASE_INSENSITIVE_ORDER))
+    @Test fun minWithOrNull() {
+        assertEquals(null, arrayOf<Int>().minWithOrNull(naturalOrder()))
+        assertEquals("a", arrayOf("a", "B").minWithOrNull(STRING_CASE_INSENSITIVE_ORDER))
     }
 
-    @Test fun minWithInPrimitiveArrays() {
-        expect(null, { intArrayOf().minWith(naturalOrder()) })
-        expect(1, { intArrayOf(1).minWith(naturalOrder()) })
-        expect(4, { intArrayOf(2, 3, 4).minWith(compareBy { it % 4 }) })
+    @Test fun minWithOrNullInPrimitiveArrays() {
+        expect(null, { intArrayOf().minWithOrNull(naturalOrder()) })
+        expect(1, { intArrayOf(1).minWithOrNull(naturalOrder()) })
+        expect(4, { intArrayOf(2, 3, 4).minWithOrNull(compareBy { it % 4 }) })
     }
 
-    @Test fun maxWith() {
-        assertEquals(null, arrayOf<Int>().maxWith(naturalOrder()) )
-        assertEquals("B", arrayOf("a", "B").maxWith(STRING_CASE_INSENSITIVE_ORDER))
+    @Test fun maxWithOrNull() {
+        assertEquals(null, arrayOf<Int>().maxWithOrNull(naturalOrder()))
+        assertEquals("B", arrayOf("a", "B").maxWithOrNull(STRING_CASE_INSENSITIVE_ORDER))
     }
 
-    @Test fun maxWithInPrimitiveArrays() {
-        expect(null, { intArrayOf().maxWith(naturalOrder()) })
-        expect(1, { intArrayOf(1).maxWith(naturalOrder()) })
-        expect(-4, { intArrayOf(2, 3, -4).maxWith(compareBy { it*it }) })
+    @Test fun maxWithOrNullInPrimitiveArrays() {
+        expect(null, { intArrayOf().maxWithOrNull(naturalOrder()) })
+        expect(1, { intArrayOf(1).maxWithOrNull(naturalOrder()) })
+        expect(-4, { intArrayOf(2, 3, -4).maxWithOrNull(compareBy { it * it }) })
     }
 
-    @Test fun minBy() {
-        expect(null, { arrayOf<Int>().minBy { it } })
-        expect(1, { arrayOf(1).minBy { it } })
-        expect(3, { arrayOf(2, 3).minBy { -it } })
-        expect('a', { arrayOf('a', 'b').minBy { "x$it" } })
-        expect("b", { arrayOf("b", "abc").minBy { it.length } })
+    @Test fun minByOrNull() {
+        expect(null, { arrayOf<Int>().minByOrNull { it } })
+        expect(1, { arrayOf(1).minByOrNull { it } })
+        expect(3, { arrayOf(2, 3).minByOrNull { -it } })
+        expect('a', { arrayOf('a', 'b').minByOrNull { "x$it" } })
+        expect("b", { arrayOf("b", "abc").minByOrNull { it.length } })
     }
 
-    @Test fun minByInPrimitiveArrays() {
-        expect(null, { intArrayOf().minBy { it } })
-        expect(1, { intArrayOf(1).minBy { it } })
-        expect(3, { intArrayOf(2, 3).minBy { -it } })
-        expect(2000000000000, { longArrayOf(3000000000000, 2000000000000).minBy { it + 1 } })
-        expect(1, { byteArrayOf(1, 3, 2).minBy { it * it } })
-        expect(3, { shortArrayOf(3, 2).minBy { "a" } })
-        expect(2.0F, { floatArrayOf(3.0F, 2.0F).minBy { it.toString() } })
-        expect(2.0, { doubleArrayOf(2.0, 3.0).minBy { it * it } })
+    @Test fun minByOrNullInPrimitiveArrays() {
+        expect(null, { intArrayOf().minByOrNull { it } })
+        expect(1, { intArrayOf(1).minByOrNull { it } })
+        expect(3, { intArrayOf(2, 3).minByOrNull { -it } })
+        expect(2000000000000, { longArrayOf(3000000000000, 2000000000000).minByOrNull { it + 1 } })
+        expect(1, { byteArrayOf(1, 3, 2).minByOrNull { it * it } })
+        expect(3, { shortArrayOf(3, 2).minByOrNull { "a" } })
+        expect(2.0F, { floatArrayOf(3.0F, 2.0F).minByOrNull { it.toString() } })
+        expect(2.0, { doubleArrayOf(2.0, 3.0).minByOrNull { it * it } })
     }
 
-    @Test fun maxBy() {
-        expect(null, { arrayOf<Int>().maxBy { it } })
-        expect(1, { arrayOf(1).maxBy { it } })
-        expect(2, { arrayOf(2, 3).maxBy { -it } })
-        expect('b', { arrayOf('a', 'b').maxBy { "x$it" } })
-        expect("abc", { arrayOf("b", "abc").maxBy { it.length } })
+    @Test fun maxByOrNull() {
+        expect(null, { arrayOf<Int>().maxByOrNull { it } })
+        expect(1, { arrayOf(1).maxByOrNull { it } })
+        expect(2, { arrayOf(2, 3).maxByOrNull { -it } })
+        expect('b', { arrayOf('a', 'b').maxByOrNull { "x$it" } })
+        expect("abc", { arrayOf("b", "abc").maxByOrNull { it.length } })
     }
 
-    @Test fun maxByInPrimitiveArrays() {
-        expect(null, { intArrayOf().maxBy { it } })
-        expect(1, { intArrayOf(1).maxBy { it } })
-        expect(2, { intArrayOf(2, 3).maxBy { -it } })
-        expect(3000000000000, { longArrayOf(3000000000000, 2000000000000).maxBy { it + 1 } })
-        expect(3, { byteArrayOf(1, 3, 2).maxBy { it * it } })
-        expect(3, { shortArrayOf(3, 2).maxBy { "a" } })
-        expect(3.0F, { floatArrayOf(3.0F, 2.0F).maxBy { it.toString() } })
-        expect(3.0, { doubleArrayOf(2.0, 3.0).maxBy { it * it } })
+    @Test fun maxByOrNullInPrimitiveArrays() {
+        expect(null, { intArrayOf().maxByOrNull { it } })
+        expect(1, { intArrayOf(1).maxByOrNull { it } })
+        expect(2, { intArrayOf(2, 3).maxByOrNull { -it } })
+        expect(3000000000000, { longArrayOf(3000000000000, 2000000000000).maxByOrNull { it + 1 } })
+        expect(3, { byteArrayOf(1, 3, 2).maxByOrNull { it * it } })
+        expect(3, { shortArrayOf(3, 2).maxByOrNull { "a" } })
+        expect(3.0F, { floatArrayOf(3.0F, 2.0F).maxByOrNull { it.toString() } })
+        expect(3.0, { doubleArrayOf(2.0, 3.0).maxByOrNull { it * it } })
     }
 
     @Test fun minIndex() {
         val a = intArrayOf(1, 7, 9, -42, 54, 93)
-        expect(3, { a.indices.minBy { a[it] } })
+        expect(3, { a.indices.minByOrNull { a[it] } })
     }
 
     @Test fun maxIndex() {
         val a = intArrayOf(1, 7, 9, 239, 54, 93)
-        expect(3, { a.indices.maxBy { a[it] } })
+        expect(3, { a.indices.maxByOrNull { a[it] } })
     }
 
     @Test fun minByEvaluateOnce() {
         var c = 0
-        expect(1, { arrayOf(5, 4, 3, 2, 1).minBy { c++; it * it } })
+        expect(1, { arrayOf(5, 4, 3, 2, 1).minByOrNull { c++; it * it } })
         assertEquals(5, c)
     }
 
     @Test fun maxByEvaluateOnce() {
         var c = 0
-        expect(5, { arrayOf(5, 4, 3, 2, 1).maxBy { c++; it * it } })
+        expect(5, { arrayOf(5, 4, 3, 2, 1).maxByOrNull { c++; it * it } })
         assertEquals(5, c)
     }
 
@@ -502,6 +502,7 @@ class ArraysTest {
         // for each arr with size > 0  arr.average() = arr.sum().toDouble() / arr.size()
     }
 
+    @Suppress("DEPRECATION")
     @Test fun indexOfInPrimitiveArrays() {
         expect(-1) { byteArrayOf(1, 2, 3).indexOf(0) }
         expect(0) { byteArrayOf(1, 2, 3).indexOf(1) }
@@ -823,6 +824,26 @@ class ArraysTest {
         assertEquals(10, intsAsList[1], "Should reflect changes in original array")
     }
 
+    @Test fun asListInFloatingPrimitiveArrays() {
+        fun <T> testTotalOrder(expected: List<T>, actual: List<T>, element: T) = compare(expected, actual) {
+            propertyEquals { contains(element) }
+            propertyEquals { indexOf(element) }
+            propertyEquals { lastIndexOf(element) }
+        }
+
+        testTotalOrder(listOf(Float.NaN), floatArrayOf(Float.NaN).asList(), Float.NaN)
+        testTotalOrder(listOf(-0.0f), floatArrayOf(-0.0f).asList(), -0.0f)
+        testTotalOrder(listOf(-0.0f), floatArrayOf(-0.0f).asList(), 0.0f)
+        testTotalOrder(listOf(0.0f), floatArrayOf(0.0f).asList(), 0.0f)
+        testTotalOrder(listOf(0.0f), floatArrayOf(0.0f).asList(), -0.0f)
+
+        testTotalOrder(listOf(Double.NaN), doubleArrayOf(Double.NaN).asList(), Double.NaN)
+        testTotalOrder(listOf(-0.0), doubleArrayOf(-0.0).asList(), -0.0)
+        testTotalOrder(listOf(-0.0), doubleArrayOf(-0.0).asList(), 0.0)
+        testTotalOrder(listOf(0.0), doubleArrayOf(0.0).asList(), 0.0)
+        testTotalOrder(listOf(0.0), doubleArrayOf(0.0).asList(), -0.0)
+    }
+
     @Test fun toPrimitiveArray() {
         val genericArray: Array<Int> = arrayOf(1, 2, 3)
         val primitiveArray: IntArray = genericArray.toIntArray()
@@ -1135,7 +1156,7 @@ class ArraysTest {
             assertEquals(expected, FloatArray(size) { it.toFloat() }.scan("") { acc, e -> acc + e.toInt() })
             assertEquals(expected, DoubleArray(size) { it.toDouble() }.scan("") { acc, e -> acc + e.toInt() })
             assertEquals(
-                expected.map { it.map { c -> c.toInt() % 2 == 0 }.joinToString(separator = "") },
+                expected.map { it.map { c -> c.code % 2 == 0 }.joinToString(separator = "") },
                 BooleanArray(size) { it % 2 == 0 }.scan("") { acc, e -> acc + e }
             )
         }
@@ -1156,7 +1177,7 @@ class ArraysTest {
             assertEquals(expected, FloatArray(size) { it.toFloat() }.runningFold("") { acc, e -> acc + e.toInt() })
             assertEquals(expected, DoubleArray(size) { it.toDouble() }.runningFold("") { acc, e -> acc + e.toInt() })
             assertEquals(
-                expected.map { it.map { c -> c.toInt() % 2 == 0 }.joinToString(separator = "") },
+                expected.map { it.map { c -> c.code % 2 == 0 }.joinToString(separator = "") },
                 BooleanArray(size) { it % 2 == 0 }.runningFold("") { acc, e -> acc + e }
             )
         }
@@ -1178,7 +1199,7 @@ class ArraysTest {
             )
             assertEquals(
                 expected,
-                CharArray(size) { it.toChar() }.scanIndexed("+") { index, acc, e -> "$acc[$index: ${'a' + e.toInt()}]" }
+                CharArray(size) { Char(it) }.scanIndexed("+") { index, acc, e -> "$acc[$index: ${'a' + e.code}]" }
             )
             assertEquals(
                 expected,
@@ -1201,7 +1222,7 @@ class ArraysTest {
                 DoubleArray(size) { it.toDouble() }.scanIndexed("+") { index, acc, e -> "$acc[$index: ${'a' + e.toInt()}]" }
             )
             assertEquals(
-                expected.map { it.map { c -> if (c.isAsciiLetter()) c.toInt() % 2 != 0 else c }.joinToString(separator = "") },
+                expected.map { it.map { c -> if (c.isAsciiLetter()) c.code % 2 != 0 else c }.joinToString(separator = "") },
                 BooleanArray(size) { it % 2 == 0 }.scanIndexed("+") { index, acc, e -> "$acc[$index: $e]" }
             )
         }
@@ -1223,7 +1244,7 @@ class ArraysTest {
             )
             assertEquals(
                 expected,
-                CharArray(size) { it.toChar() }.runningFoldIndexed("+") { index, acc, e -> "$acc[$index: ${'a' + e.toInt()}]" }
+                CharArray(size) { Char(it) }.runningFoldIndexed("+") { index, acc, e -> "$acc[$index: ${'a' + e.code}]" }
             )
             assertEquals(
                 expected,
@@ -1246,7 +1267,7 @@ class ArraysTest {
                 DoubleArray(size) { it.toDouble() }.runningFoldIndexed("+") { index, acc, e -> "$acc[$index: ${'a' + e.toInt()}]" }
             )
             assertEquals(
-                expected.map { it.map { c -> if (c.isAsciiLetter()) c.toInt() % 2 != 0 else c }.joinToString(separator = "") },
+                expected.map { it.map { c -> if (c.isAsciiLetter()) c.code % 2 != 0 else c }.joinToString(separator = "") },
                 BooleanArray(size) { it % 2 == 0 }.runningFoldIndexed("+") { index, acc, e -> "$acc[$index: $e]" }
             )
         }
@@ -1267,8 +1288,8 @@ class ArraysTest {
                 ByteArray(size) { it.toByte() }.runningReduce { acc, e -> (acc + e).toByte() }
             )
             assertEquals(
-                expected.map { it.toChar() },
-                CharArray(size) { it.toChar() }.runningReduce { acc, e -> acc + e.toInt() }
+                expected.map { Char(it) },
+                CharArray(size) { Char(it) }.runningReduce { acc, e -> acc + e.code }
             )
             assertEquals(
                 expected.map { it.toShort() },
@@ -1311,8 +1332,8 @@ class ArraysTest {
                 expected.map { it.toByte() },
                 ByteArray(size) { it.toByte() }.runningReduceIndexed { index, acc, e -> (index * (acc + e)).toByte() })
             assertEquals(
-                expected.map { it.toChar() },
-                CharArray(size) { it.toChar() }.runningReduceIndexed { index, acc, e -> (index * (acc.toInt() + e.toInt())).toChar() }
+                expected.map { Char(it) },
+                CharArray(size) { Char(it) }.runningReduceIndexed { index, acc, e -> (index * (acc.code + e.code)).let(::Char) }
             )
             assertEquals(
                 expected.map { it.toShort() },
@@ -1348,7 +1369,7 @@ class ArraysTest {
         assertEquals(mapOf("Alice" to 5, "Bob" to 3, "Carol" to 5), itemsWithTheirLength)
 
         val updatedLength = items.copyOfRange(1, 3)
-            .associateWithTo(itemsWithTheirLength.toMutableMap()) { name -> name.toLowerCase().count { it in "aeuio" } }
+            .associateWithTo(itemsWithTheirLength.toMutableMap()) { name -> name.lowercase().count { it in "aeuio" } }
 
         assertEquals(mapOf("Alice" to 5, "Bob" to 1, "Carol" to 2), updatedLength)
     }
@@ -1756,6 +1777,24 @@ class ArraysTest {
         assertEquals(listOf(2), arrayOf("a", null, "test").mapIndexedNotNull { index, it -> it?.run { if (index != 0) length / index else null  } })
     }
 
+    @Test fun flatMap() {
+        val data = arrayOf(arrayOf(1, 2, 3), arrayOf(4, 5, 6))
+        val result1 = data.flatMap { it.asList() }
+        val result2 = data.flatMap { it.asSequence() }
+        val expected = (data[0] + data[1]).toList()
+        assertEquals(expected, result1)
+        assertEquals(expected, result2)
+    }
+
+    @Test fun flatMapIndexed() {
+        val data = arrayOf(arrayOf(1, 2, 3), arrayOf(4, 5, 6))
+        val result1 = data.flatMapIndexed { index, arr -> arr.asList().subList(0, index + 1) }
+        val result2 = data.flatMapIndexed { index, arr -> arr.asSequence().take(index + 1) }
+        val expected = listOf(1, 4, 5)
+        assertEquals(expected, result1)
+        assertEquals(expected, result2)
+    }
+
     @Test fun flattenArray() {
         val arr1: Array<Array<Int>> = arrayOf(arrayOf(1, 2, 3), arrayOf(4, 5, 6))
         val arr2: Array<out Array<Int>> = arr1
@@ -2138,7 +2177,7 @@ class ArraysTest {
         testShuffle(numbers.map(Int::toShort).toShortArray(), { shuffle() }, { toList() })
         testShuffle(numbers.map(Int::toFloat).toFloatArray(), { shuffle() }, { toList() })
         testShuffle(numbers.map(Int::toDouble).toDoubleArray(), { shuffle() }, { toList() })
-        testShuffle(numbers.map(Int::toChar).toCharArray(), { shuffle() }, { toList() })
+        testShuffle(numbers.map(::Char).toCharArray(), { shuffle() }, { toList() })
         testShuffle(numbers.map { it % 2 == 0 }.toBooleanArray(), { shuffle() }, { toList() })
 
         testShuffle(numbers.map(Int::toUInt).toUIntArray(), { shuffle() }, { toList() })
@@ -2168,7 +2207,7 @@ class ArraysTest {
         testShuffleR(numbers.map(Int::toShort).toShortArray(), { r -> shuffle(r) }, { toList() })
         testShuffleR(numbers.map(Int::toFloat).toFloatArray(), { r -> shuffle(r) }, { toList() })
         testShuffleR(numbers.map(Int::toDouble).toDoubleArray(), { r -> shuffle(r) }, { toList() })
-        testShuffleR(numbers.map(Int::toChar).toCharArray(), { r -> shuffle(r) }, { toList() })
+        testShuffleR(numbers.map(::Char).toCharArray(), { r -> shuffle(r) }, { toList() })
         testShuffleR(numbers.map { it % 2 == 0 }.toBooleanArray(), { r -> shuffle(r) }, { toList() })
 
         testShuffleR(numbers.map(Int::toUInt).toUIntArray(), { r -> shuffle(r) }, { toList() })
@@ -2205,7 +2244,7 @@ class ArraysTest {
 
         testFailures(BooleanArray(5) { it % 2 == 0 }, BooleanArray::fill, true, 5)
         testFailures(ByteArray(5) { it.toByte() }, ByteArray::fill, 0.toByte(), 5)
-        testFailures(CharArray(5) { it.toChar() }, CharArray::fill, 0.toChar(), 5)
+        testFailures(CharArray(5) { Char(it) }, CharArray::fill, Char(0), 5)
         testFailures(FloatArray(5) { it.toFloat() }, FloatArray::fill, 0.0f, 5)
         testFailures(DoubleArray(5) { it.toDouble() }, DoubleArray::fill, 0.0, 5)
         testFailures(ShortArray(5) { it.toShort() }, ShortArray::fill, 0.toShort(), 5)
@@ -2239,7 +2278,7 @@ class ArraysTest {
 
         test(array, BooleanArray::fill, operations, IntArray::toBooleanArray, { this % 2 == 0 }, BooleanArray::contentEquals)
         test(array, ByteArray::fill, operations, IntArray::toByteArray, Int::toByte, ByteArray::contentEquals)
-        test(array, CharArray::fill, operations, IntArray::toCharArray, Int::toChar, CharArray::contentEquals)
+        test(array, CharArray::fill, operations, IntArray::toCharArray, ::Char, CharArray::contentEquals)
         test(array, FloatArray::fill, operations, IntArray::toFloatArray, Int::toFloat, FloatArray::contentEquals)
         test(array, DoubleArray::fill, operations, IntArray::toDoubleArray, Int::toDouble, DoubleArray::contentEquals)
         test(array, ShortArray::fill, operations, IntArray::toShortArray, Int::toShort, ShortArray::contentEquals)
@@ -2258,7 +2297,7 @@ class ArraysTest {
 
 private fun IntArray.toBooleanArray() = BooleanArray(size) { get(it) % 2 == 0 }
 private fun IntArray.toByteArray() = ByteArray(size) { get(it).toByte() }
-private fun IntArray.toCharArray() = CharArray(size) { get(it).toChar() }
+private fun IntArray.toCharArray() = CharArray(size) { Char(get(it)) }
 private fun IntArray.toFloatArray() = FloatArray(size) { get(it).toFloat() }
 private fun IntArray.toDoubleArray() = DoubleArray(size) { get(it).toDouble() }
 private fun IntArray.toShortArray() = ShortArray(size) { get(it).toShort() }

@@ -11,7 +11,7 @@ dependencies {
     compileOnly(project(":compiler:frontend"))
     compileOnly(intellijCoreDep()) { includeJars("intellij-core") }
 
-    runtime(kotlinStdlib())
+    runtimeOnly(kotlinStdlib())
 
     testCompile(project(":compiler:backend"))
     testCompile(project(":compiler:cli"))
@@ -37,5 +37,3 @@ testsJar()
 projectTest(parallel = true) {
     workingDir = rootDir
 }
-
-apply(from = "$rootDir/gradle/kotlinPluginPublication.gradle.kts")

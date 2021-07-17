@@ -5,73 +5,155 @@
 
 package org.jetbrains.kotlin.fir.analysis.checkers.declaration
 
-import com.intellij.lang.LighterASTNode
-import com.intellij.openapi.util.Ref
-import com.intellij.psi.PsiElement
-import org.jetbrains.kotlin.descriptors.ClassKind.ANNOTATION_CLASS
-import org.jetbrains.kotlin.fir.analysis.checkers.context.CheckerContext
-import org.jetbrains.kotlin.fir.analysis.diagnostics.DiagnosticReporter
-import org.jetbrains.kotlin.fir.analysis.diagnostics.FirDiagnosticFactory0
-import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors
-import org.jetbrains.kotlin.fir.declarations.*
-import org.jetbrains.kotlin.fir.FirLightSourceElement
-import org.jetbrains.kotlin.fir.FirPsiSourceElement
-import org.jetbrains.kotlin.fir.FirSourceElement
 import org.jetbrains.kotlin.KtNodeTypes.FUN
 import org.jetbrains.kotlin.KtNodeTypes.VALUE_PARAMETER
-import org.jetbrains.kotlin.lexer.KtTokens.VAL_KEYWORD
-import org.jetbrains.kotlin.lexer.KtTokens.VAR_KEYWORD
-import org.jetbrains.kotlin.psi.KtParameter
+import org.jetbrains.kotlin.descriptors.ClassKind.ANNOTATION_CLASS
+import org.jetbrains.kotlin.descriptors.ClassKind.ENUM_CLASS
+import org.jetbrains.kotlin.descriptors.annotations.KotlinTarget
+import org.jetbrains.kotlin.fir.FirSession
+import org.jetbrains.kotlin.fir.analysis.checkers.*
+import org.jetbrains.kotlin.fir.analysis.checkers.context.CheckerContext
+import org.jetbrains.kotlin.fir.analysis.diagnostics.*
+import org.jetbrains.kotlin.fir.declarations.*
+import org.jetbrains.kotlin.fir.declarations.utils.isLocal
+import org.jetbrains.kotlin.fir.resolve.toSymbol
+import org.jetbrains.kotlin.fir.symbols.impl.FirRegularClassSymbol
+import org.jetbrains.kotlin.fir.types.*
+import org.jetbrains.kotlin.name.ClassId
+import org.jetbrains.kotlin.name.StandardClassIds
+import org.jetbrains.kotlin.name.StandardClassIds.primitiveArrayTypeByElementType
+import org.jetbrains.kotlin.name.StandardClassIds.unsignedArrayTypeByElementType
 
-object FirAnnotationClassDeclarationChecker : FirDeclarationChecker<FirDeclaration>() {
-    override fun check(declaration: FirDeclaration, context: CheckerContext, reporter: DiagnosticReporter) {
-        if (declaration !is FirRegularClass) return
+object FirAnnotationClassDeclarationChecker : FirRegularClassChecker() {
+    override fun check(declaration: FirRegularClass, context: CheckerContext, reporter: DiagnosticReporter) {
         if (declaration.classKind != ANNOTATION_CLASS) return
-        if (declaration.isLocal) reporter.report(declaration.source, FirErrors.LOCAL_ANNOTATION_CLASS_ERROR)
-        for (it in declaration.declarations) {
-            when {
-                it is FirConstructor && it.isPrimary -> {
-                    for (parameter in it.valueParameters)
-                        when (val parameterSourceElement = parameter.source) {
-                            is FirPsiSourceElement<*> -> {
-                                val parameterPsiElement = parameterSourceElement.psi as KtParameter
-                                if (!parameterPsiElement.hasValOrVar())
-                                    reporter.report(parameterSourceElement, FirErrors.MISSING_VAL_ON_ANNOTATION_PARAMETER)
-                                else if (parameterPsiElement.isMutable)
-                                    reporter.report(parameterSourceElement, FirErrors.VAR_ANNOTATION_PARAMETER)
-                            }
-                            is FirLightSourceElement -> {
-                                val kidsRef = Ref<Array<LighterASTNode?>>()
-                                parameterSourceElement.tree.getChildren(parameterSourceElement.element, kidsRef)
-                                if (kidsRef.get().any { it?.tokenType == VAR_KEYWORD })
-                                    reporter.report(parameterSourceElement, FirErrors.VAR_ANNOTATION_PARAMETER)
-                                else if (kidsRef.get().all { it?.tokenType != VAL_KEYWORD })
-                                    reporter.report(parameterSourceElement, FirErrors.MISSING_VAL_ON_ANNOTATION_PARAMETER)
-                            }
+        if (declaration.isLocal) reporter.reportOn(declaration.source, FirErrors.LOCAL_ANNOTATION_CLASS_ERROR, context)
+
+        if (declaration.superTypeRefs.size != 1) {
+            reporter.reportOn(declaration.source, FirErrors.SUPERTYPES_FOR_ANNOTATION_CLASS, context)
+        }
+
+        for (member in declaration.declarations) {
+            checkAnnotationClassMember(member, context, reporter)
+        }
+
+        if (declaration.getRetention() != AnnotationRetention.SOURCE &&
+            KotlinTarget.EXPRESSION in declaration.getAllowedAnnotationTargets()
+        ) {
+            val target = declaration.getRetentionAnnotation() ?: declaration.getTargetAnnotation() ?: declaration
+            reporter.reportOn(target.source, FirErrors.RESTRICTED_RETENTION_FOR_EXPRESSION_ANNOTATION, context)
+        }
+    }
+
+    private fun checkAnnotationClassMember(member: FirDeclaration, context: CheckerContext, reporter: DiagnosticReporter) {
+        when {
+            member is FirConstructor && member.isPrimary -> {
+                for (parameter in member.valueParameters) {
+                    val source = parameter.source ?: continue
+                    if (!source.hasValOrVar()) {
+                        reporter.reportOn(source, FirErrors.MISSING_VAL_ON_ANNOTATION_PARAMETER, context)
+                    } else if (source.hasVar()) {
+                        reporter.reportOn(source, FirErrors.VAR_ANNOTATION_PARAMETER, context)
+                    }
+                    val defaultValue = parameter.defaultValue
+                    if (defaultValue != null && checkConstantArguments(defaultValue, context.session) != null) {
+                        reporter.reportOn(defaultValue.source, FirErrors.ANNOTATION_PARAMETER_DEFAULT_VALUE_MUST_BE_CONSTANT, context)
+                    }
+
+                    val typeRef = parameter.returnTypeRef
+                    val coneType = typeRef.coneTypeSafe<ConeLookupTagBasedType>()
+                    val classId = coneType?.classId
+
+                    if (coneType != null) when {
+                        classId == ClassId.fromString("<error>") -> {
+                            // TODO: replace with UNRESOLVED_REFERENCE check
                         }
+                        coneType.isNullable -> {
+                            reporter.reportOn(typeRef.source, FirErrors.NULLABLE_TYPE_OF_ANNOTATION_MEMBER, context)
+                        }
+                        coneType.isPrimitiveOrNullablePrimitive -> {
+                            // DO NOTHING: primitives are allowed as annotation class parameter
+                        }
+                        coneType.isUnsignedTypeOrNullableUnsignedType -> {
+                            // TODO: replace with EXPERIMENTAL_UNSIGNED_LITERALS check
+                        }
+                        classId == StandardClassIds.KClass -> {
+                            // DO NOTHING: KClass is allowed
+                        }
+                        classId == StandardClassIds.String -> {
+                            // DO NOTHING: String is allowed
+                        }
+                        classId in primitiveArrayTypeByElementType.values -> {
+                            // DO NOTHING: primitive arrays are allowed
+                        }
+                        classId in unsignedArrayTypeByElementType.values -> {
+                            // DO NOTHING: arrays of unsigned types are allowed
+                        }
+                        classId == StandardClassIds.Array -> {
+                            if (!isAllowedArray(typeRef, context.session))
+                                reporter.reportOn(typeRef.source, FirErrors.INVALID_TYPE_OF_ANNOTATION_MEMBER, context)
+                        }
+                        isAllowedClassKind(coneType, context.session) -> {
+                            // DO NOTHING: annotation or enum classes are allowed
+                        }
+                        else -> {
+                            reporter.reportOn(typeRef.source, FirErrors.INVALID_TYPE_OF_ANNOTATION_MEMBER, context)
+                        }
+                    }
                 }
-                it is FirRegularClass -> {
-                    // DO NOTHING: nested annotation classes are allowed in 1.3+
-                }
-                it is FirProperty && it.source?.elementType == VALUE_PARAMETER -> {
-                    // DO NOTHING to avoid reporting constructor properties
-                }
-                it is FirSimpleFunction && it.source?.elementType != FUN -> {
-                    // DO NOTHING to avoid reporting synthetic functions
-                    // TODO: replace with origin check
-                }
-                else -> {
-                    reporter.report(it.source, FirErrors.ANNOTATION_CLASS_MEMBER)
-                }
+            }
+            member is FirRegularClass -> {
+                // DO NOTHING: nested annotation classes are allowed in 1.3+
+            }
+            member is FirProperty && member.source?.elementType == VALUE_PARAMETER -> {
+                // DO NOTHING to avoid reporting constructor properties
+            }
+            member is FirSimpleFunction && member.source?.elementType != FUN -> {
+                // DO NOTHING to avoid reporting synthetic functions
+                // TODO: replace with origin check
+            }
+            else -> {
+                reporter.reportOn(member.source, FirErrors.ANNOTATION_CLASS_MEMBER, context)
+            }
+        }
+    }
+
+    private fun isAllowedClassKind(cone: ConeLookupTagBasedType, session: FirSession): Boolean {
+        val typeRefClassKind = (cone.lookupTag.toSymbol(session) as? FirRegularClassSymbol)
+            ?.classKind
+            ?: return false
+
+        return typeRefClassKind == ANNOTATION_CLASS || typeRefClassKind == ENUM_CLASS
+    }
+
+    private fun isAllowedArray(typeRef: FirTypeRef, session: FirSession): Boolean {
+        val typeArguments = typeRef.coneType.typeArguments
+
+        if (typeArguments.size != 1) return false
+
+        val arrayType = (typeArguments[0] as? ConeKotlinTypeProjection)
+            ?.type
+            ?: return false
+
+        if (arrayType.isNullable) return false
+
+        val arrayTypeClassId = arrayType.classId
+
+        when {
+            arrayTypeClassId == StandardClassIds.KClass -> {
+                // KClass is allowed
+                return true
+            }
+            arrayTypeClassId == StandardClassIds.String -> {
+                // String is allowed
+                return true
+            }
+            isAllowedClassKind(arrayType as ConeLookupTagBasedType, session) -> {
+                // annotation or enum classes are allowed
+                return true
             }
         }
 
-    }
-
-    private inline fun <reified T : FirSourceElement, P : PsiElement> DiagnosticReporter.report(
-        source: T?,
-        factory: FirDiagnosticFactory0<T, P>
-    ) {
-        source?.let { report(factory.on(it)) }
+        return false
     }
 }

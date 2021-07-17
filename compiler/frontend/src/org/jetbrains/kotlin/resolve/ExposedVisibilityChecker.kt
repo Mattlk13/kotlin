@@ -17,16 +17,22 @@
 package org.jetbrains.kotlin.resolve
 
 import com.intellij.psi.PsiElement
+import org.jetbrains.kotlin.config.LanguageFeature
+import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.diagnostics.DiagnosticFactory3
 import org.jetbrains.kotlin.diagnostics.Errors.*
 import org.jetbrains.kotlin.psi.*
+import org.jetbrains.kotlin.psi.psiUtil.visibilityModifier
 import org.jetbrains.kotlin.types.TypeUtils
 import org.jetbrains.kotlin.types.isError
 
 // Checker for all seven EXPOSED_* errors
 // All functions return true if everything is OK, or false in case of any errors
-class ExposedVisibilityChecker(private val trace: BindingTrace? = null) {
+class ExposedVisibilityChecker(
+    private val languageVersionSettings: LanguageVersionSettings,
+    private val trace: BindingTrace? = null
+) {
 
     private fun <E : PsiElement> reportExposure(
         diagnostic: DiagnosticFactory3<E, EffectiveVisibility, DescriptorWithRelation, EffectiveVisibility>,
@@ -34,7 +40,16 @@ class ExposedVisibilityChecker(private val trace: BindingTrace? = null) {
         elementVisibility: EffectiveVisibility,
         restrictingDescriptor: DescriptorWithRelation
     ) {
-        trace?.report(diagnostic.on(element, elementVisibility, restrictingDescriptor, restrictingDescriptor.effectiveVisibility()))
+        val trace = trace ?: return
+        val restrictingVisibility = restrictingDescriptor.effectiveVisibility()
+
+        if (!languageVersionSettings.supportsFeature(LanguageFeature.PrivateInFileEffectiveVisibility) &&
+            elementVisibility == EffectiveVisibility.PrivateInFile
+        ) {
+            trace.report(EXPOSED_FROM_PRIVATE_IN_FILE.on(element, restrictingDescriptor, restrictingVisibility))
+        } else {
+            trace.report(diagnostic.on(element, elementVisibility, restrictingDescriptor, restrictingVisibility))
+        }
     }
 
     // NB: does not check any members
@@ -50,7 +65,7 @@ class ExposedVisibilityChecker(private val trace: BindingTrace? = null) {
     fun checkDeclarationWithVisibility(
         modifierListOwner: KtModifierListOwner,
         descriptor: DeclarationDescriptorWithVisibility,
-        visibility: Visibility
+        visibility: DescriptorVisibility
     ): Boolean {
         return when {
             modifierListOwner is KtFunction &&
@@ -78,9 +93,12 @@ class ExposedVisibilityChecker(private val trace: BindingTrace? = null) {
         function: KtFunction,
         functionDescriptor: FunctionDescriptor,
         // for checking situation with modified basic visibility
-        visibility: Visibility = functionDescriptor.visibility
+        visibility: DescriptorVisibility = functionDescriptor.visibility
     ): Boolean {
-        val functionVisibility = functionDescriptor.effectiveVisibility(visibility)
+        var functionVisibility = functionDescriptor.effectiveVisibility(visibility)
+        if (functionDescriptor is ConstructorDescriptor && functionDescriptor.constructedClass.isSealed() && function.visibilityModifier() == null) {
+            functionVisibility = EffectiveVisibility.PrivateInClass
+        }
         var result = true
         if (function !is KtConstructor<*>) {
             val restricting = functionDescriptor.returnType?.leastPermissiveDescriptor(functionVisibility)
@@ -116,7 +134,7 @@ class ExposedVisibilityChecker(private val trace: BindingTrace? = null) {
         property: KtProperty,
         propertyDescriptor: PropertyDescriptor,
         // for checking situation with modified basic visibility
-        visibility: Visibility = propertyDescriptor.visibility
+        visibility: DescriptorVisibility = propertyDescriptor.visibility
     ): Boolean {
         val propertyVisibility = propertyDescriptor.effectiveVisibility(visibility)
         val restricting = propertyDescriptor.type.leastPermissiveDescriptor(propertyVisibility)

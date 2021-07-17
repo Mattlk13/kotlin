@@ -8,7 +8,8 @@ package org.jetbrains.kotlin.ir.backend.js.lower
 import org.jetbrains.kotlin.backend.common.BodyLoweringPass
 import org.jetbrains.kotlin.backend.common.ir.copyTo
 import org.jetbrains.kotlin.backend.common.ir.copyToWithoutSuperTypes
-import org.jetbrains.kotlin.descriptors.Visibilities
+import org.jetbrains.kotlin.ir.backend.js.JsStatementOrigins
+import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.UNDEFINED_OFFSET
 import org.jetbrains.kotlin.ir.backend.js.JsIrBackendContext
@@ -39,7 +40,7 @@ class InteropCallableReferenceLowering(val context: JsIrBackendContext) : BodyLo
     inner class CallableReferenceLowerTransformer : IrElementTransformerVoid() {
         override fun visitConstructorCall(expression: IrConstructorCall): IrExpression {
             expression.transformChildrenVoid(this)
-            if (expression.origin === CallableReferenceLowering.Companion.CALLABLE_REFERENCE_CREATE) {
+            if (expression.origin === JsStatementOrigins.CALLABLE_REFERENCE_CREATE) {
                 return transformToJavaScriptFunction(expression)
             }
             return expression
@@ -76,7 +77,7 @@ class InteropCallableReferenceLowering(val context: JsIrBackendContext) : BodyLo
             invokeFun.symbol,
             0,
             invokeFun.valueParameters.size,
-            EXPLICIT_INVOKE,
+            JsStatementOrigins.EXPLICIT_INVOKE,
             null
         )
 
@@ -87,7 +88,7 @@ class InteropCallableReferenceLowering(val context: JsIrBackendContext) : BodyLo
             invokeExpression.putValueArgument(i, getValue(vp))
         }
 
-        return IrBlockBodyImpl(
+        return context.irFactory.createBlockBody(
             UNDEFINED_OFFSET,
             UNDEFINED_OFFSET,
             listOf(
@@ -109,12 +110,12 @@ class InteropCallableReferenceLowering(val context: JsIrBackendContext) : BodyLo
         val superInvokeFun = invokeFun.overriddenSymbols.single { it.owner.isSuspend == invokeFun.isSuspend }.owner
         val lambdaName = Name.identifier("${lambdaClass.name.asString()}\$lambda")
 
-        val lambdaDeclaration = buildFun {
+        val lambdaDeclaration = context.irFactory.buildFun {
             startOffset = invokeFun.startOffset
             endOffset = invokeFun.endOffset
             // Since box/unbox is done on declaration side in case of suspend function use the specified type
             returnType = if (invokeFun.isSuspend) invokeFun.returnType else superInvokeFun.returnType
-            visibility = Visibilities.LOCAL
+            visibility = DescriptorVisibilities.LOCAL
             name = lambdaName
             isSuspend = invokeFun.isSuspend
         }
@@ -162,7 +163,7 @@ class InteropCallableReferenceLowering(val context: JsIrBackendContext) : BodyLo
                         nameGetter.symbol,
                         0,
                         0,
-                        CallableReferenceLowering.Companion.CALLABLE_REFERENCE_INVOKE
+                        JsStatementOrigins.CALLABLE_REFERENCE_INVOKE
                     ).apply {
                         dispatchReceiver = JsIrBuilder.buildGetValue(instanceVal.symbol)
                     }
@@ -188,9 +189,7 @@ class InteropCallableReferenceLowering(val context: JsIrBackendContext) : BodyLo
             statements.add(JsIrBuilder.buildReturn(factoryFunction.symbol, functionExpression, context.irBuiltIns.nothingType))
         }
 
-        return expression.run {
-            IrBlockBodyImpl(startOffset, endOffset, statements)
-        }
+        return context.irFactory.createBlockBody(expression.startOffset, expression.endOffset, statements)
     }
 
     private fun buildFactoryFunction(expression: IrConstructorCall): IrSimpleFunction {
@@ -200,12 +199,13 @@ class InteropCallableReferenceLowering(val context: JsIrBackendContext) : BodyLo
 
         val factoryName = Name.identifier("${lambdaClass.name.asString()}\$factory")
 
-        val factoryDeclaration = buildFun {
+        val factoryDeclaration = context.irFactory.buildFun {
             startOffset = expression.startOffset
             endOffset = expression.endOffset
             visibility = lambdaClass.visibility
             returnType = expression.type
             name = factoryName
+            origin = JsStatementOrigins.FACTORY_ORIGIN
         }
 
         factoryDeclaration.parent = implicitDeclarationFile
@@ -229,9 +229,5 @@ class InteropCallableReferenceLowering(val context: JsIrBackendContext) : BodyLo
             receiver = IrDynamicMemberExpressionImpl(startOffset, endOffset, context.dynamicType, property, JsIrBuilder.buildGetValue(r))
             arguments += value
         }
-    }
-
-    companion object {
-        object EXPLICIT_INVOKE : IrStatementOriginImpl("EXPLICIT_INVOKE")
     }
 }

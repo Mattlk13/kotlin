@@ -17,7 +17,10 @@
 package kotlin.reflect.jvm.internal
 
 import org.jetbrains.kotlin.descriptors.*
-import org.jetbrains.kotlin.descriptors.impl.DeclarationDescriptorVisitorEmptyBodies
+import org.jetbrains.kotlin.descriptors.runtime.components.RuntimeModuleData
+import org.jetbrains.kotlin.descriptors.runtime.components.tryLoadClass
+import org.jetbrains.kotlin.descriptors.runtime.structure.safeClassLoader
+import org.jetbrains.kotlin.descriptors.runtime.structure.wrapperByPrimitive
 import org.jetbrains.kotlin.load.java.JvmAbi
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.renderer.DescriptorRenderer
@@ -25,11 +28,6 @@ import org.jetbrains.kotlin.resolve.scopes.MemberScope
 import java.lang.reflect.Constructor
 import java.lang.reflect.Method
 import kotlin.jvm.internal.ClassBasedDeclarationContainer
-import org.jetbrains.kotlin.descriptors.runtime.components.RuntimeModuleData
-import org.jetbrains.kotlin.descriptors.runtime.components.tryLoadClass
-import org.jetbrains.kotlin.descriptors.runtime.structure.createArrayType
-import org.jetbrains.kotlin.descriptors.runtime.structure.safeClassLoader
-import org.jetbrains.kotlin.descriptors.runtime.structure.wrapperByPrimitive
 
 internal abstract class KDeclarationContainerImpl : ClassBasedDeclarationContainer {
     abstract inner class Data {
@@ -51,20 +49,13 @@ internal abstract class KDeclarationContainerImpl : ClassBasedDeclarationContain
     abstract fun getLocalProperty(index: Int): PropertyDescriptor?
 
     protected fun getMembers(scope: MemberScope, belonginess: MemberBelonginess): Collection<KCallableImpl<*>> {
-        val visitor = object : DeclarationDescriptorVisitorEmptyBodies<KCallableImpl<*>, Unit>() {
-            override fun visitPropertyDescriptor(descriptor: PropertyDescriptor, data: Unit): KCallableImpl<*> =
-                createProperty(descriptor)
-
-            override fun visitFunctionDescriptor(descriptor: FunctionDescriptor, data: Unit): KCallableImpl<*> =
-                KFunctionImpl(this@KDeclarationContainerImpl, descriptor)
-
+        val visitor = object : CreateKCallableVisitor(this) {
             override fun visitConstructorDescriptor(descriptor: ConstructorDescriptor, data: Unit): KCallableImpl<*> =
-                throw IllegalStateException("No constructors should appear in this scope: $descriptor")
+                throw IllegalStateException("No constructors should appear here: $descriptor")
         }
-
         return scope.getContributedDescriptors().mapNotNull { descriptor ->
             if (descriptor is CallableMemberDescriptor &&
-                descriptor.visibility != Visibilities.INVISIBLE_FAKE &&
+                descriptor.visibility != DescriptorVisibilities.INVISIBLE_FAKE &&
                 belonginess.accept(descriptor)
             ) descriptor.accept(visitor, Unit) else null
         }.toList()
@@ -78,32 +69,12 @@ internal abstract class KDeclarationContainerImpl : ClassBasedDeclarationContain
             member.kind.isReal == (this == DECLARED)
     }
 
-    private fun createProperty(descriptor: PropertyDescriptor): KPropertyImpl<*> {
-        val receiverCount = (descriptor.dispatchReceiverParameter?.let { 1 } ?: 0) +
-                (descriptor.extensionReceiverParameter?.let { 1 } ?: 0)
-
-        when {
-            descriptor.isVar -> when (receiverCount) {
-                0 -> return KMutableProperty0Impl<Any?>(this, descriptor)
-                1 -> return KMutableProperty1Impl<Any?, Any?>(this, descriptor)
-                2 -> return KMutableProperty2Impl<Any?, Any?, Any?>(this, descriptor)
-            }
-            else -> when (receiverCount) {
-                0 -> return KProperty0Impl<Any?>(this, descriptor)
-                1 -> return KProperty1Impl<Any?, Any?>(this, descriptor)
-                2 -> return KProperty2Impl<Any?, Any?, Any?>(this, descriptor)
-            }
-        }
-
-        throw KotlinReflectionInternalError("Unsupported property: $descriptor")
-    }
-
     fun findPropertyDescriptor(name: String, signature: String): PropertyDescriptor {
         val match = LOCAL_PROPERTY_SIGNATURE.matchEntire(signature)
         if (match != null) {
             val (number) = match.destructured
             return getLocalProperty(number.toInt())
-                    ?: throw KotlinReflectionInternalError("Local property #$number not found in $jClass")
+                ?: throw KotlinReflectionInternalError("Local property #$number not found in $jClass")
         }
 
         val properties = getProperties(Name.identifier(name))
@@ -128,9 +99,9 @@ internal abstract class KDeclarationContainerImpl : ClassBasedDeclarationContain
 
             val mostVisibleProperties = properties
                 .groupBy { it.visibility }
-                .toSortedMap(Comparator { first, second ->
-                    Visibilities.compare(first, second) ?: 0
-                }).values.last()
+                .toSortedMap { first, second ->
+                    DescriptorVisibilities.compare(first, second) ?: 0
+                }.values.last()
             if (mostVisibleProperties.size == 1) {
                 return mostVisibleProperties.first()
             }
@@ -206,9 +177,7 @@ internal abstract class KDeclarationContainerImpl : ClassBasedDeclarationContain
                 // Falling back to enumerating all methods in the class in this (rather rare) case.
                 // Example: class A(val x: Int) { fun getX(): String = ... }
                 declaredMethods.firstOrNull { method ->
-                    method.name == name &&
-                            method.returnType == returnType &&
-                            method.parameterTypes!!.contentEquals(parameterTypes)
+                    method.name == name && method.returnType == returnType && method.parameterTypes.contentEquals(parameterTypes)
                 }
             }
         } catch (e: NoSuchMethodException) {
@@ -277,6 +246,7 @@ internal abstract class KDeclarationContainerImpl : ClassBasedDeclarationContain
         while (desc[begin] != ')') {
             var end = begin
             while (desc[end] == '[') end++
+            @Suppress("SpellCheckingInspection")
             when (desc[end]) {
                 in "VZCBSIFJD" -> end++
                 'L' -> end = desc.indexOf(';', begin) + 1

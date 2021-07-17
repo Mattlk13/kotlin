@@ -5,16 +5,16 @@ version '1.0-SNAPSHOT'
 
 buildscript {
     repositories {
-        mavenCentral()
+        {{kotlin_plugin_repositories}}
     }
 
     dependencies {
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:1.2.40")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:{{kotlin_plugin_version}}")
     }
 }
 
 apply plugin: 'kotlin'
 
 dependencies {
-    compile "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.2.40"
+    compile "org.jetbrains.kotlin:kotlin-stdlib-jdk7"
 }

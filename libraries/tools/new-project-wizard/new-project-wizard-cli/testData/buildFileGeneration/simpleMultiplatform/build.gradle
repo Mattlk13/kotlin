@@ -1,31 +1,43 @@
 plugins {
     id 'org.jetbrains.kotlin.multiplatform' version 'KOTLIN_VERSION'
 }
+
 group = 'testGroupId'
 version = '1.0-SNAPSHOT'
 
 repositories {
     mavenCentral()
-    maven {
-        url 'https://dl.bintray.com/kotlin/kotlin-dev'
-    }
 }
+
 kotlin {
     jvm {
         compilations.all {
             kotlinOptions.jvmTarget = '9'
         }
+        testRuns["test"].executionTask.configure {
+            useJUnit()
+        }
     }
-    js('a') {
+    js('a', LEGACY) {
         browser {
             binaries.executable()
+            webpackTask {
+                cssSupport.enabled = true
+            }
+            runTask {
+                cssSupport.enabled = true
+            }
+            testTask {
+                useKarma {
+                    useChromeHeadless()
+                    webpackConfig.cssSupport.enabled = true
+                }
+            }
         }
     }
     sourceSets {
         jvmMain {
-            dependencies {
-                implementation kotlin('stdlib-jdk8')
-            }
+
         }
         jvmTest {
             dependencies {
@@ -33,9 +45,7 @@ kotlin {
             }
         }
         aMain {
-            dependencies {
-                implementation kotlin('stdlib-js')
-            }
+
         }
         aTest {
             dependencies {

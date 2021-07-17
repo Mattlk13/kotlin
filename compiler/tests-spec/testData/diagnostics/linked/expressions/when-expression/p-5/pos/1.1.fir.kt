@@ -1,16 +1,6 @@
 // !DIAGNOSTICS: -UNUSED_EXPRESSION
 // SKIP_TXT
 
-/*
- * KOTLIN DIAGNOSTICS SPEC TEST (POSITIVE)
- *
- * SPEC VERSION: 0.1-313
- * PLACE: expressions, when-expression -> paragraph 5 -> sentence 1
- * NUMBER: 1
- * DESCRIPTION: 'When' with bound value and with different variants of expressions in the control structure body.
- * HELPERS: typesProvider, classes, functions
- */
-
 // TESTCASE NUMBER: 1
 fun case_1(value_1: Int) {
     when (value_1) {
@@ -135,7 +125,7 @@ fun case_10(value_1: Int, value_2: String?, value_3: String?) {
     when (value_1) {
         1 -> value_2 ?: true
         2 -> value_2 ?: value_3 ?: true
-        3 -> value_2!! ?: true
+        3 -> value_2!! <!USELESS_ELVIS!>?: true<!>
     }
 }
 

@@ -1,20 +1,25 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.gradle.targets.js.webpack
 
 import org.gradle.api.DefaultTask
+import org.gradle.api.Incubating
 import org.gradle.api.file.FileCollection
+import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.internal.file.FileResolver
+import org.gradle.api.model.ObjectFactory
 import org.gradle.api.plugins.BasePluginConvention
+import org.gradle.api.provider.Provider
 import org.gradle.api.tasks.*
 import org.gradle.deployment.internal.Deployment
 import org.gradle.deployment.internal.DeploymentHandle
 import org.gradle.deployment.internal.DeploymentRegistry
 import org.gradle.process.internal.ExecHandle
 import org.gradle.process.internal.ExecHandleFactory
+import org.jetbrains.kotlin.gradle.plugin.PropertiesProvider
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinJsCompilation
 import org.jetbrains.kotlin.gradle.targets.js.RequiredKotlinJsDependency
 import org.jetbrains.kotlin.gradle.targets.js.nodejs.NodeJsRootPlugin
@@ -27,9 +32,23 @@ import org.jetbrains.kotlin.gradle.utils.property
 import java.io.File
 import javax.inject.Inject
 
-open class KotlinWebpack : DefaultTask(), RequiresNpmDependencies {
+open class KotlinWebpack
+@Inject
+constructor(
+    @Internal
+    @Transient
+    override val compilation: KotlinJsCompilation,
+    objects: ObjectFactory
+) : DefaultTask(), RequiresNpmDependencies {
+    @Transient
     private val nodeJs = NodeJsRootPlugin.apply(project.rootProject)
     private val versions = nodeJs.versions
+    private val resolutionManager = nodeJs.npmResolutionManager
+    private val rootPackageDir by lazy { nodeJs.rootPackageDir }
+
+    private val npmProject = compilation.npmProject
+
+    private val projectPath = project.path
 
     @get:Inject
     open val fileResolver: FileResolver
@@ -39,24 +58,28 @@ open class KotlinWebpack : DefaultTask(), RequiresNpmDependencies {
     open val execHandleFactory: ExecHandleFactory
         get() = injected
 
-    @Internal
-    override lateinit var compilation: KotlinJsCompilation
-
     @Suppress("unused")
-    val compilationId: String
-        @Input get() = compilation.let {
+    @get:Input
+    val compilationId: String by lazy {
+        compilation.let {
             val target = it.target
-            target.project.path + "@" + target.name + ":" + it.compilationName
+            target.project.path + "@" + target.name + ":" + it.compilationPurpose
         }
+    }
 
     @Input
     var mode: Mode = Mode.DEVELOPMENT
 
+    @get:Internal
+    var entry: File
+        get() = entryProperty.asFile.get()
+        set(value) {
+            entryProperty.set(value)
+        }
+
     @get:PathSensitive(PathSensitivity.ABSOLUTE)
     @get:InputFile
-    var entry: File by property {
-        compilation.compileKotlinTask.outputFile
-    }
+    val entryProperty: RegularFileProperty = objects.fileProperty().fileProvider(compilation.compileKotlinTask.outputFileProperty)
 
     init {
         onlyIf {
@@ -68,19 +91,29 @@ open class KotlinWebpack : DefaultTask(), RequiresNpmDependencies {
     internal var resolveFromModulesFirst: Boolean = false
 
     @Suppress("unused")
-    val runtimeClasspath: FileCollection
-        @InputFiles get() = compilation.compileDependencyFiles
+    @get:PathSensitive(PathSensitivity.ABSOLUTE)
+    @get:IgnoreEmptyDirectories
+    @get:InputFiles
+    val runtimeClasspath: FileCollection by lazy {
+        compilation.compileDependencyFiles
+    }
 
-    open val configFile: File
-        @OutputFile get() = compilation.npmProject.dir.resolve("webpack.config.js")
+    @get:OutputFile
+    open val configFile: File by lazy {
+        npmProject.dir.resolve("webpack.config.js")
+    }
 
     @Input
     var saveEvaluatedConfigFile: Boolean = true
 
+    @Transient
+    private val baseConventions: BasePluginConvention? = project.convention.plugins["base"] as BasePluginConvention?
+
     @Nested
     val output: KotlinWebpackOutput = KotlinWebpackOutput(
         library = baseConventions?.archivesBaseName,
-        libraryTarget = KotlinWebpackOutput.Target.UMD
+        libraryTarget = KotlinWebpackOutput.Target.UMD,
+        globalObject = "this"
     )
 
     @get:Internal
@@ -88,45 +121,79 @@ open class KotlinWebpack : DefaultTask(), RequiresNpmDependencies {
     val outputPath: File
         get() = destinationDirectory
 
-    private val baseConventions: BasePluginConvention?
-        get() = project.convention.plugins["base"] as BasePluginConvention?
-
     @get:Internal
     internal var _destinationDirectory: File? = null
 
+    private val defaultDestinationDirectory by lazy {
+        project.buildDir.resolve(baseConventions!!.distsDirName)
+    }
+
     @get:Internal
-    val destinationDirectory: File
-        get() = _destinationDirectory ?: project.buildDir.resolve(baseConventions!!.distsDirName)
+    var destinationDirectory: File
+        get() = _destinationDirectory ?: defaultDestinationDirectory
+        set(value) {
+            _destinationDirectory = value
+        }
+
+    private val defaultOutputFileName by lazy {
+        baseConventions?.archivesBaseName + ".js"
+    }
 
     @get:Internal
     var outputFileName: String by property {
-        baseConventions?.archivesBaseName + ".js"
+        defaultOutputFileName
     }
 
     @get:OutputFile
     open val outputFile: File
         get() = destinationDirectory.resolve(outputFileName)
 
+    private val projectDir = project.projectDir
+
+    @get:PathSensitive(PathSensitivity.ABSOLUTE)
+    @get:Optional
+    @get:IgnoreEmptyDirectories
+    @get:InputDirectory
     open val configDirectory: File?
-        @Optional @InputDirectory get() = project.projectDir.resolve("webpack.config.d").takeIf { it.isDirectory }
+        get() = projectDir.resolve("webpack.config.d").takeIf { it.isDirectory }
 
     @Input
     var report: Boolean = false
 
+    private val projectReportsDir = project.reportsDir
+
     open val reportDir: File
-        @OutputDirectory get() = project.reportsDir.resolve("webpack").resolve(entry.nameWithoutExtension)
+        @Internal get() = reportDirProvider.get()
+
+    @get:OutputDirectory
+    open val reportDirProvider: Provider<File> by lazy {
+        entryProperty
+            .map { it.asFile.nameWithoutExtension }
+            .map {
+                projectReportsDir.resolve("webpack").resolve(it)
+            }
+    }
 
     open val evaluatedConfigFile: File
-        @OutputFile get() = reportDir.resolve("webpack.config.evaluated.js")
+        @Internal get() = evaluatedConfigFileProvider.get()
+
+    open val evaluatedConfigFileProvider: Provider<File>
+        @OutputFile get() = reportDirProvider.map { it.resolve("webpack.config.evaluated.js") }
 
     @Input
     var bin: String = "webpack/bin/webpack.js"
 
     @Input
+    var args: MutableList<String> = mutableListOf()
+
+    @Input
+    var nodeArgs: MutableList<String> = mutableListOf()
+
+    @Input
     var sourceMaps: Boolean = true
 
     @Nested
-    val cssSettings: KotlinWebpackCssSettings = KotlinWebpackCssSettings()
+    val cssSupport: KotlinWebpackCssSupport = KotlinWebpackCssSupport()
 
     @Input
     @Optional
@@ -135,12 +202,26 @@ open class KotlinWebpack : DefaultTask(), RequiresNpmDependencies {
     @Input
     var devtool: String = WebpackDevtool.EVAL_SOURCE_MAP
 
-    private fun createRunner() = KotlinWebpackRunner(
-        compilation.npmProject,
-        configFile,
-        execHandleFactory,
-        bin,
-        KotlinWebpackConfig(
+    @Incubating
+    @Internal
+    var generateConfigOnly: Boolean = false
+
+    @Nested
+    val synthConfig = KotlinWebpackConfig()
+
+    @Input
+    val webpackMajorVersion = PropertiesProvider(project).webpackMajorVersion
+
+    fun webpackConfigApplier(body: KotlinWebpackConfig.() -> Unit) {
+        synthConfig.body()
+        webpackConfigAppliers.add(body)
+    }
+
+    private val webpackConfigAppliers: MutableList<(KotlinWebpackConfig) -> Unit> =
+        mutableListOf()
+
+    private fun createRunner(): KotlinWebpackRunner {
+        val config = KotlinWebpackConfig(
             mode = mode,
             entry = entry,
             reportEvaluatedConfigFile = if (saveEvaluatedConfigFile) evaluatedConfigFile else null,
@@ -149,41 +230,61 @@ open class KotlinWebpack : DefaultTask(), RequiresNpmDependencies {
             outputFileName = outputFileName,
             configDirectory = configDirectory,
             bundleAnalyzerReportDir = if (report) reportDir else null,
-            cssSettings = cssSettings,
+            cssSupport = cssSupport,
             devServer = devServer,
             devtool = devtool,
             sourceMaps = sourceMaps,
-            resolveFromModulesFirst = resolveFromModulesFirst
+            resolveFromModulesFirst = resolveFromModulesFirst,
+            webpackMajorVersion = webpackMajorVersion
         )
-    )
+
+        webpackConfigAppliers
+            .forEach { it(config) }
+
+        return KotlinWebpackRunner(
+            npmProject,
+            logger,
+            configFile,
+            execHandleFactory,
+            bin,
+            args,
+            nodeArgs,
+            config
+        )
+    }
 
     override val nodeModulesRequired: Boolean
         @Internal get() = true
 
-    override val requiredNpmDependencies: Collection<RequiredKotlinJsDependency>
+    override val requiredNpmDependencies: Set<RequiredKotlinJsDependency>
         @Internal get() = createRunner().config.getRequiredDependencies(versions)
+
+    private val isContinuous = project.gradle.startParameter.isContinuous
 
     @TaskAction
     fun doExecute() {
-        nodeJs.npmResolutionManager.checkRequiredDependencies(this)
+        resolutionManager.checkRequiredDependencies(task = this, services = services, logger = logger, projectPath = projectPath)
 
         val runner = createRunner()
 
-        if (project.gradle.startParameter.isContinuous) {
-            val continuousRunner = runner
+        if (generateConfigOnly) {
+            runner.config.save(configFile)
+            return
+        }
 
+        if (isContinuous) {
             val deploymentRegistry = services.get(DeploymentRegistry::class.java)
             val deploymentHandle = deploymentRegistry.get("webpack", Handle::class.java)
             if (deploymentHandle == null) {
-                deploymentRegistry.start("webpack", DeploymentRegistry.ChangeBehavior.BLOCK, Handle::class.java, continuousRunner)
+                deploymentRegistry.start("webpack", DeploymentRegistry.ChangeBehavior.BLOCK, Handle::class.java, runner)
             }
         } else {
             runner.copy(
                 config = runner.config.copy(
                     progressReporter = true,
-                    progressReporterPathFilter = nodeJs.rootPackageDir.absolutePath
+                    progressReporterPathFilter = rootPackageDir.absolutePath
                 )
-            ).execute()
+            ).execute(services)
         }
     }
 

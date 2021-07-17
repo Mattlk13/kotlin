@@ -1,6 +1,5 @@
 package org.jetbrains.kotlin.tools.projectWizard.settings.buildsystem
 
-import kotlinx.collections.immutable.PersistentList
 import org.jetbrains.annotations.NonNls
 import org.jetbrains.kotlin.tools.projectWizard.GeneratedIdentificator
 import org.jetbrains.kotlin.tools.projectWizard.Identificator
@@ -18,16 +17,19 @@ import org.jetbrains.kotlin.tools.projectWizard.settings.DisplayableSettingItem
 import org.jetbrains.kotlin.tools.projectWizard.templates.Template
 
 @Suppress("EnumEntryName")
-enum class ModuleKind : DisplayableSettingItem {
-    multiplatform,
-    target,
-    singleplatformJvm,
-    singleplatformAndroid,
-    singleplatformJs, ;
+enum class ModuleKind(val isSingleplatform: Boolean) : DisplayableSettingItem {
+    multiplatform(isSingleplatform = false),
+    target(isSingleplatform = false),
+    singleplatformJvm(isSingleplatform = true),
+    singleplatformAndroid(isSingleplatform = true),
+    singleplatformJsBrowser(isSingleplatform = true),
+    singleplatformJsNode(isSingleplatform = true),
+    ;
 
     override val text: String
         get() = name
 }
+
 
 // TODO separate to classes
 class Module(
@@ -68,12 +70,14 @@ class Module(
             configurator == MppModuleConfigurator -> KotlinNewProjectWizardBundle.message("module.kind.mpp.module")
             configurator == AndroidSinglePlatformModuleConfigurator -> KotlinNewProjectWizardBundle.message("module.kind.android.module")
             configurator == IOSSinglePlatformModuleConfigurator -> KotlinNewProjectWizardBundle.message("module.kind.ios.module")
-            configurator == JsSingleplatformModuleConfigurator -> KotlinNewProjectWizardBundle.message("module.kind.js.module")
+            configurator == BrowserJsSinglePlatformModuleConfigurator -> KotlinNewProjectWizardBundle.message("module.kind.js.browser.module")
+            configurator == NodeJsSinglePlatformModuleConfigurator -> KotlinNewProjectWizardBundle.message("module.kind.js.node.module")
             else -> KotlinNewProjectWizardBundle.message("module.kind.module")
         }
 
     fun SettingsWriter.initDefaultValuesForSettings() {
         configurator.safeAs<ModuleConfiguratorWithSettings>()?.apply { initDefaultValuesFor(this@Module) }
+        configurator.safeAs<ModuleConfiguratorWithProperties>()?.apply { initDefaultValuesForProperties(this@Module) }
         template?.apply { initDefaultValuesFor(this@Module) }
     }
 
@@ -112,7 +116,7 @@ class Module(
         }
 
         val moduleConfiguratorValidator = settingValidator<Module> { module ->
-            withSettingsOf(module) {
+            inContextOfModuleConfigurator(module) {
                 allSettingsOfModuleConfigurator(module.configurator).map { setting ->
                     val reference = when (setting) {
                         is PluginSetting<Any, SettingType<Any>> -> setting.reference
@@ -124,7 +128,7 @@ class Module(
                         ?: return@map ValidationResult.ValidationError(
                             KotlinNewProjectWizardBundle.message(
                                 "validation.should.not.be.blank",
-                                setting.title.capitalize()
+                                setting.title.replaceFirstChar(Char::uppercaseChar)
                             )
                         )
                     (setting.validator as SettingValidator<Any>).validate(this@settingValidator, value)
@@ -141,7 +145,7 @@ class Module(
                         ?: return@map ValidationResult.ValidationError(
                             KotlinNewProjectWizardBundle.message(
                                 "validation.should.not.be.blank",
-                                setting.title.capitalize()
+                                setting.title.replaceFirstChar(Char::uppercaseChar)
                             )
                         )
                     (setting.validator as SettingValidator<Any>).validate(this@settingValidator, value)
@@ -181,11 +185,11 @@ fun MultiplatformTargetModule(@NonNls name: String, configurator: ModuleConfigur
     )
 
 @Suppress("FunctionName")
-fun MultiplatformModule(@NonNls name: String, targets: List<Module> = emptyList()) =
+fun MultiplatformModule(@NonNls name: String, template: Template? = null, targets: List<Module> = emptyList()) =
     Module(
         name,
         MppModuleConfigurator,
-        null,
+        template,
         emptyList(),
         targets
     )

@@ -16,39 +16,30 @@
 
 package org.jetbrains.uast.kotlin
 
-import com.intellij.psi.PsiClassType
-import com.intellij.psi.PsiElement
-import com.intellij.psi.PsiMethod
-import com.intellij.psi.PsiNamedElement
+import com.intellij.openapi.util.Key
+import com.intellij.psi.*
 import org.jetbrains.kotlin.descriptors.CallableDescriptor
 import org.jetbrains.kotlin.descriptors.ConstructorDescriptor
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
 import org.jetbrains.kotlin.lexer.KtTokens
-import org.jetbrains.kotlin.resolve.sam.SamConstructorDescriptor
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
 import org.jetbrains.kotlin.resolve.calls.tower.NewResolvedCallImpl
+import org.jetbrains.kotlin.resolve.sam.SamConstructorDescriptor
 import org.jetbrains.kotlin.synthetic.SyntheticJavaPropertyDescriptor
 import org.jetbrains.uast.*
 import org.jetbrains.uast.internal.acceptList
 import org.jetbrains.uast.internal.log
-import org.jetbrains.uast.kotlin.declarations.KotlinUIdentifier
 import org.jetbrains.uast.kotlin.internal.DelegatedMultiResolve
 import org.jetbrains.uast.visitor.UastVisitor
 
-open class KotlinUSimpleReferenceExpression(
+var PsiElement.destructuringDeclarationInitializer: Boolean? by UserDataProperty(Key.create("kotlin.uast.destructuringDeclarationInitializer"))
+
+class KotlinUSimpleReferenceExpression(
     override val sourcePsi: KtSimpleNameExpression,
     givenParent: UElement?
-) : KotlinAbstractUExpression(givenParent), USimpleNameReferenceExpression, KotlinUElementWithType, KotlinEvaluatableUElement {
-    private val resolvedDeclaration: PsiElement? by lz { resolveToDeclaration(sourcePsi) }
-
-    override val identifier get() = sourcePsi.getReferencedName()
-
-    override fun resolve() = resolvedDeclaration
-
-    override val resolvedName: String?
-        get() = (resolvedDeclaration as? PsiNamedElement)?.name
+) : KotlinAbstractUSimpleReferenceExpression(sourcePsi, givenParent) {
 
     override fun accept(visitor: UastVisitor) {
         visitor.visitSimpleNameReferenceExpression(this)
@@ -60,8 +51,6 @@ open class KotlinUSimpleReferenceExpression(
 
         visitor.afterVisitSimpleNameReferenceExpression(this)
     }
-
-    override val referenceNameElement: UElement? by lz { sourcePsi.getIdentifier()?.toUElement() }
 
     private fun visitAccessorCalls(visitor: UastVisitor) {
         // Visit Kotlin get-set synthetic Java property calls as function calls
@@ -106,7 +95,7 @@ open class KotlinUSimpleReferenceExpression(
         private val resolvedCall: ResolvedCall<*>,
         private val accessorDescriptor: DeclarationDescriptor,
         val setterValue: KtExpression?
-    ) : UCallExpressionEx, DelegatedMultiResolve, JvmDeclarationUElementPlaceholder {
+    ) : UCallExpressionEx, DelegatedMultiResolve {
         override val methodName: String?
             get() = accessorDescriptor.name.asString()
 
@@ -177,7 +166,7 @@ class KotlinClassViaConstructorUSimpleReferenceExpression(
     private val resolved by lazy {
         when (val resultingDescriptor = sourcePsi.getResolvedCall(sourcePsi.analyze())?.descriptorForResolveViaConstructor()) {
             is ConstructorDescriptor -> {
-                sourcePsi.calleeExpression?.let { resolveToDeclaration(it, resultingDescriptor) }
+                sourcePsi.calleeExpression?.let { resolveToDeclarationImpl(it, resultingDescriptor.constructedClass) }
             }
             is SamConstructorDescriptor ->
                 (resultingDescriptor.returnType?.getFunctionalInterfaceType(this, sourcePsi) as? PsiClassType)?.resolve()
@@ -191,7 +180,14 @@ class KotlinClassViaConstructorUSimpleReferenceExpression(
 
     override fun resolve(): PsiElement? = resolved
 
-    override fun asLogString(): String = log<USimpleNameReferenceExpression>("identifier = $identifier, resolvesTo = $resolvedName")
+    override fun asLogString(): String {
+        val resolveStr = when(val resolved = resolve()){
+            is PsiClass -> "PsiClass: ${resolved.name}"
+            is PsiMethod -> "PsiMethod: ${resolved.name}"
+            else -> resolved.toString()
+        }
+        return log<USimpleNameReferenceExpression>("identifier = $identifier, resolvesTo = $resolveStr")
+    }
 
     // In new inference, SAM constructor is substituted with a function descriptor, so we use candidate descriptor to preserve behavior
     private fun ResolvedCall<*>.descriptorForResolveViaConstructor(): CallableDescriptor? {

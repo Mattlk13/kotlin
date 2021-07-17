@@ -18,38 +18,53 @@ import org.jetbrains.kotlin.backend.common.ir.createImplicitParameterDeclaration
 import org.jetbrains.kotlin.backend.common.lower.DeclarationIrBuilder
 import org.jetbrains.kotlin.backend.common.lower.irBlock
 import org.jetbrains.kotlin.descriptors.*
-import org.jetbrains.kotlin.descriptors.impl.EmptyPackageFragmentDescriptor
 import org.jetbrains.kotlin.ir.IrStatement
+import org.jetbrains.kotlin.ir.ObsoleteDescriptorBasedAPI
 import org.jetbrains.kotlin.ir.UNDEFINED_OFFSET
 import org.jetbrains.kotlin.ir.builders.*
 import org.jetbrains.kotlin.ir.builders.declarations.*
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.declarations.impl.IrExternalPackageFragmentImpl
-import org.jetbrains.kotlin.ir.declarations.impl.IrFunctionImpl
+import org.jetbrains.kotlin.ir.declarations.impl.IrFactoryImpl
 import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.expressions.IrTypeOperator
 import org.jetbrains.kotlin.ir.expressions.impl.*
 import org.jetbrains.kotlin.ir.symbols.IrClassifierSymbol
-import org.jetbrains.kotlin.ir.symbols.impl.IrExternalPackageFragmentSymbolImpl
+import org.jetbrains.kotlin.ir.symbols.IrSimpleFunctionSymbol
+import org.jetbrains.kotlin.ir.symbols.IrSymbol
+import org.jetbrains.kotlin.ir.symbols.impl.IrTypeParameterSymbolImpl
+import org.jetbrains.kotlin.ir.symbols.impl.IrValueParameterSymbolImpl
 import org.jetbrains.kotlin.ir.types.*
-import org.jetbrains.kotlin.ir.util.defaultType
-import org.jetbrains.kotlin.ir.util.isClass
-import org.jetbrains.kotlin.ir.util.isObject
+import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.FqNameUnsafe
 import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.resolve.descriptorUtil.propertyIfAccessor
+import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 
+@OptIn(ObsoleteDescriptorBasedAPI::class)
 abstract class AndroidIrExtension : IrGenerationExtension {
     abstract fun isEnabled(declaration: IrClass): Boolean
     abstract fun isExperimental(declaration: IrClass): Boolean
     abstract fun getGlobalCacheImpl(declaration: IrClass): CacheImplementation
+
+    override fun resolveSymbol(symbol: IrSymbol, context: TranslationPluginContext): IrDeclaration? =
+        if (symbol !is IrSimpleFunctionSymbol ||
+            (symbol.descriptor !is AndroidSyntheticFunction
+                    && symbol.descriptor.safeAs<PropertyGetterDescriptor>()?.correspondingProperty !is AndroidSyntheticProperty)) {
+            super.resolveSymbol(symbol, context)
+        } else {
+            // Replace android synthetic functions with stubs, since they are essentially intrinsics and will be replaced in the plugin
+            context.declareFunctionStub(symbol.descriptor).also { symbol.bind(it) }
+        }
 
     override fun generate(moduleFragment: IrModuleFragment, pluginContext: IrPluginContext) {
         moduleFragment.transform(AndroidIrTransformer(this, pluginContext), null)
     }
 }
 
+@OptIn(ObsoleteDescriptorBasedAPI::class)
 private class AndroidIrTransformer(val extension: AndroidIrExtension, val pluginContext: IrPluginContext) :
     IrElementTransformerVoidWithContext() {
 
@@ -58,15 +73,16 @@ private class AndroidIrTransformer(val extension: AndroidIrExtension, val plugin
     private val cachedMethods = mutableMapOf<FqName, IrSimpleFunction>()
     private val cachedFields = mutableMapOf<FqName, IrField>()
 
+    private val irFactory: IrFactory = IrFactoryImpl
+
     private fun createPackage(fqName: FqName) =
         cachedPackages.getOrPut(fqName) {
-            val descriptor = EmptyPackageFragmentDescriptor(pluginContext.moduleDescriptor, fqName)
-            IrExternalPackageFragmentImpl(IrExternalPackageFragmentSymbolImpl(descriptor))
+            IrExternalPackageFragmentImpl.createEmptyExternalPackageFragment(pluginContext.moduleDescriptor, fqName)
         }
 
     private fun createClass(fqName: FqName, isInterface: Boolean = false) =
         cachedClasses.getOrPut(fqName) {
-            buildClass {
+            irFactory.buildClass {
                 name = fqName.shortName()
                 kind = if (isInterface) ClassKind.INTERFACE else ClassKind.CLASS
                 origin = IrDeclarationOrigin.IR_EXTERNAL_JAVA_DECLARATION_STUB
@@ -76,7 +92,7 @@ private class AndroidIrTransformer(val extension: AndroidIrExtension, val plugin
             }
         }
 
-    private fun createMethod(fqName: FqName, type: IrType, inInterface: Boolean = false, f: IrFunctionImpl.() -> Unit = {}) =
+    private fun createMethod(fqName: FqName, type: IrType, inInterface: Boolean = false, f: IrFunction.() -> Unit = {}) =
         cachedMethods.getOrPut(fqName) {
             val parent = createClass(fqName.parent(), inInterface)
             parent.addFunction {
@@ -92,7 +108,7 @@ private class AndroidIrTransformer(val extension: AndroidIrExtension, val plugin
 
     private fun createField(fqName: FqName, type: IrType) =
         cachedFields.getOrPut(fqName) {
-            createClass(fqName.parent()).addField(fqName.shortName(), type, Visibilities.PUBLIC)
+            createClass(fqName.parent()).addField(fqName.shortName(), type, DescriptorVisibilities.PUBLIC)
         }
 
     override fun visitClassNew(declaration: IrClass): IrStatement {
@@ -202,8 +218,9 @@ private class AndroidIrTransformer(val extension: AndroidIrExtension, val plugin
 
 private fun FqName.child(name: String) = child(Name.identifier(name))
 
+@ObsoleteDescriptorBasedAPI
 private fun IrSimpleFunction.callWithRanges(source: IrExpression) =
-    IrCallImpl(source.startOffset, source.endOffset, returnType, symbol)
+    IrCallImpl.fromSymbolDescriptor(source.startOffset, source.endOffset, returnType, symbol)
 
 private val AndroidContainerType.fqName: FqName
     get() = FqName(internalClassName.replace("/", "."))
@@ -212,3 +229,35 @@ private val IrClassifierSymbol.isFragment: Boolean
     get() = isClassWithFqName(FqNameUnsafe(AndroidConst.FRAGMENT_FQNAME)) ||
             isClassWithFqName(FqNameUnsafe(AndroidConst.SUPPORT_FRAGMENT_FQNAME)) ||
             isClassWithFqName(FqNameUnsafe(AndroidConst.ANDROIDX_SUPPORT_FRAGMENT_FQNAME))
+
+private fun TranslationPluginContext.declareTypeParameterStub(typeParameterDescriptor: TypeParameterDescriptor): IrTypeParameter {
+    val symbol = IrTypeParameterSymbolImpl(typeParameterDescriptor)
+    return irFactory.createTypeParameter(
+        UNDEFINED_OFFSET, UNDEFINED_OFFSET, IrDeclarationOrigin.DEFINED, symbol, typeParameterDescriptor.name,
+        typeParameterDescriptor.index, typeParameterDescriptor.isReified, typeParameterDescriptor.variance
+    )
+}
+
+private fun TranslationPluginContext.declareParameterStub(parameterDescriptor: ParameterDescriptor): IrValueParameter {
+    val symbol = IrValueParameterSymbolImpl(parameterDescriptor)
+    val type = typeTranslator.translateType(parameterDescriptor.type)
+    val varargElementType = parameterDescriptor.varargElementType?.let { typeTranslator.translateType(it) }
+    return irFactory.createValueParameter(
+        UNDEFINED_OFFSET, UNDEFINED_OFFSET, IrDeclarationOrigin.DEFINED, symbol, parameterDescriptor.name,
+        parameterDescriptor.indexOrMinusOne, type, varargElementType, parameterDescriptor.isCrossinline,
+        parameterDescriptor.isNoinline, isHidden = false, isAssignable = false
+    )
+}
+
+private fun TranslationPluginContext.declareFunctionStub(descriptor: FunctionDescriptor): IrSimpleFunction =
+    irFactory.buildFun {
+        name = descriptor.name
+        visibility = descriptor.visibility
+        returnType = typeTranslator.translateType(descriptor.returnType!!)
+        modality = descriptor.modality
+    }.also {
+        it.typeParameters = descriptor.propertyIfAccessor.typeParameters.map(this::declareTypeParameterStub)
+        it.dispatchReceiverParameter = descriptor.dispatchReceiverParameter?.let(this::declareParameterStub)
+        it.extensionReceiverParameter = descriptor.extensionReceiverParameter?.let(this::declareParameterStub)
+        it.valueParameters = descriptor.valueParameters.map(this::declareParameterStub)
+    }

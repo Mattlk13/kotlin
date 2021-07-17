@@ -30,7 +30,11 @@ object Plugins {
             ConsoleJvmApplicationTemplatePlugin(context),
             KtorTemplatesPlugin(context),
             JsTemplatesPlugin(context),
-            NativeConsoleApplicationTemplatePlugin(context)
+            ReactJsTemplatesPlugin(context),
+            SimpleNodeJsTemplatesPlugin(context),
+            NativeConsoleApplicationTemplatePlugin(context),
+            ComposeTemplatesPlugin(context),
+            MobileMppTemplatePlugin(context),
         )
     }
 }

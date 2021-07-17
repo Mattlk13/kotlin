@@ -9,27 +9,24 @@ import groovy.lang.Closure
 import org.gradle.api.InvalidUserCodeException
 import org.gradle.api.Project
 import org.gradle.api.file.SourceDirectorySet
-import org.gradle.api.internal.file.DefaultSourceDirectorySet
-import org.gradle.api.internal.file.FileResolver
 import org.gradle.util.ConfigureUtil
 import org.jetbrains.kotlin.build.DEFAULT_KOTLIN_SOURCE_FILES_EXTENSIONS
+import org.jetbrains.kotlin.commonizer.util.transitiveClosure
+import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
 import org.jetbrains.kotlin.gradle.plugin.KotlinDependencyHandler
 import org.jetbrains.kotlin.gradle.plugin.KotlinSourceSet
 import org.jetbrains.kotlin.gradle.plugin.LanguageSettingsBuilder
 import org.jetbrains.kotlin.gradle.plugin.mpp.*
-import org.jetbrains.kotlin.gradle.plugin.mpp.GranularMetadataTransformation
-import org.jetbrains.kotlin.gradle.plugin.mpp.MetadataDependencyResolution
+import org.jetbrains.kotlin.gradle.plugin.whenEvaluated
 import org.jetbrains.kotlin.gradle.utils.*
 import java.io.File
-import java.lang.reflect.Constructor
 import java.util.*
 
 const val METADATA_CONFIGURATION_NAME_SUFFIX = "DependenciesMetadata"
 
 class DefaultKotlinSourceSet(
     private val project: Project,
-    val displayName: String,
-    fileResolver: FileResolver
+    val displayName: String
 ) : KotlinSourceSet {
 
     override val apiConfigurationName: String
@@ -56,15 +53,21 @@ class DefaultKotlinSourceSet(
     override val runtimeOnlyMetadataConfigurationName: String
         get() = lowerCamelCaseName(runtimeOnlyConfigurationName, METADATA_CONFIGURATION_NAME_SUFFIX)
 
-    override val kotlin: SourceDirectorySet = createDefaultSourceDirectorySet(project, "$name Kotlin source", fileResolver).apply {
+    /**
+     * Dependencies added to this configuration will not be exposed to any other source set.
+     */
+    val intransitiveMetadataConfigurationName: String
+        get() = lowerCamelCaseName(disambiguateName(INTRANSITIVE), METADATA_CONFIGURATION_NAME_SUFFIX)
+
+    override val kotlin: SourceDirectorySet = createDefaultSourceDirectorySet(project, "$name Kotlin source").apply {
         filter.include("**/*.java")
         filter.include("**/*.kt")
         filter.include("**/*.kts")
     }
 
-    override val languageSettings: LanguageSettingsBuilder = DefaultLanguageSettingsBuilder()
+    override val languageSettings: LanguageSettingsBuilder = DefaultLanguageSettingsBuilder(project)
 
-    override val resources: SourceDirectorySet = createDefaultSourceDirectorySet(project, "$name resources", fileResolver)
+    override val resources: SourceDirectorySet = createDefaultSourceDirectorySet(project, "$name resources")
 
     override fun kotlin(configureClosure: Closure<Any?>): SourceDirectorySet =
         kotlin.apply { ConfigureUtil.configure(configureClosure, this) }
@@ -72,6 +75,9 @@ class DefaultKotlinSourceSet(
     override fun languageSettings(configureClosure: Closure<Any?>): LanguageSettingsBuilder = languageSettings.apply {
         ConfigureUtil.configure(configureClosure, this)
     }
+
+    override fun languageSettings(configure: LanguageSettingsBuilder.() -> Unit): LanguageSettingsBuilder =
+        languageSettings.apply { configure(this) }
 
     override fun getName(): String = displayName
 
@@ -87,7 +93,7 @@ class DefaultKotlinSourceSet(
         // Fail-fast approach: check on each new added edge and report a circular dependency at once when the edge is added.
         checkForCircularDependencies()
 
-        project.afterEvaluate { defaultSourceSetLanguageSettingsChecker.runAllChecks(this, other) }
+        project.whenEvaluated { defaultSourceSetLanguageSettingsChecker.runAllChecks(this@DefaultKotlinSourceSet, other) }
     }
 
     private val dependsOnSourceSetsImpl = mutableSetOf<KotlinSourceSet>()
@@ -158,7 +164,8 @@ class DefaultKotlinSourceSet(
                 ?.associateBy { ModuleIds.fromComponent(project, it.dependency) }
                 ?: emptyMap()
 
-        val baseDir = project.buildDir.resolve("tmp/kotlinMetadata/$name/${scope.scopeName}")
+        val baseDir = SourceSetMetadataStorageForIde.sourceSetStorageWithScope(project, this@DefaultKotlinSourceSet.name, scope)
+
         if (metadataDependencyResolutionByModule.values.any { it is MetadataDependencyResolution.ChooseVisibleSourceSets }) {
             if (baseDir.isDirectory) {
                 baseDir.deleteRecursively()
@@ -179,7 +186,8 @@ class DefaultKotlinSourceSet(
                     val filesBySourceSet = resolution.getMetadataFilesBySourceSet(
                         baseDir,
                         doProcessFiles = true
-                    )
+                    ).filter { it.value.any { it.exists() } }
+
                     MetadataDependencyTransformation(
                         group, name, projectPath,
                         resolution.projectStructureMetadata,
@@ -193,6 +201,17 @@ class DefaultKotlinSourceSet(
 
     //endregion
 }
+
+
+internal val defaultSourceSetLanguageSettingsChecker =
+    FragmentConsistencyChecker<KotlinSourceSet>(
+        unitsName = "source sets",
+        name = { name },
+        checks = FragmentConsistencyChecks<KotlinSourceSet>(
+            unitName = "source set",
+            languageSettings = { languageSettings }
+        ).allChecks
+    )
 
 private fun KotlinSourceSet.checkForCircularDependencies() {
     // If adding an edge creates a cycle, than the source node of the edge belongs to the cycle, so run DFS from that node
@@ -226,46 +245,31 @@ internal fun KotlinSourceSet.disambiguateName(simpleName: String): String {
     return lowerCamelCaseName(*nameParts.toTypedArray())
 }
 
-private fun createDefaultSourceDirectorySet(project: Project, name: String?, resolver: FileResolver?): SourceDirectorySet {
-    if (isGradleVersionAtLeast(5, 0)) {
-        val objects = project.objects
-        val sourceDirectorySetMethod = objects.javaClass.methods.single { it.name == "sourceDirectorySet" && it.parameterCount == 2 }
-        return sourceDirectorySetMethod(objects, name, name) as SourceDirectorySet
-    }
+private fun createDefaultSourceDirectorySet(project: Project, name: String?): SourceDirectorySet =
+    project.objects.sourceDirectorySet(name!!, name)
 
-    val klass = DefaultSourceDirectorySet::class.java
-    val defaultConstructor = klass.constructorOrNull(String::class.java, FileResolver::class.java)
+/**
+ * Like [resolveAllDependsOnSourceSets] but will include the receiver source set also!
+ */
+internal fun KotlinSourceSet.withAllDependsOnSourceSets(): Set<KotlinSourceSet> {
+    return this + this.resolveAllDependsOnSourceSets()
+}
 
-    return if (defaultConstructor != null && defaultConstructor.getAnnotation(java.lang.Deprecated::class.java) == null) {
-        // TODO: drop when gradle < 2.12 are obsolete
-        defaultConstructor.newInstance(name, resolver)
-    } else {
-        val directoryFileTreeFactoryClass = Class.forName("org.gradle.api.internal.file.collections.DirectoryFileTreeFactory")
-        val alternativeConstructor = klass.getConstructor(String::class.java, FileResolver::class.java, directoryFileTreeFactoryClass)
-
-        val defaultFileTreeFactoryClass = Class.forName("org.gradle.api.internal.file.collections.DefaultDirectoryFileTreeFactory")
-        val defaultFileTreeFactory = defaultFileTreeFactoryClass.getConstructor().newInstance()
-        alternativeConstructor.newInstance(name, resolver, defaultFileTreeFactory)
+internal operator fun KotlinSourceSet.plus(sourceSets: Set<KotlinSourceSet>): Set<KotlinSourceSet> {
+    return HashSet<KotlinSourceSet>(sourceSets.size + 1).also { set ->
+        set.add(this)
+        set.addAll(sourceSets)
     }
 }
 
-internal fun KotlinSourceSet.getSourceSetHierarchy(): Set<KotlinSourceSet> {
-    val result = mutableSetOf<KotlinSourceSet>()
-
-    fun processSourceSet(sourceSet: KotlinSourceSet) {
-        if (result.add(sourceSet)) {
-            sourceSet.dependsOn.forEach { processSourceSet(it) }
-        }
-    }
-
-    processSourceSet(this)
-    return result
+internal fun KotlinSourceSet.resolveAllDependsOnSourceSets(): Set<KotlinSourceSet> {
+    return transitiveClosure(this) { dependsOn }
 }
 
+internal fun Iterable<KotlinSourceSet>.resolveAllDependsOnSourceSets(): Set<KotlinSourceSet> {
+    return flatMapTo(mutableSetOf()) { it.resolveAllDependsOnSourceSets() }
+}
 
-private fun <T> Class<T>.constructorOrNull(vararg parameterTypes: Class<*>): Constructor<T>? =
-    try {
-        getConstructor(*parameterTypes)
-    } catch (e: NoSuchMethodException) {
-        null
-    }
+internal fun KotlinMultiplatformExtension.resolveAllSourceSetsDependingOn(sourceSet: KotlinSourceSet): Set<KotlinSourceSet> {
+    return transitiveClosure(sourceSet) { sourceSets.filter { otherSourceSet -> this in otherSourceSet.dependsOn } }
+}

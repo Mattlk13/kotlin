@@ -5,21 +5,13 @@ plugins {
     id 'com.android.library'
     id 'kotlin-android-extensions'
 }
+
 group = 'me.user'
 version = '1.0-SNAPSHOT'
 
-repositories {
-    gradlePluginPortal()
-    google()
-    jcenter()
-    mavenCentral()
-    maven {
-        url 'https://dl.bintray.com/kotlin/kotlin-dev'
-    }
-}
 kotlin {
     android()
-    iosX64('ios') {
+    ios {
         binaries {
             framework {
                 baseName = 'shared'
@@ -28,9 +20,7 @@ kotlin {
     }
     sourceSets {
         commonMain {
-            dependencies {
-                implementation kotlin('stdlib-common')
-            }
+
         }
         commonTest {
             dependencies {
@@ -40,12 +30,14 @@ kotlin {
         }
         androidMain {
             dependencies {
-                implementation kotlin('stdlib-jdk7')
-                implementation 'androidx.core:core-ktx:1.2.0'
+                implementation 'com.google.android.material:material:1.2.1'
             }
         }
         androidTest {
-
+            dependencies {
+                implementation kotlin('test-junit')
+                implementation 'junit:junit:4.13'
+            }
         }
         iosMain {
 
@@ -55,28 +47,27 @@ kotlin {
         }
     }
 }
+
 android {
     compileSdkVersion 29
+    sourceSets.main.manifest.srcFile('src/androidMain/AndroidManifest.xml')
     defaultConfig {
         minSdkVersion 24
         targetSdkVersion 29
-        versionCode 1
-        versionName '1.0'
-    }
-    buildTypes {
-        'release' {
-            minifyEnabled false
-        }
     }
 }
+
 task(packForXcode, type: Sync) {
     group = 'build'
     def mode = System.getenv('CONFIGURATION') ?: 'DEBUG'
-    def framework = kotlin.targets.ios.binaries.getFramework(mode)
+    def sdkName = System.getenv('SDK_NAME') ?: 'iphonesimulator'
+    def targetName = 'ios' + (sdkName.startsWith('iphoneos') ? 'Arm64' : 'X64')
+    def framework = kotlin.targets[targetName].binaries.getFramework(mode)
     inputs.property('mode', mode)
     dependsOn(framework.linkTask)
     def targetDir = new File(buildDir, 'xcode-frameworks')
     from({ framework.outputDirectory })
     into(targetDir)
 }
+
 tasks.getByName('build').dependsOn(packForXcode)

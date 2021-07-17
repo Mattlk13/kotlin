@@ -1,13 +1,5 @@
 // !USE_EXPERIMENTAL: kotlin.contracts.ExperimentalContracts
 
-/*
- * KOTLIN DIAGNOSTICS NOT LINKED SPEC TEST (POSITIVE)
- *
- * SECTIONS: contracts, analysis, smartcasts
- * NUMBER: 7
- * DESCRIPTION: Smartcasts using Returns effects with nested or subsequent contract function calls.
- */
-
 // FILE: contracts.kt
 
 package contracts
@@ -227,7 +219,7 @@ fun case_1(value_1: Int?) {
 // TESTCASE NUMBER: 2
 fun case_2(value_1: Number?) {
     case_2_1(value_1)
-    value_1.toByte()
+    value_1.<!DEPRECATION_ERROR!>toByte<!>()
     case_2_2(value_1)
     value_1.inv()
 }
@@ -286,25 +278,25 @@ fun case_5(value_1: Int?, value_2: Int?) {
 fun case_6(value_1: Number?, value_2: Number?) {
     when {
         case_6_1(value_1) -> {
-            value_1.toByte()
+            value_1.<!DEPRECATION_ERROR!>toByte<!>()
             when { case_6_2(value_1) -> value_1.inv() }
         }
     }
     when {
         !case_6_3(value_2) -> {
-            value_2.toByte()
+            value_2.<!DEPRECATION_ERROR!>toByte<!>()
             when { !case_6_4(value_2) -> value_2.inv() }
         }
     }
     when {
         case_6_5(value_2) != null -> {
-            value_2.<!INAPPLICABLE_CANDIDATE!>toByte<!>()
+            value_2.<!DEPRECATION_ERROR!>toByte<!>()
             when { case_6_6(value_2) != null -> value_2.inv() }
         }
     }
     when {
         case_6_7(value_2) == null -> {
-            value_2.toByte()
+            value_2.<!DEPRECATION_ERROR!>toByte<!>()
             when { case_6_8(value_2) == null -> value_2.inv() }
         }
     }
@@ -321,8 +313,8 @@ fun case_7(value_1: Any?, value_2: Any?) {
         if (!case_7_4(value_2)) value_2.length
     }
     if (case_7_5(value_2) != null) {
-        value_2.<!UNRESOLVED_REFERENCE!>length<!>
-        if (case_7_6(value_2) != null) value_2.<!UNRESOLVED_REFERENCE!>length<!>
+        value_2.length
+        if (case_7_6(value_2) != null) value_2.length
     }
     if (case_7_7(value_2) == null) {
         value_2.length
@@ -347,10 +339,10 @@ fun case_8(value_1: Any?, value_2: Any?) {
         }
     }
     if (case_8_7(value_2) != null) {
-        value_2?.<!UNRESOLVED_REFERENCE!>toByte<!>()
-        if (<!INAPPLICABLE_CANDIDATE!>case_8_8<!>(value_2) != null) {
-            value_2.<!UNRESOLVED_REFERENCE!>toByte<!>()
-            if (<!INAPPLICABLE_CANDIDATE!>case_8_9<!>(value_2) != null) value_2.inv()
+        value_2?.toByte()
+        if (case_8_8(value_2) != null) {
+            value_2.toByte()
+            if (case_8_9(value_2) != null) value_2.inv()
         }
     }
     if (case_8_10(value_2) == null) {

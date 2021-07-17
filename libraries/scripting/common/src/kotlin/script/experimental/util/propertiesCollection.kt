@@ -37,6 +37,18 @@ open class PropertiesCollection(protected var properties: Map<Key<*>, Any?> = em
         getDefaultValue: PropertiesCollection.() -> T?
     ) : Key<T>(name, getDefaultValue)
 
+    class CopiedKey<T>(
+        source: Key<T>,
+        getSourceProperties: PropertiesCollection.() -> PropertiesCollection?
+    ) : Key<T>(
+        source.name,
+        {
+            val sourceProperties = getSourceProperties()
+            if (sourceProperties == null) source.getDefaultValue(this)
+            else sourceProperties.get(source)
+        }
+    )
+
     class PropertyKeyDelegate<T>(private val getDefaultValue: PropertiesCollection.() -> T?, val isTransient: Boolean = false) {
         constructor(defaultValue: T?, isTransient: Boolean = false) : this({ defaultValue }, isTransient)
 
@@ -45,8 +57,10 @@ open class PropertiesCollection(protected var properties: Map<Key<*>, Any?> = em
             else Key(property.name, getDefaultValue)
     }
 
-    class PropertyKeyCopyDelegate<T>(val source: Key<T>) {
-        operator fun getValue(thisRef: Any?, property: KProperty<*>): Key<T> = source
+    class PropertyKeyCopyDelegate<T>(
+        val source: Key<T>, val getSourceProperties: PropertiesCollection.() -> PropertiesCollection? = { null }
+    ) {
+        operator fun getValue(thisRef: Any?, property: KProperty<*>): Key<T> = CopiedKey(source, getSourceProperties)
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -62,7 +76,8 @@ open class PropertiesCollection(protected var properties: Map<Key<*>, Any?> = em
 
     fun entries(): Set<Map.Entry<Key<*>, Any?>> = properties.entries
 
-    val notTransientData: Map<Key<*>, Any?> get() = properties.filterKeys { it !is TransientKey<*> }
+    val notTransientData: Map<Key<*>, Any?>
+        get() = properties.filter { (key, value) -> key !is TransientKey<*> && value is Serializable }
 
     fun isEmpty(): Boolean = properties.isEmpty()
 
@@ -87,7 +102,12 @@ open class PropertiesCollection(protected var properties: Map<Key<*>, Any?> = em
         fun <T> key(getDefaultValue: PropertiesCollection.() -> T?, isTransient: Boolean = false): PropertyKeyDelegate<T> =
             PropertyKeyDelegate(getDefaultValue, isTransient)
 
-        fun <T> keyCopy(source: Key<T>): PropertyKeyCopyDelegate<T> = PropertyKeyCopyDelegate(source)
+//        fun <T> keyCopy(source: Key<T>): PropertyKeyCopyDelegate<T> = PropertyKeyCopyDelegate(source)
+
+        fun <T> keyCopy(
+            source: Key<T>, getSourceProperties: PropertiesCollection.() -> PropertiesCollection? = { null }
+        ): PropertyKeyCopyDelegate<T> =
+            PropertyKeyCopyDelegate(source, getSourceProperties)
 
         @JvmStatic
         private val serialVersionUID = 1L

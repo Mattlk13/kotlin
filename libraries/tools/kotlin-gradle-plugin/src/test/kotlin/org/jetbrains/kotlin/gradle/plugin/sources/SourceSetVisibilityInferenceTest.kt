@@ -9,6 +9,7 @@ import groovy.lang.Closure
 import org.gradle.api.attributes.AttributeContainer
 import org.gradle.api.file.FileCollection
 import org.gradle.api.file.SourceDirectorySet
+import org.gradle.api.tasks.TaskProvider
 import org.jetbrains.kotlin.gradle.dsl.KotlinCommonOptions
 import org.jetbrains.kotlin.gradle.dsl.KotlinCompile
 import org.jetbrains.kotlin.gradle.plugin.*
@@ -252,6 +253,7 @@ class MockKotlinSourceSet(private val name: String) : KotlinSourceSet {
     override val resources: SourceDirectorySet get() = throw UnsupportedOperationException()
     override val languageSettings: LanguageSettingsBuilder get() = throw UnsupportedOperationException()
     override fun languageSettings(configureClosure: Closure<Any?>): LanguageSettingsBuilder = languageSettings
+    override fun languageSettings(configure: LanguageSettingsBuilder.() -> Unit): LanguageSettingsBuilder = languageSettings
     override val apiMetadataConfigurationName: String get() = throw UnsupportedOperationException()
     override val implementationMetadataConfigurationName: String get() = throw UnsupportedOperationException()
     override val compileOnlyMetadataConfigurationName: String get() = throw UnsupportedOperationException()
@@ -297,7 +299,7 @@ class MockKotlinCompilation(
 
     //region Not implemented
     override val target: KotlinTarget get() = throw UnsupportedOperationException()
-
+    override val compileKotlinTaskProvider: TaskProvider<out KotlinCompile<KotlinCommonOptions>> get() = throw UnsupportedOperationException()
     override fun getAttributes(): AttributeContainer = throw UnsupportedOperationException()
     override fun dependencies(configure: KotlinDependencyHandler.() -> Unit) = throw UnsupportedOperationException()
     override fun dependencies(configureClosure: Closure<Any?>) = throw UnsupportedOperationException()

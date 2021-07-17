@@ -80,9 +80,9 @@ private fun getCounterpart(expression: KtCallExpression): String? {
         }
         val bindingContext = callee.analyze(BodyResolveMode.PARTIAL)
         val resolvedCall = callee.getResolvedCall(bindingContext) ?: return null
-        if (resolvedCall.resultingDescriptor.fqNameSafe.asString() == "kotlin.$calleeName" &&
-            nameResolvesToStdlib(expression, bindingContext, counterpartName)
-        ) {
+        val descriptor = resolvedCall.resultingDescriptor
+        if (descriptor.dispatchReceiverParameter == null && descriptor.extensionReceiverParameter == null) return null
+        if (descriptor.fqNameSafe.asString() == "kotlin.$calleeName" && nameResolvesToStdlib(expression, bindingContext, counterpartName)) {
             return counterpartName
         }
     }
@@ -238,12 +238,14 @@ class ConvertScopeFunctionToParameter(counterpartName: String) : ConvertScopeFun
     }
 
     override fun postprocessLambda(lambda: KtLambdaArgument) {
-        ShortenReferences { ShortenReferences.Options(removeThisLabels = true) }.process(lambda) { element ->
+        val filter = { element: PsiElement ->
             if (element is KtThisExpression && element.getLabelName() != null)
                 ShortenReferences.FilterResult.PROCESS
             else
                 ShortenReferences.FilterResult.GO_INSIDE
         }
+
+        ShortenReferences{ ShortenReferences.Options(removeThisLabels = true) }.process(lambda, filter)
     }
 
     private fun needUniqueNameForParameter(
@@ -342,7 +344,7 @@ class ConvertScopeFunctionToReceiver(counterpartName: String) : ConvertScopeFunc
     }
 
     override fun postprocessLambda(lambda: KtLambdaArgument) {
-        ShortenReferences { ShortenReferences.Options(removeThis = true, removeThisLabels = true) }.process(lambda) { element ->
+        val filter = { element: PsiElement ->
             if (element is KtThisExpression && element.getLabelName() != null)
                 ShortenReferences.FilterResult.PROCESS
             else if (element is KtQualifiedExpression && element.receiverExpression is KtThisExpression)
@@ -350,6 +352,7 @@ class ConvertScopeFunctionToReceiver(counterpartName: String) : ConvertScopeFunc
             else
                 ShortenReferences.FilterResult.GO_INSIDE
         }
+        ShortenReferences { ShortenReferences.Options(removeThis = true, removeThisLabels = true) }.process(lambda, filter)
     }
 }
 

@@ -9,9 +9,8 @@ import org.jetbrains.kotlin.fir.*
 import org.jetbrains.kotlin.fir.expressions.FirComparisonExpression
 import org.jetbrains.kotlin.fir.expressions.FirExpression
 import org.jetbrains.kotlin.fir.expressions.arguments
-import org.jetbrains.kotlin.fir.symbols.StandardClassIds
+import org.jetbrains.kotlin.name.StandardClassIds
 import org.jetbrains.kotlin.fir.types.*
-import org.jetbrains.kotlin.utils.addToStdlib.firstNotNullResult
 
 class PrimitiveConeNumericComparisonInfo(
     val comparisonType: ConeClassLikeType,
@@ -29,8 +28,8 @@ fun FirComparisonExpression.inferPrimitiveNumericComparisonInfo(): PrimitiveCone
     inferPrimitiveNumericComparisonInfo(left, right)
 
 fun inferPrimitiveNumericComparisonInfo(left: FirExpression, right: FirExpression): PrimitiveConeNumericComparisonInfo? {
-    val leftType = left.typeRef.coneTypeSafe<ConeKotlinType>() ?: return null
-    val rightType = right.typeRef.coneTypeSafe<ConeKotlinType>() ?: return null
+    val leftType = left.typeRef.coneType
+    val rightType = right.typeRef.coneType
     val leftPrimitiveOrNullableType = leftType.getPrimitiveTypeOrSupertype() ?: return null
     val rightPrimitiveOrNullableType = rightType.getPrimitiveTypeOrSupertype() ?: return null
     val leastCommonType = leastCommonPrimitiveNumericType(leftPrimitiveOrNullableType, rightPrimitiveOrNullableType)
@@ -47,7 +46,7 @@ private fun leastCommonPrimitiveNumericType(t1: ConeClassLikeType, t2: ConeClass
         pt1.isFloat() || pt2.isFloat() -> PrimitiveTypes.Float
         pt1.isLong() || pt2.isLong() -> PrimitiveTypes.Long
         pt1.isInt() || pt2.isInt() -> PrimitiveTypes.Int
-        else -> throw AssertionError("Unexpected types: t1=$t1, t2=$t2")
+        else -> error("Unexpected types: t1=$t1, t2=$t2")
     }
 }
 
@@ -55,14 +54,14 @@ private fun ConeClassLikeType.promoteIntegerTypeToIntIfRequired(): ConeClassLike
     when (lookupTag.classId) {
         StandardClassIds.Byte, StandardClassIds.Short -> PrimitiveTypes.Int
         StandardClassIds.Long, StandardClassIds.Int, StandardClassIds.Float, StandardClassIds.Double, StandardClassIds.Char -> this
-        else -> throw AssertionError("Primitive number type expected: $this")
+        else -> error("Primitive number type expected: $this")
     }
 
 private fun ConeKotlinType.getPrimitiveTypeOrSupertype(): ConeClassLikeType? =
     when {
         this is ConeTypeParameterType ->
-            this.lookupTag.typeParameterSymbol.fir.bounds.firstNotNullResult {
-                it.coneTypeSafe<ConeKotlinType>()?.getPrimitiveTypeOrSupertype()
+            this.lookupTag.typeParameterSymbol.fir.bounds.firstNotNullOfOrNull {
+                it.coneType.getPrimitiveTypeOrSupertype()
             }
         this is ConeClassLikeType && isPrimitiveNumberType() ->
             this

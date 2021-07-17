@@ -20,7 +20,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.descriptors.SourceElement;
 import org.jetbrains.kotlin.load.java.JvmAnnotationNames;
-import org.jetbrains.kotlin.metadata.jvm.deserialization.JvmBytecodeBinaryVersion;
+import org.jetbrains.kotlin.metadata.jvm.deserialization.BitEncoding;
 import org.jetbrains.kotlin.metadata.jvm.deserialization.JvmMetadataVersion;
 import org.jetbrains.kotlin.name.ClassId;
 import org.jetbrains.kotlin.name.FqName;
@@ -51,7 +51,6 @@ public class ReadKotlinClassHeaderAnnotationVisitor implements AnnotationVisitor
     }
 
     private int[] metadataVersionArray = null;
-    private JvmBytecodeBinaryVersion bytecodeVersion = null;
     private String extraString = null;
     private int extraInt = 0;
     private String packageName = null;
@@ -59,6 +58,7 @@ public class ReadKotlinClassHeaderAnnotationVisitor implements AnnotationVisitor
     private String[] strings = null;
     private String[] incompatibleData = null;
     private KotlinClassHeader.Kind headerKind = null;
+    private String[] serializedIrFields = null;
 
     @Nullable
     public KotlinClassHeader createHeader() {
@@ -79,16 +79,21 @@ public class ReadKotlinClassHeaderAnnotationVisitor implements AnnotationVisitor
             return null;
         }
 
+        byte[] serializedIr = null;
+        if (serializedIrFields != null) {
+            serializedIr = BitEncoding.decodeBytes(serializedIrFields);
+        }
+
         return new KotlinClassHeader(
                 headerKind,
                 metadataVersion,
-                bytecodeVersion != null ? bytecodeVersion : JvmBytecodeBinaryVersion.INSTANCE,
                 data,
                 incompatibleData,
                 strings,
                 extraString,
                 extraInt,
-                packageName
+                packageName,
+                serializedIr
         );
     }
 
@@ -142,11 +147,6 @@ public class ReadKotlinClassHeaderAnnotationVisitor implements AnnotationVisitor
                     metadataVersionArray = (int[]) value;
                 }
             }
-            else if (BYTECODE_VERSION_FIELD_NAME.equals(string)) {
-                if (value instanceof int[]) {
-                    bytecodeVersion = new JvmBytecodeBinaryVersion((int[]) value);
-                }
-            }
             else if (METADATA_EXTRA_STRING_FIELD_NAME.equals(string)) {
                 if (value instanceof String) {
                     extraString = (String) value;
@@ -178,6 +178,9 @@ public class ReadKotlinClassHeaderAnnotationVisitor implements AnnotationVisitor
             else if (METADATA_STRINGS_FIELD_NAME.equals(string)) {
                 return stringsArrayVisitor();
             }
+            else if (METADATA_SERIALIZED_IR_FIELD_NAME.equals(string)) {
+                return serializedIrArrayVisitor();
+            }
             else {
                 return null;
             }
@@ -199,6 +202,16 @@ public class ReadKotlinClassHeaderAnnotationVisitor implements AnnotationVisitor
                 @Override
                 protected void visitEnd(@NotNull String[] result) {
                     strings = result;
+                }
+            };
+        }
+
+        @NotNull
+        private AnnotationArrayArgumentVisitor serializedIrArrayVisitor() {
+            return new CollectStringArrayAnnotationVisitor() {
+                @Override
+                protected void visitEnd(@NotNull String[] result) {
+                    serializedIrFields = result;
                 }
             };
         }
@@ -227,11 +240,6 @@ public class ReadKotlinClassHeaderAnnotationVisitor implements AnnotationVisitor
             if ("version".equals(string)) {
                 if (value instanceof int[]) {
                     metadataVersionArray = (int[]) value;
-
-                    // If there's no bytecode binary version in the class file, we assume it to be equal to the metadata version
-                    if (bytecodeVersion == null) {
-                        bytecodeVersion = new JvmBytecodeBinaryVersion((int[]) value);
-                    }
                 }
             }
             else if ("multifileClassName".equals(string)) {
@@ -313,6 +321,12 @@ public class ReadKotlinClassHeaderAnnotationVisitor implements AnnotationVisitor
 
         @Override
         public void visitClassLiteral(@NotNull ClassLiteralValue classLiteralValue) {
+        }
+
+        @Nullable
+        @Override
+        public AnnotationArgumentVisitor visitAnnotation(@NotNull ClassId classId) {
+            return null;
         }
 
         @Override

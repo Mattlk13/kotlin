@@ -2,15 +2,6 @@
 // !DIAGNOSTICS: -UNUSED_VARIABLE -ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE -UNUSED_VALUE -UNUSED_PARAMETER -UNUSED_EXPRESSION
 // SKIP_TXT
 
-/*
- * KOTLIN DIAGNOSTICS SPEC TEST (NEGATIVE)
- *
- * SPEC VERSION: 0.1-213
- * PLACE: declarations, classifier-declaration, class-declaration, abstract-classes -> paragraph 2 -> sentence 1
- * NUMBER: 1
- * DESCRIPTION: Abstract classes may contain one or more abstract members, which should be implemented in a subtype of this abstract class
- */
-
 // TESTCASE NUMBER: 1
 
 <!REDUNDANT_MODIFIER!>open<!>     abstract class Base {
@@ -31,9 +22,9 @@ fun case1() {
 
 class BaseImplCase2(
     override var a: Any, override
-    val  b: Any, override var c: Any, override
+    <!VAR_OVERRIDDEN_BY_VAL!>val<!>  b: Any, override var c: Any, override
 
- val  d: Any = "5") : Base()
+ <!VAR_OVERRIDDEN_BY_VAL!>val<!>  d: Any = "5") : Base()
 {
     override fun foo() {}
     override internal fun boo() {}
@@ -51,14 +42,14 @@ class ImplBaseCase2() : Base() {
         set(value) {}
     override
 
-     val  b: Any
+     <!VAR_OVERRIDDEN_BY_VAL!>val<!>  b: Any
         get() = TODO()
     override var c: Any
         get() = TODO()
         set(value) {}
     override
 
-     val  d: Any
+     <!VAR_OVERRIDDEN_BY_VAL!>val<!>  d: Any
         get() = TODO()
 
     override fun foo() {}
@@ -76,7 +67,7 @@ fun case3() {
     ImplBaseCase3()
 }
 
-class ImplBaseCase3() : Base() {
+<!ABSTRACT_CLASS_MEMBER_NOT_IMPLEMENTED!>class ImplBaseCase3<!>() : Base() {
     override var b: Any
         get() = TODO()
         set(value) {}
@@ -104,7 +95,7 @@ fun case4() {
     ImplBaseCase4()
 }
 
-class ImplBaseCase4() : Base() {
+<!ABSTRACT_CLASS_MEMBER_NOT_IMPLEMENTED!>class ImplBaseCase4<!>() : Base() {
     override var b: Any
         get() = TODO()
         set(value) {}

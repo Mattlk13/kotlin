@@ -1,14 +1,5 @@
+// FIR_IDE_IGNORE
 // !USE_EXPERIMENTAL: kotlin.contracts.ExperimentalContracts
-// !WITH_NEW_INFERENCE
-
-/*
- * KOTLIN DIAGNOSTICS NOT LINKED SPEC TEST (POSITIVE)
- *
- * SECTIONS: contracts, analysis, smartcasts
- * NUMBER: 8
- * DESCRIPTION: Smartcasts using some Returns effects.
- * HELPERS: contractFunctions
- */
 
 // FILE: contracts.kt
 
@@ -40,23 +31,23 @@ fun case_4(value_1: Number, block: (() -> Unit)?): Boolean? {
 
 // TESTCASE NUMBER: 5
 fun String?.case_5(value_1: Number?): Boolean? {
-    contract {
+    <!WRONG_IMPLIES_CONDITION, WRONG_IMPLIES_CONDITION, WRONG_IMPLIES_CONDITION!>contract {
         returns(true) implies (value_1 != null)
         returns(false) implies (value_1 is Int)
         returnsNotNull() implies (this@case_5 != null)
-    }
+    }<!>
 
     return value_1 == null
 }
 
 // TESTCASE NUMBER: 6
 fun <T> T?.case_6(value_1: Number, value_2: String?): Boolean? {
-    contract {
+    <!WRONG_IMPLIES_CONDITION, WRONG_IMPLIES_CONDITION, WRONG_IMPLIES_CONDITION!>contract {
         returns(true) implies (this@case_6 != null)
         returns(false) implies (this@case_6 is String)
         returns(null) implies (value_1 is Int)
         returnsNotNull() implies (value_2 != null)
-    }
+    }<!>
 
     return value_1 == null
 }
@@ -71,7 +62,7 @@ fun case_1(value_1: Any?) {
     println(value_1?.toByte())
     if (funWithReturnsTrue(value_1 is Number)) {
         println(value_1.toByte())
-        if (funWithReturnsNotNull(value_1 is Int) != null) <!AMBIGUITY!>println<!>(value_1.inv())
+        if (funWithReturnsNotNull(value_1 is Int) != null) println(value_1.inv())
     }
 }
 
@@ -120,7 +111,7 @@ fun case_5(value_1: Number?, value_2: String?) {
             println(value_1.toByte())
         }
         false -> {
-            <!AMBIGUITY!>println<!>(value_2.<!INAPPLICABLE_CANDIDATE!>length<!>)
+            println(value_2<!UNSAFE_CALL!>.<!>length)
             println(value_1.inv())
         }
     }
@@ -139,10 +130,10 @@ fun case_6(value_1: Number, value_2: String?, value_3: Any?) {
         }
         false -> {
             println(value_3.length)
-            <!AMBIGUITY!>println<!>(value_2.<!INAPPLICABLE_CANDIDATE!>length<!>)
+            println(value_2<!UNSAFE_CALL!>.<!>length)
         }
         null -> {
-            <!AMBIGUITY!>println<!>(value_1.inv())
+            <!OVERLOAD_RESOLUTION_AMBIGUITY!>println<!>(value_1.<!UNRESOLVED_REFERENCE!>inv<!>())
         }
     }
 }

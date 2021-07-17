@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2021 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -13,16 +13,19 @@ internal actual fun formatToExactDecimals(value: Double, decimals: Int): String 
         value
     } else {
         val pow = 10.0.pow(decimals)
-        @Suppress("DEPRECATION", "DEPRECATION_ERROR")
-        kotlin.js.Math.round(abs(value) * pow) / pow * sign(value)
+        JsMath.round(abs(value) * pow) / pow * sign(value)
     }
-    return rounded.asDynamic().toFixed(decimals).unsafeCast<String>()
+    return if (abs(rounded) < 1e21) {
+        // toFixed switches to scientific format after 1e21
+        rounded.asDynamic().toFixed(decimals).unsafeCast<String>()
+    } else {
+        // toPrecision outputs the specified number of digits, but only for positive numbers
+        val positive = abs(rounded)
+        val positiveString = positive.asDynamic().toPrecision(ceil(log10(positive)) + decimals).unsafeCast<String>()
+        if (rounded < 0) "-$positiveString" else positiveString
+    }
 }
 
 internal actual fun formatUpToDecimals(value: Double, decimals: Int): String {
     return value.asDynamic().toLocaleString("en-us", json("maximumFractionDigits" to decimals)).unsafeCast<String>()
-}
-
-internal actual fun formatScientific(value: Double): String {
-    return value.asDynamic().toExponential(2).unsafeCast<String>()
 }

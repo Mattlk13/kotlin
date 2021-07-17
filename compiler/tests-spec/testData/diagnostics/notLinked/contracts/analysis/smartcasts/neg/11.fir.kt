@@ -1,14 +1,5 @@
 // !USE_EXPERIMENTAL: kotlin.contracts.ExperimentalContracts
 
-/*
- * KOTLIN DIAGNOSTICS NOT LINKED SPEC TEST (NEGATIVE)
- *
- * SECTIONS: contracts, analysis, smartcasts
- * NUMBER: 11
- * DESCRIPTION: Smartcast using many of the various Returns effects on the same values.
- * HELPERS: contractFunctions
- */
-
 // FILE: contracts.kt
 
 package contracts
@@ -42,7 +33,7 @@ import contracts.*
 // TESTCASE NUMBER: 1
 fun case_1(value_1: Any?) {
     if (!(value_1.case_1_1() || value_1.case_1_2() == null)) {
-        <!AMBIGUITY!>println<!>(value_1.<!UNRESOLVED_REFERENCE!>length<!>)
+        <!OVERLOAD_RESOLUTION_AMBIGUITY!>println<!>(value_1.<!UNRESOLVED_REFERENCE!>length<!>)
     }
 }
 

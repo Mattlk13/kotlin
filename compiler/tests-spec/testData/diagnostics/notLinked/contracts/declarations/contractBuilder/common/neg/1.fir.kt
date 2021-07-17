@@ -1,14 +1,6 @@
 // !DIAGNOSTICS: -UNUSED_VARIABLE -UNUSED_PARAMETER -UNREACHABLE_CODE -UNUSED_EXPRESSION
 // !USE_EXPERIMENTAL: kotlin.contracts.ExperimentalContracts
 
-/*
- * KOTLIN DIAGNOSTICS NOT LINKED SPEC TEST (NEGATIVE)
- *
- * SECTIONS: contracts, declarations, contractBuilder, common
- * NUMBER: 1
- * DESCRIPTION: Contract isn't first statement.
- */
-
 import kotlin.contracts.*
 
 // TESTCASE NUMBER: 1
@@ -22,7 +14,7 @@ inline fun case_1(block: () -> Unit) {
 inline fun case_2(block: () -> Unit) {
     10 - 1
     contract {
-        callsInPlace(block, InvocationKind.EXACTLY_ONCE)
+        callsInPlace(<!USAGE_IS_NOT_INLINABLE!>block<!>, InvocationKind.EXACTLY_ONCE)
     }
     return block()
 }
@@ -31,7 +23,7 @@ inline fun case_2(block: () -> Unit) {
 inline fun case_3(block: () -> Unit) {
     throw Exception()
     contract {
-        callsInPlace(block, InvocationKind.UNKNOWN)
+        callsInPlace(<!USAGE_IS_NOT_INLINABLE!>block<!>, InvocationKind.UNKNOWN)
     }
     return block()
 }
@@ -43,7 +35,7 @@ inline fun case_3(block: () -> Unit) {
 inline fun case_4(block: () -> Unit) {
     .0009
     return contract {
-        callsInPlace(block, InvocationKind.EXACTLY_ONCE)
+        callsInPlace(<!USAGE_IS_NOT_INLINABLE!>block<!>, InvocationKind.EXACTLY_ONCE)
     }
 }
 

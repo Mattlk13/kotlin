@@ -1,4 +1,3 @@
-// !WITH_NEW_INFERENCE
 // !CHECK_TYPE
 
 // FILE: Clazz.java
@@ -10,10 +9,10 @@ public class Clazz<T> {
 // FILE: main.kt
 fun test(clazz: Clazz<*>) {
     clazz.t checkType { _<Any?>() }
-    clazz.getSuperClass() checkType { <!NI;UNRESOLVED_REFERENCE_WRONG_RECEIVER!>_<!><Clazz<*>?>() }
+    clazz.getSuperClass() checkType { _<Clazz<*>?>() }
     clazz.getSuperClass().t checkType { _<Any?>() }
 
-    clazz.superClass checkType { <!NI;UNRESOLVED_REFERENCE_WRONG_RECEIVER!>_<!><Clazz<*>?>() }
+    clazz.superClass checkType { _<Clazz<*>?>() }
     clazz.superClass.t checkType { _<Any?>() }
 
     // See KT-9294

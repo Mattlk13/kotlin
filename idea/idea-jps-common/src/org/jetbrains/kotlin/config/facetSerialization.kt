@@ -17,9 +17,9 @@ import org.jetbrains.kotlin.load.java.JvmAbi
 import org.jetbrains.kotlin.platform.*
 import org.jetbrains.kotlin.platform.impl.FakeK2NativeCompilerArguments
 import org.jetbrains.kotlin.platform.impl.JvmIdePlatformKind
-import org.jetbrains.kotlin.platform.js.JsPlatform
+import org.jetbrains.kotlin.platform.js.isJs
 import org.jetbrains.kotlin.platform.jvm.JdkPlatform
-import org.jetbrains.kotlin.platform.jvm.JvmPlatform
+import org.jetbrains.kotlin.platform.jvm.isJvm
 import org.jetbrains.kotlin.platform.konan.*
 import java.lang.reflect.Modifier
 import kotlin.reflect.KClass
@@ -32,16 +32,16 @@ private fun Element.getOptionValue(name: String) = getOption(name)?.getAttribute
 private fun Element.getOptionBody(name: String) = getOption(name)?.children?.firstOrNull()
 
 fun TargetPlatform.createArguments(init: (CommonCompilerArguments).() -> Unit = {}): CommonCompilerArguments {
-    return when (val singlePlatform = singleOrNull()) {
-        null -> K2MetadataCompilerArguments().apply { init() }
-        is JvmPlatform -> K2JVMCompilerArguments().apply {
+    return when {
+        isCommon() -> K2MetadataCompilerArguments().apply { init() }
+        isJvm() -> K2JVMCompilerArguments().apply {
             init()
             // TODO(dsavvinov): review this
-            jvmTarget = (singlePlatform as? JdkPlatform)?.targetVersion?.description ?: JvmTarget.DEFAULT.description
+            jvmTarget = (single() as? JdkPlatform)?.targetVersion?.description ?: JvmTarget.DEFAULT.description
         }
-        is JsPlatform -> K2JSCompilerArguments().apply { init() }
-        is NativePlatform -> FakeK2NativeCompilerArguments().apply { init() }
-        else -> error("Unknown platform $singlePlatform")
+        isJs() -> K2JSCompilerArguments().apply { init() }
+        isNative() -> FakeK2NativeCompilerArguments().apply { init() }
+        else -> error("Unknown platform $this")
     }
 }
 
@@ -111,7 +111,7 @@ fun Element.getFacetPlatformByConfigurationElement(): TargetPlatform {
     if (targetPlatform != null) return targetPlatform
 
     // failed to read list of all platforms. Fallback to legacy algorithm
-    val platformName = getAttributeValue("platform") as String
+    val platformName = getAttributeValue("platform") ?: return DefaultIdeTargetPlatformKindProvider.defaultPlatform
 
     return CommonPlatforms.allSimplePlatforms.firstOrNull {
         // first, look for exact match through all simple platforms
@@ -194,20 +194,12 @@ private fun readElementsList(element: Element, rootElementName: String, elementN
     return null
 }
 
+private fun readV3Config(element: Element): KotlinFacetSettings {
+    return readV2AndLaterConfig(element)
+}
+
 private fun readV2Config(element: Element): KotlinFacetSettings {
-    return readV2AndLaterConfig(element).apply {
-        element.getChild("compilerArguments")?.children?.let { args ->
-            when {
-                args.any { arg -> arg.attributes[0].value == "coroutinesEnable" && arg.attributes[1].booleanValue } ->
-                    compilerArguments!!.coroutinesState = CommonCompilerArguments.ENABLE
-                args.any { arg -> arg.attributes[0].value == "coroutinesWarn" && arg.attributes[1].booleanValue } ->
-                    compilerArguments!!.coroutinesState = CommonCompilerArguments.WARN
-                args.any { arg -> arg.attributes[0].value == "coroutinesError" && arg.attributes[1].booleanValue } ->
-                    compilerArguments!!.coroutinesState = CommonCompilerArguments.ERROR
-                else -> compilerArguments!!.coroutinesState = CommonCompilerArguments.DEFAULT
-            }
-        }
-    }
+    return readV2AndLaterConfig(element)
 }
 
 private fun readLatestConfig(element: Element): KotlinFacetSettings {
@@ -223,6 +215,7 @@ fun deserializeFacetSettings(element: Element): KotlinFacetSettings {
     return when (version) {
         1 -> readV1Config(element)
         2 -> readV2Config(element)
+        3 -> readV3Config(element)
         KotlinFacetSettings.CURRENT_VERSION -> readLatestConfig(element)
         else -> return KotlinFacetSettings() // Reset facet configuration if versions don't match
     }.apply { this.version = version }
@@ -408,35 +401,13 @@ fun Element.dropVersionsIfNecessary(settings: CommonCompilerArguments) {
     }
 }
 
-// Special treatment of v2 may be dropped after transition to IDEA 172
-private fun KotlinFacetSettings.writeV2Config(element: Element) {
-    writeLatestConfig(element)
-    element.getChild("compilerArguments")?.let {
-        it.getOption("coroutinesState")?.detach()
-        val coroutineOption = when (compilerArguments?.coroutinesState) {
-            CommonCompilerArguments.ENABLE -> "coroutinesEnable"
-            CommonCompilerArguments.WARN -> "coroutinesWarn"
-            CommonCompilerArguments.ERROR -> "coroutinesError"
-            else -> null
-        }
-        if (coroutineOption != null) {
-            Element("option").apply {
-                setAttribute("name", coroutineOption)
-                setAttribute("value", "true")
-                it.addContent(this)
-            }
-        }
-    }
-}
-
 fun KotlinFacetSettings.serializeFacetSettings(element: Element) {
-    val versionToWrite = if (version == 2) version else KotlinFacetSettings.CURRENT_VERSION
-    element.setAttribute("version", versionToWrite.toString())
-    if (versionToWrite == 2) {
-        writeV2Config(element)
-    } else {
-        writeLatestConfig(element)
+    val versionToWrite = when (version) {
+        2, 3 -> version
+        else -> KotlinFacetSettings.CURRENT_VERSION
     }
+    element.setAttribute("version", versionToWrite.toString())
+    writeLatestConfig(element)
 }
 
 private fun TargetPlatform.serializeComponentPlatforms(): String {

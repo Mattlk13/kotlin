@@ -1,13 +1,14 @@
+// DONT_TARGET_EXACT_BACKEND: WASM
+// WASM_MUTE_REASON: COROUTINES
 // !LANGUAGE: +NewInference +FunctionalInterfaceConversion +SamConversionPerArgument +SamConversionForKotlinFunctions
-// IGNORE_BACKEND_FIR: JVM_IR
 // WITH_COROUTINES
 // WITH_RUNTIME
-// SKIP_DCE_DRIVEN
 
 import helpers.*
 import kotlin.coroutines.*
 
 fun interface SuspendRunnable {
+    @Suppress("FUN_INTERFACE_WITH_SUSPEND_FUNCTION")
     suspend fun invoke()
 }
 

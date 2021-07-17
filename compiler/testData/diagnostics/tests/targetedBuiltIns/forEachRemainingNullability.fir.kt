@@ -11,7 +11,7 @@ abstract class MyIt2<out T> : Iterator<T> {
 }
 
 abstract class MyIt3<out T> : Iterator<T> {
-    override fun forEachRemaining(x: Consumer<in T>?) {}
+    <!NOTHING_TO_OVERRIDE!>override<!> fun forEachRemaining(x: Consumer<in T>?) {}
 }
 
 abstract class MyIt4 : Iterator<String?> {
@@ -23,7 +23,7 @@ abstract class MyIt5 : Iterator<String> {
 }
 
 abstract class MyIt6 : Iterator<String?> {
-    override fun forEachRemaining(x: Consumer<in String>) {}
+    <!NOTHING_TO_OVERRIDE!>override<!> fun forEachRemaining(x: Consumer<in String>) {}
 }
 
 abstract class MyIt7 : Iterator<String> {
@@ -32,10 +32,10 @@ abstract class MyIt7 : Iterator<String> {
 
 
 fun foo(x: Iterator<String>, y: Iterator<String?>) {
-    x.<!INAPPLICABLE_CANDIDATE!>forEachRemaining<!>(null)
+    x.forEachRemaining(<!NULL_FOR_NONNULL_TYPE!>null<!>)
 
     x.forEachRemaining { it -> it.length }
     x.forEachRemaining { it -> it?.length }
-    y.forEachRemaining { it -> it.<!INAPPLICABLE_CANDIDATE!>length<!> }
+    y.forEachRemaining { it -> it<!UNSAFE_CALL!>.<!>length }
     y.forEachRemaining { it -> it?.length }
 }

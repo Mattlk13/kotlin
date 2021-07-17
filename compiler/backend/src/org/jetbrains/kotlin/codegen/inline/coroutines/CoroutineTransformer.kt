@@ -11,15 +11,17 @@ import org.jetbrains.kotlin.codegen.coroutines.*
 import org.jetbrains.kotlin.codegen.inline.*
 import org.jetbrains.kotlin.codegen.optimization.common.asSequence
 import org.jetbrains.kotlin.codegen.optimization.transformer.MethodTransformer
+import org.jetbrains.kotlin.config.JVMConfigurationKeys
 import org.jetbrains.kotlin.config.isReleaseCoroutines
-import org.jetbrains.kotlin.descriptors.ClassDescriptor
-import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
+import org.jetbrains.kotlin.resolve.jvm.AsmTypes
 import org.jetbrains.kotlin.resolve.jvm.diagnostics.JvmDeclarationOrigin
-import org.jetbrains.org.objectweb.asm.*
+import org.jetbrains.org.objectweb.asm.MethodVisitor
+import org.jetbrains.org.objectweb.asm.Opcodes
+import org.jetbrains.org.objectweb.asm.Type
 import org.jetbrains.org.objectweb.asm.tree.*
+import org.jetbrains.org.objectweb.asm.tree.analysis.BasicInterpreter
+import org.jetbrains.org.objectweb.asm.tree.analysis.BasicValue
 import org.jetbrains.org.objectweb.asm.tree.analysis.Frame
-import org.jetbrains.org.objectweb.asm.tree.analysis.SourceInterpreter
-import org.jetbrains.org.objectweb.asm.tree.analysis.SourceValue
 
 const val FOR_INLINE_SUFFIX = "\$\$forInline"
 
@@ -39,10 +41,13 @@ class CoroutineTransformer(
     fun shouldGenerateStateMachine(node: MethodNode): Boolean {
         // Continuations are similar to lambdas from bird's view, but we should never generate state machine for them
         if (isContinuationNotLambda()) return false
-        // there can be suspend lambdas inside inline functions, which do not
-        // capture crossinline lambdas, thus, there is no need to transform them
         return isSuspendFunctionWithFakeConstructorCall(node) || (isSuspendLambda(node) && !isStateMachine(node))
     }
+
+    // there can be suspend lambdas inside inline functions, which do not
+    // capture crossinline lambdas, thus, there is no need to transform them
+    fun suspendLambdaWithGeneratedStateMachine(node: MethodNode): Boolean =
+        !isContinuationNotLambda() && isSuspendLambda(node) && isStateMachine(node)
 
     private fun isContinuationNotLambda(): Boolean = inliningContext.isContinuation &&
             if (state.languageVersionSettings.isReleaseCoroutines()) superClassName.endsWith("ContinuationImpl")
@@ -86,13 +91,14 @@ class CoroutineTransformer(
                 obtainClassBuilderForCoroutineState = { classBuilder },
                 reportSuspensionPointInsideMonitor = { sourceCompilerForInline.reportSuspensionPointInsideMonitor(it) },
                 // TODO: this linenumbers might not be correct and since they are used only for step-over, check them.
-                lineNumber = sourceCompilerForInline.inlineCallSiteInfo.lineNumber,
-                sourceFile = sourceCompilerForInline.callsiteFile?.name ?: "",
+                lineNumber = inliningContext.callSiteInfo.lineNumber,
+                sourceFile = inliningContext.callSiteInfo.file?.name ?: "",
                 languageVersionSettings = state.languageVersionSettings,
                 shouldPreserveClassInitialization = state.constructorCallNormalizationMode.shouldPreserveClassInitialization,
                 containingClassInternalName = classBuilder.thisName,
                 isForNamedFunction = false,
-                disableTailCallOptimizationForFunctionReturningUnit = false
+                disableTailCallOptimizationForFunctionReturningUnit = false,
+                useOldSpilledVarTypeAnalysis = state.configuration.getBoolean(JVMConfigurationKeys.USE_OLD_SPILLED_VAR_TYPE_ANALYSIS)
             )
 
             if (generateForInline)
@@ -119,8 +125,8 @@ class CoroutineTransformer(
                 createNewMethodFrom(node, name), node.access, name, node.desc, null, null,
                 obtainClassBuilderForCoroutineState = { (inliningContext as RegeneratedClassContext).continuationBuilders[continuationClassName]!! },
                 reportSuspensionPointInsideMonitor = { sourceCompilerForInline.reportSuspensionPointInsideMonitor(it) },
-                lineNumber = sourceCompilerForInline.inlineCallSiteInfo.lineNumber,
-                sourceFile = sourceCompilerForInline.callsiteFile?.name ?: "",
+                lineNumber = inliningContext.callSiteInfo.lineNumber,
+                sourceFile = inliningContext.callSiteInfo.file?.name ?: "",
                 languageVersionSettings = state.languageVersionSettings,
                 shouldPreserveClassInitialization = state.constructorCallNormalizationMode.shouldPreserveClassInitialization,
                 containingClassInternalName = classBuilder.thisName,
@@ -128,7 +134,8 @@ class CoroutineTransformer(
                 needDispatchReceiver = true,
                 internalNameForDispatchReceiver = classBuilder.thisName,
                 disableTailCallOptimizationForFunctionReturningUnit = disableTailCallOptimization,
-                putContinuationParameterToLvt = !state.isIrBackend
+                putContinuationParameterToLvt = !state.isIrBackend,
+                useOldSpilledVarTypeAnalysis = state.configuration.getBoolean(JVMConfigurationKeys.USE_OLD_SPILLED_VAR_TYPE_ANALYSIS)
             )
 
             if (generateForInline)
@@ -187,8 +194,7 @@ fun markNoinlineLambdaIfSuspend(mv: MethodVisitor, info: FunctionalArgument?) {
     }
 }
 
-private fun Frame<SourceValue>.getSource(offset: Int): AbstractInsnNode? =
-    getStack(stackSize - offset - 1)?.insns?.singleOrNull()
+private fun Frame<BasicValue>.getSource(offset: Int): AbstractInsnNode? = (getStack(stackSize - offset - 1) as? PossibleLambdaLoad)?.insn
 
 fun surroundInvokesWithSuspendMarkersIfNeeded(node: MethodNode) {
     val markers = node.instructions.asSequence().filter {
@@ -196,14 +202,14 @@ fun surroundInvokesWithSuspendMarkersIfNeeded(node: MethodNode) {
     }.toList()
     if (markers.isEmpty()) return
 
-    val sourceFrames = MethodTransformer.analyze("fake", node, SourceInterpreter())
+    val sourceFrames = MethodTransformer.analyze("fake", node, CapturedLambdaInterpreter())
     val loads = markers.map { marker ->
         val arity = (marker.next as MethodInsnNode).owner.removePrefix(NUMBERED_FUNCTION_PREFIX).toInt()
         var receiver = sourceFrames[node.instructions.indexOf(marker) + 1].getSource(arity)
         // Navigate the ALOAD+GETFIELD+... chain to the first instruction. We need to insert a stack
         // spilling marker before it starts.
         while (receiver?.opcode == Opcodes.GETFIELD) {
-            receiver = sourceFrames[node.instructions.indexOf(receiver)].getSource(0)
+            receiver = receiver.previous
         }
         receiver
     }
@@ -227,20 +233,38 @@ fun surroundInvokesWithSuspendMarkersIfNeeded(node: MethodNode) {
     }
 }
 
-// We cannot find the lambda in captured parameters: it came from object outside of the our reach:
-// this can happen when the lambda capture by non-transformed closure:
-//   inline fun inlineMe(crossinline c: suspend() -> Unit) = suspend { c() }
-//   inline fun inlineMe2(crossinline c: suspend() -> Unit) = suspend { inlineMe { c() }() }
-// Suppose, we inline inlineMe into inlineMe2: the only knowledge we have about inlineMe$1 is captured receiver (this$0)
-// Thus, transformed lambda from inlineMe, inlineMe3$$inlined$inlineMe2$1 contains the following bytecode
-//   ALOAD 0
-//   GETFIELD inlineMe2$1$invokeSuspend$$inlined$inlineMe$1.this$0 : LScratchKt$inlineMe2$1;
-//   GETFIELD inlineMe2$1.$c : Lkotlin/jvm/functions/Function1;
-// Since inlineMe2's lambda is outside of reach of the inliner, find crossinline parameter from compilation context:
-fun FieldInsnNode.isSuspendLambdaCapturedByOuterObjectOrLambda(inliningContext: InliningContext): Boolean {
-    var container: DeclarationDescriptor = inliningContext.root.sourceCompilerForInline.compilationContextFunctionDescriptor
-    while (container !is ClassDescriptor) {
-        container = container.containingDeclaration ?: return false
+// Interpreter, that keeps track of captured functional arguments
+private class PossibleLambdaLoad(val insn: AbstractInsnNode) : BasicValue(AsmTypes.OBJECT_TYPE)
+
+private class CapturedLambdaInterpreter : BasicInterpreter(Opcodes.API_VERSION) {
+    override fun newOperation(insn: AbstractInsnNode): BasicValue? {
+        if (insn.opcode == Opcodes.GETSTATIC) {
+            insn.fieldLoad()?.let { return it }
+        }
+
+        return super.newOperation(insn)
     }
-    return isCapturedSuspendLambda(container, name, inliningContext.state.bindingContext)
+
+    private fun AbstractInsnNode.fieldLoad(): PossibleLambdaLoad? {
+        if (this !is FieldInsnNode) return null
+        if (desc.startsWith('L') && Type.getType(desc).internalName.isNumberedFunctionInternalName()) {
+            if ((opcode == Opcodes.GETSTATIC && name.startsWith(CAPTURED_FIELD_FOLD_PREFIX + CAPTURED_FIELD_PREFIX)) ||
+                (opcode == Opcodes.GETFIELD && isCapturedFieldName(name))
+            ) return PossibleLambdaLoad(this)
+        }
+        return null
+    }
+
+    override fun copyOperation(insn: AbstractInsnNode, value: BasicValue?): BasicValue? =
+        if (insn.opcode == Opcodes.ALOAD) PossibleLambdaLoad(insn) else super.copyOperation(insn, value)
+
+    override fun unaryOperation(insn: AbstractInsnNode, value: BasicValue?): BasicValue? {
+        if (insn.opcode == Opcodes.GETFIELD) {
+            insn.fieldLoad()?.let { return it }
+        }
+        return super.unaryOperation(insn, value)
+    }
+
+    override fun merge(v: BasicValue?, w: BasicValue?): BasicValue? =
+        if (v is PossibleLambdaLoad && w is PossibleLambdaLoad && v.insn == w.insn) v else super.merge(v, w)
 }

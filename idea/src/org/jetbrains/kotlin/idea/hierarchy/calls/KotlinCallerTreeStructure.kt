@@ -9,11 +9,13 @@ import com.intellij.find.findUsages.JavaFindUsagesOptions
 import com.intellij.ide.hierarchy.HierarchyNodeDescriptor
 import com.intellij.ide.hierarchy.HierarchyTreeStructure
 import com.intellij.ide.hierarchy.call.CallHierarchyNodeDescriptor
+import com.intellij.ide.hierarchy.call.CallerMethodsTreeStructure
 import com.intellij.ide.util.treeView.NodeDescriptor
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiMember
 import com.intellij.psi.PsiMethod
 import com.intellij.psi.PsiReference
+import com.intellij.psi.impl.source.resolve.JavaResolveUtil
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.util.ArrayUtil
 import org.jetbrains.kotlin.descriptors.CallableMemberDescriptor
@@ -24,6 +26,7 @@ import org.jetbrains.kotlin.idea.findUsages.KotlinClassFindUsagesOptions
 import org.jetbrains.kotlin.idea.findUsages.KotlinFunctionFindUsagesOptions
 import org.jetbrains.kotlin.idea.findUsages.KotlinPropertyFindUsagesOptions
 import org.jetbrains.kotlin.idea.findUsages.processAllUsages
+import org.jetbrains.kotlin.kdoc.psi.api.KDoc
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.containingClassOrObject
 import org.jetbrains.kotlin.psi.psiUtil.getNonStrictParentOfType
@@ -65,7 +68,7 @@ class KotlinCallerTreeStructure(
     ): Collection<Any> {
         if (nodeDescriptor is CallHierarchyNodeDescriptor) {
             val psiMethod = nodeDescriptor.enclosingElement as? PsiMethod ?: return emptyList()
-            return createCallerMethodsTreeStructure(myProject, psiMethod, scopeType).getChildElements(nodeDescriptor).toList()
+            return CallerMethodsTreeStructure(myProject, psiMethod as PsiMember, scopeType).getChildElements(nodeDescriptor).toList()
         }
 
         if (element !is KtDeclaration) return emptyList()
@@ -96,7 +99,11 @@ class KotlinCallerTreeStructure(
 
         // If reference belongs to property initializer, show enclosing declaration instead
         elementToSearch.processAllUsages(findOptions) {
-            processReference(it.reference, it.element ?: return@processAllUsages, nodeDescriptor, callerToDescriptorMap, false)
+            val refElement = it.element
+            val isInKDoc = PsiTreeUtil.getParentOfType(refElement, KDoc::class.java) != null
+            if (refElement != null && !JavaResolveUtil.isInJavaDoc(refElement) && !isInKDoc) {
+                processReference(it.reference, refElement, nodeDescriptor, callerToDescriptorMap, false)
+            }
         }
 
         return callerToDescriptorMap.values

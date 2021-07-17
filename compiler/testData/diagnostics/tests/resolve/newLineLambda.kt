@@ -1,4 +1,3 @@
-// !WITH_NEW_INFERENCE
 // !DIAGNOSTICS: -UNUSED_PARAMETER
 
 fun noArgs() {}
@@ -100,19 +99,19 @@ fun testTwoLambdas() {
         {}
         <!MANY_LAMBDA_EXPRESSION_ARGUMENTS, UNEXPECTED_TRAILING_LAMBDA_ON_A_NEW_LINE!>{}<!>
 
-        return <!NI;TYPE_MISMATCH!>if (true) {
-            <!OI;TYPE_MISMATCH!>twoLambdaArgs({})
+        return if (true) <!TYPE_MISMATCH!>{
+            twoLambdaArgs({})
             {}
-            <!MANY_LAMBDA_EXPRESSION_ARGUMENTS, UNEXPECTED_TRAILING_LAMBDA_ON_A_NEW_LINE!>{}<!><!>
-        } else <!NI;TYPE_MISMATCH!>{
+            <!MANY_LAMBDA_EXPRESSION_ARGUMENTS, UNEXPECTED_TRAILING_LAMBDA_ON_A_NEW_LINE!>{}<!>
+        }<!> else {
             {}
-        }<!><!>
+        }
     }
 }
 
 fun f1(): (() -> Unit) -> (() -> Unit) -> Unit {
     return { l1 ->
-        <!NI;TYPE_MISMATCH, TYPE_MISMATCH!>l1()
-        <!UNEXPECTED_TRAILING_LAMBDA_ON_A_NEW_LINE!>{ <!CANNOT_INFER_PARAMETER_TYPE, NI;UNUSED_ANONYMOUS_PARAMETER!>l2<!> -> <!OI;DEBUG_INFO_ELEMENT_WITH_ERROR_TYPE!><!NI;DEBUG_INFO_MISSING_UNRESOLVED!>l2<!>()<!> }<!><!>
+        <!TYPE_MISMATCH, TYPE_MISMATCH!>l1()
+        <!UNEXPECTED_TRAILING_LAMBDA_ON_A_NEW_LINE!>{ <!CANNOT_INFER_PARAMETER_TYPE!>l2<!> -> <!DEBUG_INFO_MISSING_UNRESOLVED!>l2<!>() }<!><!>
     }
 }

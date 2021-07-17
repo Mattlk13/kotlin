@@ -3,30 +3,21 @@
 // SKIP_TXT
 
 /*
- * KOTLIN DIAGNOSTICS NOT LINKED SPEC TEST (NEGATIVE)
- *
- * SECTIONS: dfa
- * NUMBER: 36
- * DESCRIPTION: Raw data flow analysis test
- * HELPERS: classes, objects, typealiases, functions, enumClasses, interfaces, sealedClasses
- */
-
-/*
  * TESTCASE NUMBER: 1
  * UNEXPECTED BEHAVIOUR
  * ISSUES: KT-13650
  */
 fun case_1(x: Class?, y: Any) {
     x?.prop_12 = if (y is String) "" else throw Exception()
-    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String & kotlin.Any")!>y<!>
-    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String & kotlin.Any")!>y<!>.toUpperCase()
+    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any")!>y<!>
+    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any")!>y<!>.<!UNRESOLVED_REFERENCE!>toUpperCase<!>()
 }
 
 // TESTCASE NUMBER: 2
 fun case_2(x: Class?, y: Any) {
     x?.prop_9 = y is String || return
-    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String & kotlin.Any")!>y<!>
-    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String & kotlin.Any")!>y<!>.toUpperCase()
+    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any")!>y<!>
+    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any")!>y<!>.<!UNRESOLVED_REFERENCE!>toUpperCase<!>()
 }
 
 /*
@@ -36,8 +27,8 @@ fun case_2(x: Class?, y: Any) {
  */
 fun case_3(x: Class?, y: Any) {
     x?.prop_12 = y as String
-    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String & kotlin.Any")!>y<!>
-    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String & kotlin.Any")!>y<!>.toUpperCase()
+    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any")!>y<!>
+    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any")!>y<!>.<!UNRESOLVED_REFERENCE!>toUpperCase<!>()
 }
 
 /*
@@ -47,8 +38,8 @@ fun case_3(x: Class?, y: Any) {
  */
 fun case_4(x: Class?, y: Any) {
     x?.prop_12 = y as? String ?: return
-    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String & kotlin.Any")!>y<!>
-    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String & kotlin.Any")!>y<!>.toUpperCase()
+    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any")!>y<!>
+    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any")!>y<!>.<!UNRESOLVED_REFERENCE!>toUpperCase<!>()
 }
 
 /*
@@ -58,15 +49,15 @@ fun case_4(x: Class?, y: Any) {
  */
 fun case_5(x: Class?, y: String?) {
     x?.prop_12 = y ?: return
-    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String & kotlin.String?")!>y<!>
-    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String & kotlin.String?")!>y<!>.toUpperCase()
+    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String?")!>y<!>
+    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String?")!>y<!><!UNSAFE_CALL!>.<!>toUpperCase()
 }
 
 // TESTCASE NUMBER: 6
 fun case_6(x: Class?, y: String?) {
     x?.prop_9 = y !is String && throw Exception()
-    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String & kotlin.String?")!>y<!>
-    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String & kotlin.String?")!>y<!>.toUpperCase()
+    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String?")!>y<!>
+    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String?")!>y<!><!UNSAFE_CALL!>.<!>toUpperCase()
 }
 
 /*
@@ -76,8 +67,8 @@ fun case_6(x: Class?, y: String?) {
  */
 fun case_7(x: Class?, y: String?) {
     x?.prop_12 = y!!
-    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String & kotlin.String?")!>y<!>
-    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String & kotlin.String?")!>y<!>.toUpperCase()
+    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String?")!>y<!>
+    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String?")!>y<!><!UNSAFE_CALL!>.<!>toUpperCase()
 }
 
 /*
@@ -87,6 +78,6 @@ fun case_7(x: Class?, y: String?) {
  */
 fun case_8(x: Class?, y: String?) {
     x?.prop_12 = if (y === null) throw Exception() else ""
-    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String & kotlin.String?")!>y<!>
-    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String & kotlin.String?")!>y<!>.toUpperCase()
+    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String?")!>y<!>
+    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String?")!>y<!><!UNSAFE_CALL!>.<!>toUpperCase()
 }

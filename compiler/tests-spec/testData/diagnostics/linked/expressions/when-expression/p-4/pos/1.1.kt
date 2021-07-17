@@ -1,4 +1,4 @@
-// !LANGUAGE: +NewInference
+// !LANGUAGE: +NewInference -ProhibitSimplificationOfNonTrivialConstBooleanExpressions
 // !DIAGNOSTICS: -UNUSED_VARIABLE -ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE -UNUSED_VALUE -UNUSED_PARAMETER -UNUSED_EXPRESSION
 // SKIP_TXT
 // FULL_JDK
@@ -7,7 +7,7 @@
  * KOTLIN DIAGNOSTICS SPEC TEST (POSITIVE)
  *
  * SPEC VERSION: 0.1-313
- * PLACE: expressions, when-expression -> paragraph 4 -> sentence 1
+ * MAIN LINK: expressions, when-expression -> paragraph 4 -> sentence 1
  * NUMBER: 1
  * DESCRIPTION:  it is possible to  replace the else condition with an always-true condition
  */
@@ -47,18 +47,18 @@ fun case2() {
     val b = false
     val when1: Any = when (b) {
         false -> { }
-        !false -> { }
+        <!NON_TRIVIAL_BOOLEAN_CONSTANT!>!false<!> -> { }
         <!REDUNDANT_ELSE_IN_WHEN!>else<!> -> { }
     }
 
     val when2: Any = when (b) {
         false -> { }
-        !false -> { }
+        <!NON_TRIVIAL_BOOLEAN_CONSTANT!>!false<!> -> { }
     }
     val when3: Any = when (b) {
         false -> { }
         <!DUPLICATE_LABEL_IN_WHEN!>false<!> -> { }
-        !false -> { }
+        <!NON_TRIVIAL_BOOLEAN_CONSTANT!>!false<!> -> { }
     }
 }
 

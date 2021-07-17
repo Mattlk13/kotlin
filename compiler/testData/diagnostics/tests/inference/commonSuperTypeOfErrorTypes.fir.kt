@@ -9,13 +9,13 @@ fun <T> materialize() = null as T
 
 fun test() {
     consume(
-        materialize<Foo<Bar<ErrorType>>>(),
-        materialize<Foo<Bar<ErrorType>>>()
+        materialize<Foo<Bar<<!UNRESOLVED_REFERENCE!>ErrorType<!>>>>(),
+        materialize<Foo<Bar<<!UNRESOLVED_REFERENCE!>ErrorType<!>>>>()
     )
 
-    <!INAPPLICABLE_CANDIDATE!>consume<!>(
-        materialize<Foo<Bar<ErrorType>>>(),
-        materialize<Foo<ErrorType>>()
+    consume(
+        materialize<Foo<Bar<<!UNRESOLVED_REFERENCE!>ErrorType<!>>>>(),
+        <!ARGUMENT_TYPE_MISMATCH!>materialize<Foo<<!UNRESOLVED_REFERENCE!>ErrorType<!>>>()<!>
     )
 
 }

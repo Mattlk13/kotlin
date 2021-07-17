@@ -5,7 +5,7 @@ package test
 sealed class Test {
     object O : Test()
 
-    class Extra(val x: Int): Test
+    class Extra(val x: Int): <!SUPERTYPE_NOT_INITIALIZED!>Test<!>
 }
 
 // FILE: main.kt
@@ -15,7 +15,7 @@ package other
 import test.Test.*
 
 abstract class Factory {
-    abstract fun createTest(): Test
+    abstract fun createTest(): <!UNRESOLVED_REFERENCE!>Test<!>
 
     abstract fun createObj(): O
 

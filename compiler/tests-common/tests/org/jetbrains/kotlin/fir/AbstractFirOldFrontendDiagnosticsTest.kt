@@ -6,7 +6,7 @@
 package org.jetbrains.kotlin.fir
 
 import org.jetbrains.kotlin.fir.declarations.FirFile
-import org.jetbrains.kotlin.fir.resolve.transformers.FirTotalResolveTransformer
+import org.jetbrains.kotlin.fir.resolve.transformers.createAllCompilerResolveProcessors
 import org.jetbrains.kotlin.test.KotlinTestUtils
 import java.io.File
 
@@ -20,7 +20,7 @@ abstract class AbstractFirOldFrontendDiagnosticsTest : AbstractFirDiagnosticsTes
 
     private fun prepareTestDataFile(originalFilePath: String, firTestDataFile: File) {
         if (!firTestDataFile.exists()) {
-            KotlinTestUtils.assertEqualsToFile(firTestDataFile, loadTestDataWithoutDiagnostics(File(originalFilePath)))
+            KotlinTestUtils.assertEqualsToFile(firTestDataFile, loadTestDataWithDiagnostics(File(originalFilePath)))
         }
     }
 
@@ -31,8 +31,8 @@ abstract class AbstractFirOldFrontendDiagnosticsTest : AbstractFirDiagnosticsTes
 
     override fun runAnalysis(testDataFile: File, testFiles: List<TestFile>, firFilesPerSession: Map<FirSession, List<FirFile>>) {
         val failure: FirRuntimeException? = try {
-            for ((_, firFiles) in firFilesPerSession) {
-                doFirResolveTestBench(firFiles, FirTotalResolveTransformer().transformers, gc = false)
+            for ((session, firFiles) in firFilesPerSession) {
+                doFirResolveTestBench(firFiles, createAllCompilerResolveProcessors(session), gc = false)
             }
             null
         } catch (e: FirRuntimeException) {
@@ -53,6 +53,7 @@ abstract class AbstractFirOldFrontendDiagnosticsTest : AbstractFirDiagnosticsTes
             if (needDump) {
                 checkFir(testDataFile, allFirFiles)
             }
+            checkCfg(allFirFiles, testFiles, testDataFile)
         } else {
             if (!failureFile.exists()) {
                 throw failure
@@ -63,9 +64,9 @@ abstract class AbstractFirOldFrontendDiagnosticsTest : AbstractFirDiagnosticsTes
 
     private fun checkFailureFile(failure: FirRuntimeException, failureFile: File) {
         val failureMessage = buildString {
-            appendln(failure.message)
+            appendLine(failure.message)
             append("Cause: ")
-            appendln(failure.cause)
+            appendLine(failure.cause)
         }
         KotlinTestUtils.assertEqualsToFile(failureFile, failureMessage)
     }

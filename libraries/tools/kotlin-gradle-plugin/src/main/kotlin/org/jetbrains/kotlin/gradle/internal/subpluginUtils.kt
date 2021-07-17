@@ -23,6 +23,7 @@ import org.jetbrains.kotlin.gradle.tasks.CompilerPluginOptions
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.ObjectOutputStream
+import java.nio.charset.StandardCharsets
 import java.util.*
 
 fun encodePluginOptions(options: Map<String, List<String>>): String {
@@ -35,7 +36,9 @@ fun encodePluginOptions(options: Map<String, List<String>>): String {
 
         oos.writeInt(values.size)
         for (value in values) {
-            oos.writeUTF(value)
+            val valueBytes = value.toByteArray(StandardCharsets.UTF_8)
+            oos.writeInt(valueBytes.size)
+            oos.write(valueBytes)
         }
     }
 
@@ -53,7 +56,7 @@ internal fun CompilerPluginOptions.withWrappedKaptOptions(
     val resultOptionsByPluginId: MutableMap<String, List<SubpluginOption>> =
         subpluginOptionsByPluginId.toMutableMap()
 
-    resultOptionsByPluginId.compute(Kapt3KotlinGradleSubplugin.KAPT_SUBPLUGIN_ID) { _, kaptOptions ->
+    resultOptionsByPluginId.compute(Kapt3GradleSubplugin.KAPT_SUBPLUGIN_ID) { _, kaptOptions ->
         val changedFilesOption = changedFiles.map { SubpluginOption("changedFile", it.canonicalPath) }
         val classpathChangesOption = classpathChanges.map { SubpluginOption("classpathChange", it) }
         val processIncrementallyOption = SubpluginOption("processIncrementally", processIncrementally.toString())

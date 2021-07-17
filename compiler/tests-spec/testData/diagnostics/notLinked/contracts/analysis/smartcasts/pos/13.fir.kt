@@ -1,15 +1,5 @@
 // !USE_EXPERIMENTAL: kotlin.contracts.ExperimentalContracts
 
-/*
- * KOTLIN DIAGNOSTICS NOT LINKED SPEC TEST (POSITIVE)
- *
- * SECTIONS: contracts, analysis, smartcasts
- * NUMBER: 13
- * DESCRIPTION: Check smartcast to upper bound of the types in disjunction.
- * UNEXPECTED BEHAVIOUR
- * ISSUES: KT-1982
- */
-
 // FILE: contracts.kt
 
 package contracts
@@ -41,5 +31,5 @@ fun case_1(value_1: Any?) {
 // TESTCASE NUMBER: 2
 fun case_2(value_1: Any?, value_2: Number, value_3: Any?, value_4: String?) {
     value_1.case_2(value_2, value_3, value_4)
-    <!AMBIGUITY!>println<!>(value_1.<!UNRESOLVED_REFERENCE!>toByte<!>())
+    println(value_1.toByte())
 }

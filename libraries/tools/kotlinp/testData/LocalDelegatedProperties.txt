@@ -3,7 +3,7 @@
 public final class Class : kotlin/Any {
 
   // signature: <init>()V
-  public /* primary */ constructor()
+  public constructor()
 
   // signature: f()V
   public final fun f(): kotlin/Unit
@@ -22,19 +22,12 @@ public final class Class : kotlin/Any {
 
   // module name: test-module
 }
-// Class$f$1.class
-// ------------------------------------------
-lambda {
-
-  // signature: invoke()V
-  local final fun g(): kotlin/Unit
-}
 // Delegate.class
 // ------------------------------------------
 public final class Delegate<T#0 /* T */> : kotlin/Any {
 
   // signature: <init>(Ljava/lang/Object;)V
-  public /* primary */ constructor(value: T#0? /* = ... */)
+  public constructor(value: T#0? /* = ... */)
 
   // signature: getValue(Ljava/lang/Object;Lkotlin/reflect/KProperty;)Ljava/lang/Object;
   public final operator fun getValue(instance: kotlin/Any?, property: kotlin/reflect/KProperty<*>): T#0

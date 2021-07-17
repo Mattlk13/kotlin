@@ -8,6 +8,7 @@ package org.jetbrains.kotlin.codegen
 import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.builtins.UnsignedTypes
+import org.jetbrains.kotlin.codegen.JvmCodegenUtil.isJvmInterface
 import org.jetbrains.kotlin.codegen.binding.CodegenBinding
 import org.jetbrains.kotlin.codegen.context.CodegenContext
 import org.jetbrains.kotlin.codegen.context.FieldOwnerContext
@@ -19,14 +20,13 @@ import org.jetbrains.kotlin.codegen.inline.ReificationArgument
 import org.jetbrains.kotlin.codegen.intrinsics.TypeIntrinsics
 import org.jetbrains.kotlin.codegen.state.GenerationState
 import org.jetbrains.kotlin.codegen.state.KotlinTypeMapper
-import org.jetbrains.kotlin.config.ApiVersion
 import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.config.isReleaseCoroutines
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.deserialization.PLATFORM_DEPENDENT_ANNOTATION_FQ_NAME
 import org.jetbrains.kotlin.descriptors.impl.ValueParameterDescriptorImpl
-import org.jetbrains.kotlin.load.java.BuiltinMethodsWithSpecialGenericSignature.SpecialSignatureInfo
-import org.jetbrains.kotlin.load.java.JvmAbi
+import org.jetbrains.kotlin.load.java.DescriptorsJvmAbiUtil
+import org.jetbrains.kotlin.load.java.SpecialGenericSignatures.SpecialSignatureInfo
 import org.jetbrains.kotlin.load.java.descriptors.JavaCallableMemberDescriptor
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
@@ -60,6 +60,12 @@ import org.jetbrains.org.objectweb.asm.Opcodes.*
 import org.jetbrains.org.objectweb.asm.Type
 import org.jetbrains.org.objectweb.asm.commons.InstructionAdapter
 import org.jetbrains.org.objectweb.asm.commons.Method
+import org.jetbrains.org.objectweb.asm.tree.LabelNode
+import java.lang.Deprecated
+import java.util.*
+
+@JvmField
+internal val JAVA_LANG_DEPRECATED = Type.getType(Deprecated::class.java).descriptor
 
 fun generateIsCheck(
     v: InstructionAdapter,
@@ -96,11 +102,12 @@ fun generateAsCast(
     kotlinType: KotlinType,
     asmType: Type,
     isSafe: Boolean,
-    languageVersionSettings: LanguageVersionSettings
+    languageVersionSettings: LanguageVersionSettings,
+    unifiedNullChecks: Boolean,
 ) {
     if (!isSafe) {
         if (!TypeUtils.isNullableType(kotlinType)) {
-            generateNullCheckForNonSafeAs(v, kotlinType, languageVersionSettings)
+            generateNullCheckForNonSafeAs(v, kotlinType, unifiedNullChecks)
         }
     } else {
         with(v) {
@@ -120,15 +127,13 @@ fun generateAsCast(
 private fun generateNullCheckForNonSafeAs(
     v: InstructionAdapter,
     type: KotlinType,
-    languageVersionSettings: LanguageVersionSettings
+    unifiedNullChecks: Boolean,
 ) {
     with(v) {
         dup()
         val nonnull = Label()
         ifnonnull(nonnull)
-        val exceptionClass =
-            if (languageVersionSettings.apiVersion >= ApiVersion.KOTLIN_1_4) "java/lang/NullPointerException"
-            else "kotlin/TypeCastException"
+        val exceptionClass = if (unifiedNullChecks) "java/lang/NullPointerException" else "kotlin/TypeCastException"
         AsmUtil.genThrow(
             v,
             exceptionClass,
@@ -152,7 +157,7 @@ fun populateCompanionBackingFieldNamesToOuterContextIfNeeded(
         return
     }
 
-    if (!JvmAbi.isClassCompanionObjectWithBackingFieldsInOuter(descriptor)) {
+    if (!DescriptorsJvmAbiUtil.isClassCompanionObjectWithBackingFieldsInOuter(descriptor)) {
         return
     }
     val properties = companion.declarations.filterIsInstance<KtProperty>()
@@ -240,7 +245,7 @@ fun CallableDescriptor.isJvmStaticInObjectOrClassOrInterface(): Boolean =
         DescriptorUtils.isNonCompanionObject(it) ||
                 // This is necessary because for generation of @JvmStatic methods from companion of class A
                 // we create a synthesized descriptor containing in class A
-                DescriptorUtils.isClassOrEnumClass(it) || DescriptorUtils.isInterface(it)
+                DescriptorUtils.isClassOrEnumClass(it) || isJvmInterface(it)
     }
 
 fun CallableDescriptor.isJvmStaticInCompanionObject(): Boolean =
@@ -388,13 +393,12 @@ fun TypeSystemCommonBackendContext.extractReificationArgument(initialType: Kotli
     while (type.isArrayOrNullableArray()) {
         arrayDepth++
         val argument = type.getArgument(0)
-        type =
-            if (argument.isStarProjection()) nullableAnyType()
-            else argument.getType()
+        if (argument.isStarProjection()) return null
+        type = argument.getType()
     }
 
     val typeParameter = type.typeConstructor().getTypeParameterClassifier() ?: return null
-
+    if (!typeParameter.isReified()) return null
     return Pair(typeParameter, ReificationArgument(typeParameter.getName().asString(), isNullable, arrayDepth))
 }
 
@@ -588,7 +592,7 @@ private fun generateLambdaForRunSuspend(
 
     lambdaBuilder.newField(
         JvmDeclarationOrigin.NO_ORIGIN,
-        ACC_PRIVATE or ACC_FINAL,
+        ACC_PRIVATE or ACC_FINAL or ACC_SYNTHETIC,
         "args",
         ARRAY_OF_STRINGS_TYPE.descriptor, null, null
     )
@@ -665,3 +669,22 @@ private fun generateLambdaForRunSuspend(
     lambdaBuilder.done()
     return lambdaBuilder.thisName
 }
+
+internal fun LabelNode.linkWithLabel(): LabelNode {
+    // Remember labelNode in label and vise versa.
+    // Before ASM 8 there was JB patch in MethodNode that makes such linking in constructor of LabelNode.
+    //
+    // protected LabelNode getLabelNode(final Label label) {
+    //    if (!(label.info instanceof LabelNode)) {
+    //      //label.info = new LabelNode(label); //[JB: needed for Coverage agent]
+    //      label.info = new LabelNode(); //ASM 8
+    //    }
+    //    return (LabelNode) label.info;
+    //  }
+    if (label.info == null) {
+        label.info = this
+    }
+    return this
+}
+
+fun linkedLabel(): Label = LabelNode().linkWithLabel().label

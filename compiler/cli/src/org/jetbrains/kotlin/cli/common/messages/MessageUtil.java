@@ -17,8 +17,6 @@
 package org.jetbrains.kotlin.cli.common.messages;
 
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.openapi.vfs.impl.jar.CoreJarVirtualFile;
-import com.intellij.openapi.vfs.local.CoreLocalVirtualFile;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import org.jetbrains.annotations.NotNull;
@@ -32,14 +30,14 @@ public class MessageUtil {
     private MessageUtil() {}
 
     @Nullable
-    public static CompilerMessageLocation psiElementToMessageLocation(@Nullable PsiElement element) {
+    public static CompilerMessageSourceLocation psiElementToMessageLocation(@Nullable PsiElement element) {
         if (element == null) return null;
         PsiFile file = element.getContainingFile();
         return psiFileToMessageLocation(file, "<no path>", DiagnosticUtils.getLineAndColumnRangeInPsiFile(file, element.getTextRange()));
     }
 
     @Nullable
-    public static CompilerMessageLocation psiFileToMessageLocation(
+    public static CompilerMessageSourceLocation psiFileToMessageLocation(
             @NotNull PsiFile file,
             @Nullable String defaultValue,
             @NotNull PsiDiagnosticUtils.LineAndColumnRange range
@@ -48,15 +46,11 @@ public class MessageUtil {
         String path = virtualFile != null ? virtualFileToPath(virtualFile) : defaultValue;
         PsiDiagnosticUtils.LineAndColumn start = range.getStart();
         PsiDiagnosticUtils.LineAndColumn end = range.getEnd();
-        return CompilerMessageLocation.create(path, start.getLine(), start.getColumn(), end.getLine(), end.getColumn(), start.getLineContent());
+        return CompilerMessageLocationWithRange.create(path, start.getLine(), start.getColumn(), end.getLine(), end.getColumn(), start.getLineContent());
     }
 
     @NotNull
     public static String virtualFileToPath(@NotNull VirtualFile virtualFile) {
-        // Convert path to platform-dependent format when virtualFile is local file.
-        if (virtualFile instanceof CoreLocalVirtualFile || virtualFile instanceof CoreJarVirtualFile) {
-            return toSystemDependentName(virtualFile.getPath());
-        }
-        return virtualFile.getPath();
+        return toSystemDependentName(virtualFile.getPath());
     }
 }

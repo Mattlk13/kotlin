@@ -3,15 +3,6 @@
 // SKIP_TXT
 
 /*
- * KOTLIN DIAGNOSTICS NOT LINKED SPEC TEST (POSITIVE)
- *
- * SECTIONS: dfa
- * NUMBER: 72
- * DESCRIPTION: Raw data flow analysis test
- * HELPERS: classes, objects, typealiases, functions, enumClasses, interfaces, sealedClasses
- */
-
-/*
  * TESTCASE NUMBER: 1
  * UNEXPECTED BEHAVIOUR
  * ISSUES: KT-19446
@@ -21,6 +12,6 @@ fun case_1() {
     val ints = list as MutableList<Int>
     val strs = list as MutableList<String>
     strs.add("two")
-    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.collections.MutableList<kotlin.Int> & kotlin.collections.MutableList<kotlin.String> & kotlin.collections.MutableList<kotlin.String>")!>list<!>
-    val s: String = <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.collections.MutableList<kotlin.Int> & kotlin.collections.MutableList<kotlin.String> & kotlin.collections.MutableList<kotlin.String>")!>list<!>[0]
+    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.collections.MutableList<kotlin.String> & kotlin.collections.MutableList<kotlin.Int> & kotlin.collections.MutableList<kotlin.String>")!>list<!>
+    val s: String = <!INITIALIZER_TYPE_MISMATCH, TYPE_MISMATCH!><!DEBUG_INFO_EXPRESSION_TYPE("kotlin.collections.MutableList<kotlin.String> & kotlin.collections.MutableList<kotlin.Int> & kotlin.collections.MutableList<kotlin.String>")!>list<!>[0]<!>
 }

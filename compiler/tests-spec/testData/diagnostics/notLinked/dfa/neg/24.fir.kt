@@ -3,15 +3,6 @@
 // SKIP_TXT
 
 /*
- * KOTLIN DIAGNOSTICS NOT LINKED SPEC TEST (NEGATIVE)
- *
- * SECTIONS: dfa
- * NUMBER: 24
- * DESCRIPTION: Raw data flow analysis test
- * HELPERS: classes, objects, typealiases, functions, enumClasses, interfaces, sealedClasses
- */
-
-/*
  * TESTCASE NUMBER: 1
  * UNEXPECTED BEHAVIOUR
  * ISSUES: KT-28370
@@ -25,7 +16,7 @@ fun case_1() {
             x = null
         }
         <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Boolean?")!>x<!>
-        <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Boolean?")!>x<!>.<!INAPPLICABLE_CANDIDATE!>not<!>()
+        <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Boolean?")!>x<!><!UNSAFE_CALL!>.<!>not()
     }
 }
 
@@ -41,7 +32,7 @@ fun case_2() {
             x = null
         } finally { }
         <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Boolean?")!>x<!>
-        <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Boolean?")!>x<!>.<!INAPPLICABLE_CANDIDATE!>not<!>()
+        <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Boolean?")!>x<!><!UNSAFE_CALL!>.<!>not()
     }
 }
 
@@ -61,7 +52,7 @@ fun case_3(x: String?) {
         }
     }
     <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String?")!>x<!>
-    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String?")!>x<!>.<!INAPPLICABLE_CANDIDATE!>length<!>
+    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String?")!>x<!><!UNSAFE_CALL!>.<!>length
 }
 
 /*
@@ -77,8 +68,8 @@ fun case_4(x: String?) {
             break
         }
     }
-    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String & kotlin.String?")!>x<!>
-    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String & kotlin.String?")!>x<!>.length
+    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String?")!>x<!>
+    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String?")!>x<!><!UNSAFE_CALL!>.<!>length
 }
 
 /*
@@ -94,8 +85,8 @@ fun case_5(x: String?) {
             break
         }
     } while (true)
-    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String & kotlin.String?")!>x<!>
-    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String & kotlin.String?")!>x<!>.length
+    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String?")!>x<!>
+    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String?")!>x<!><!UNSAFE_CALL!>.<!>length
 }
 
 /*
@@ -114,5 +105,5 @@ fun case_6(x: String?) {
         }
     } while (true)
     <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String?")!>x<!>
-    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String?")!>x<!>.<!INAPPLICABLE_CANDIDATE!>length<!>
+    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String?")!>x<!><!UNSAFE_CALL!>.<!>length
 }

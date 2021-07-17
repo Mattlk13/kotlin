@@ -3,15 +3,6 @@
 // SKIP_TXT
 
 /*
- * KOTLIN DIAGNOSTICS NOT LINKED SPEC TEST (NEGATIVE)
- *
- * SECTIONS: dfa
- * NUMBER: 43
- * DESCRIPTION: Raw data flow analysis test
- * HELPERS: classes, objects, typealiases, functions, enumClasses, interfaces, sealedClasses
- */
-
-/*
  * TESTCASE NUMBER: 1
  * ISSUES: KT-10461
  */
@@ -23,7 +14,7 @@ fun case_1(x: Double?, y: Double?) : Double {
     } else if (x == null && y != null) {
         y
     } else {
-        x <!AMBIGUITY!>+<!> y
+        x <!UNSAFE_OPERATOR_CALL!>+<!> y
     }
 }
 
@@ -36,7 +27,7 @@ fun case_2(x: Boolean?, y: Any?) {
     if (x == false) return
     if (y != x) {
         <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any?")!>y<!>
-        <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any?")!>y<!>.<!INAPPLICABLE_CANDIDATE!>equals<!>(10)
+        <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any?")!>y<!><!UNSAFE_CALL!>.<!>equals(10)
     }
 }
 
@@ -48,7 +39,7 @@ fun case_3(x : Unit?, y : Any?) {
     if (x == kotlin.Unit) return
     if (y != x) {
         <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any?")!>y<!>
-        <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any?")!>y<!>.<!INAPPLICABLE_CANDIDATE!>equals<!>(10)
+        <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any?")!>y<!><!UNSAFE_CALL!>.<!>equals(10)
     }
 }
 
@@ -60,7 +51,7 @@ fun case_4(x : EnumClassSingle?, y : Any?) {
     if (x == EnumClassSingle.EVERYTHING) return
     if (y != x) {
         <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any?")!>y<!>
-        <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any?")!>y<!>.<!INAPPLICABLE_CANDIDATE!>equals<!>(10)
+        <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any?")!>y<!><!UNSAFE_CALL!>.<!>equals(10)
     }
 }
 

@@ -7,14 +7,14 @@
  * KOTLIN DIAGNOSTICS SPEC TEST (POSITIVE)
  *
  * SPEC VERSION: 0.1-280
- * PLACE: overload-resolution, building-the-overload-candidate-set-ocs, call-with-named-parameters -> paragraph 1 -> sentence 2
- * RELEVANT PLACES: overload-resolution, building-the-overload-candidate-set-ocs, call-with-named-parameters -> paragraph 2 -> sentence 1
+ * MAIN LINK: overload-resolution, building-the-overload-candidate-set-ocs, call-with-named-parameters -> paragraph 1 -> sentence 2
+ * PRIMARY LINKS: overload-resolution, building-the-overload-candidate-set-ocs, call-with-named-parameters -> paragraph 2 -> sentence 1
  * overload-resolution, building-the-overload-candidate-set-ocs, call-with-specified-type-parameters -> paragraph 1 -> sentence 2
  * NUMBER: 10
  * DESCRIPTION: Explicit receiver:  Top-level non-extension functions: Callables star-imported into the current file;
  */
 
-// FILE: TestCase.kt
+// FILE: TestCase1.kt
 // TESTCASE NUMBER: 1
 package testsCase1
 
@@ -23,12 +23,12 @@ import libPackageCase1.*
 fun case1() {
     <!DEBUG_INFO_CALL("fqName: libPackageCase1.listOf; typeCall: function")!>listOf(elements = arrayOf(1))<!>
 }
-// FILE: Lib.kt
+// FILE: Lib1.kt
 package libPackageCase1
 
 fun <T> listOf(vararg elements: T): List<T> = TODO()
 
-// FILE: TestCase.kt
+// FILE: TestCase2.kt
 // TESTCASE NUMBER: 2
 package testsCase2
 import libPackageCase2.*
@@ -42,7 +42,7 @@ class A {
     operator fun <T> invoke(): T = TODO()
 }
 
-// FILE: Lib.kt
+// FILE: Lib2.kt
 package libPackageCase2
 import testsCase2.*
 
@@ -50,7 +50,7 @@ fun <T> listOf(vararg elements: T): List<T> = TODO()
 val listOf: A
     get() = A()
 
-// FILE: TestCase.kt
+// FILE: TestCase3.kt
 // TESTCASE NUMBER: 3
 package testsCase3
 import libPackageCase3.*
@@ -64,7 +64,7 @@ class A {
     operator fun <T> invoke(vararg elements: T): List<T> = TODO()
 }
 
-// FILE: Lib.kt
+// FILE: Lib3.kt
 package libPackageCase3
 import testsCase3.*
 

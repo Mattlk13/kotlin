@@ -7,6 +7,7 @@ package org.jetbrains.kotlin.idea.configuration
 
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.util.Consumer
+import org.jetbrains.kotlin.idea.debugger.KotlinDebuggerSettings
 import org.jetbrains.plugins.gradle.service.project.AbstractProjectResolverExtension
 
 class KotlinGradleCoroutineDebugProjectResolver : AbstractProjectResolverExtension() {
@@ -14,7 +15,9 @@ class KotlinGradleCoroutineDebugProjectResolver : AbstractProjectResolverExtensi
 
     override fun enhanceTaskProcessing(taskNames: MutableList<String>, jvmParametersSetup: String?, initScriptConsumer: Consumer<String>) {
         try {
-            setupCoroutineAgentForJvmForkedTestTasks(initScriptConsumer)
+            val disableCoroutineAgent = KotlinDebuggerSettings.getInstance().debugDisableCoroutineAgent
+            if (!disableCoroutineAgent)
+                setupCoroutineAgentForJvmForkedTestTasks(initScriptConsumer)
         } catch (e: Exception) {
             log.error("Gradle: not possible to attach a coroutine debugger agent.", e)
         }
@@ -24,12 +27,24 @@ class KotlinGradleCoroutineDebugProjectResolver : AbstractProjectResolverExtensi
         val script =
             //language=Gradle
             """
-            gradle.taskGraph.beforeTask { Task task ->
-              if (task instanceof Test) {
-                def kotlinxCoroutinesDebugJar = task.classpath.find { it.name.startsWith("kotlinx-coroutines-debug") }
-                if (kotlinxCoroutinesDebugJar)
-                    task.jvmArgs ("-javaagent:${'$'}{kotlinxCoroutinesDebugJar?.absolutePath}", "-ea")
-              }
+            gradle.taskGraph.whenReady { TaskExecutionGraph taskGraph ->
+                taskGraph.allTasks.each { Task task ->
+                    if (task instanceof Test || task instanceof JavaExec) {
+                        task.doFirst { Task forkedTask ->
+                            def kotlinxCoroutinesCoreJar = forkedTask.classpath.find { it.name.startsWith("kotlinx-coroutines-core") }
+                            if (kotlinxCoroutinesCoreJar) {
+                                def results = (kotlinxCoroutinesCoreJar.getName() =~ /kotlinx-coroutines-core(\-jvm)?-(\d[\w\.\-]+)\.jar${'$'}/).findAll()
+                                if (results) {
+                                    def version = results.first()[2]
+                                    def referenceVersion = org.gradle.util.VersionNumber.parse('1.3.7-255')
+                                    if (org.gradle.util.VersionNumber.parse(version) > referenceVersion) {
+                                        forkedTask.jvmArgs ("-javaagent:${'$'}{kotlinxCoroutinesCoreJar?.absolutePath}", "-ea")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
             """.trimIndent()
         initScriptConsumer.consume(script)

@@ -18,8 +18,8 @@ class Outer<E> {
             bar(outerE(), baz())
             bar(instance().outerE(), baz())
 
-            <!INAPPLICABLE_CANDIDATE!>bar<!>(topLevel().Inner<E>().baz(), topLevel().Inner<E>().baz())
-            <!INAPPLICABLE_CANDIDATE!>bar<!>(topLevel().Inner<E>().foo(), topLevel().Inner<E>().baz())
+            bar(topLevel().Inner<E>().baz(), <!ARGUMENT_TYPE_MISMATCH!>topLevel().Inner<E>().baz()<!>)
+            bar(<!ARGUMENT_TYPE_MISMATCH!>topLevel().Inner<E>().foo()<!>, <!ARGUMENT_TYPE_MISMATCH!>topLevel().Inner<E>().baz()<!>)
 
             setE(foo())
         }
@@ -44,6 +44,6 @@ fun foo() {
 
     strInt.instance().Inner<Double>().checkType { _<Outer<String>.Inner<Double>>() }
 
-    Outer<String>().<!INAPPLICABLE_CANDIDATE!>setInner<!>(strInt)
-    Outer<CharSequence>().<!INAPPLICABLE_CANDIDATE!>setInner<!>(strInt)
+    Outer<String>().setInner(strInt)
+    Outer<CharSequence>().setInner(<!ARGUMENT_TYPE_MISMATCH!>strInt<!>)
 }

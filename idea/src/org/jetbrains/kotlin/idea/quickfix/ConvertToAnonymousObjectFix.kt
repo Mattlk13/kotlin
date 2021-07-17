@@ -7,6 +7,7 @@ package org.jetbrains.kotlin.idea.quickfix
 
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.project.Project
+import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.ClassifierDescriptor
 import org.jetbrains.kotlin.descriptors.SimpleFunctionDescriptor
 import org.jetbrains.kotlin.diagnostics.Diagnostic
@@ -20,8 +21,7 @@ import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import org.jetbrains.kotlin.psi.KtReferenceExpression
 import org.jetbrains.kotlin.resolve.calls.tower.WrongResolutionToClassifier
-import org.jetbrains.kotlin.resolve.lazy.descriptors.LazyClassDescriptor
-import org.jetbrains.kotlin.utils.addToStdlib.firstNotNullResult
+import org.jetbrains.kotlin.resolve.sam.getAbstractMembers
 
 class ConvertToAnonymousObjectFix(element: KtNameReferenceExpression) : KotlinQuickFixAction<KtNameReferenceExpression>(element) {
     override fun getFamilyName() = KotlinBundle.message("convert.to.anonymous.object")
@@ -32,7 +32,7 @@ class ConvertToAnonymousObjectFix(element: KtNameReferenceExpression) : KotlinQu
         val nameReference = element ?: return
         val call = nameReference.parent as? KtCallExpression ?: return
         val lambda = SamConversionToAnonymousObjectIntention.getLambdaExpression(call) ?: return
-        val functionDescriptor = nameReference.analyze().diagnostics.forElement(nameReference).firstNotNullResult {
+        val functionDescriptor = nameReference.analyze().diagnostics.forElement(nameReference).firstNotNullOfOrNull {
             if (it.factory == Errors.RESOLUTION_TO_CLASSIFIER) getFunctionDescriptor(Errors.RESOLUTION_TO_CLASSIFIER.cast(it)) else null
         } ?: return
         val functionName = functionDescriptor.name.asString()
@@ -52,6 +52,10 @@ class ConvertToAnonymousObjectFix(element: KtNameReferenceExpression) : KotlinQu
 
         private fun getFunctionDescriptor(
             d: DiagnosticWithParameters3<KtReferenceExpression, ClassifierDescriptor, WrongResolutionToClassifier, String>
-        ) = (d.a as? LazyClassDescriptor)?.declaredCallableMembers?.singleOrNull() as? SimpleFunctionDescriptor
+        ): SimpleFunctionDescriptor? {
+            val classDescriptor = d.a as? ClassDescriptor ?: return null
+            val singleAbstractFunction = getAbstractMembers(classDescriptor).singleOrNull() as? SimpleFunctionDescriptor ?: return null
+            return if (singleAbstractFunction.typeParameters.isEmpty()) singleAbstractFunction else null
+        }
     }
 }

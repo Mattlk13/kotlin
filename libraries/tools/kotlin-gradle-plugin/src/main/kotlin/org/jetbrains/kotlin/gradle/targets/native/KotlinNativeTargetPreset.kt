@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -8,9 +8,7 @@
 
 package org.jetbrains.kotlin.gradle.plugin.mpp
 
-import org.gradle.BuildAdapter
 import org.gradle.api.Project
-import org.gradle.api.invocation.Gradle
 import org.jetbrains.kotlin.compilerRunner.konanHome
 import org.jetbrains.kotlin.compilerRunner.konanVersion
 import org.jetbrains.kotlin.gradle.plugin.*
@@ -18,7 +16,7 @@ import org.jetbrains.kotlin.gradle.plugin.PropertiesProvider
 import org.jetbrains.kotlin.gradle.targets.native.DisabledNativeTargetsReporter
 import org.jetbrains.kotlin.gradle.targets.native.internal.NativeDistributionTypeProvider
 import org.jetbrains.kotlin.gradle.targets.native.internal.PlatformLibrariesGenerator
-import org.jetbrains.kotlin.gradle.targets.native.internal.setUpKotlinNativePlatformDependencies
+import org.jetbrains.kotlin.gradle.targets.native.internal.setupKotlinNativePlatformDependencies
 import org.jetbrains.kotlin.gradle.utils.NativeCompilerDownloader
 import org.jetbrains.kotlin.gradle.utils.SingleActionPerProject
 import org.jetbrains.kotlin.konan.CompilerVersion
@@ -28,8 +26,7 @@ import org.jetbrains.kotlin.konan.target.KonanTarget
 abstract class AbstractKotlinNativeTargetPreset<T : KotlinNativeTarget>(
     private val name: String,
     val project: Project,
-    val konanTarget: KonanTarget,
-    protected val kotlinPluginVersion: String
+    val konanTarget: KonanTarget
 ) : KotlinTargetPreset<T> {
 
     init {
@@ -89,11 +86,9 @@ abstract class AbstractKotlinNativeTargetPreset<T : KotlinNativeTarget>(
         createTargetConfigurator().configureTarget(result)
 
         SingleActionPerProject.run(project, "setUpKotlinNativePlatformDependencies") {
-            project.gradle.addListener(object : BuildAdapter() {
-                override fun projectsEvaluated(gradle: Gradle) {
-                    project.setUpKotlinNativePlatformDependencies()
-                }
-            })
+            project.gradle.projectsEvaluated {
+                project.setupKotlinNativePlatformDependencies()
+            }
         }
 
         if (!konanTarget.enabledOnCurrentHost) {
@@ -112,32 +107,32 @@ abstract class AbstractKotlinNativeTargetPreset<T : KotlinNativeTarget>(
 
 }
 
-open class KotlinNativeTargetPreset(name: String, project: Project, konanTarget: KonanTarget, kotlinPluginVersion: String) :
-    AbstractKotlinNativeTargetPreset<KotlinNativeTarget>(name, project, konanTarget, kotlinPluginVersion) {
+open class KotlinNativeTargetPreset(name: String, project: Project, konanTarget: KonanTarget) :
+    AbstractKotlinNativeTargetPreset<KotlinNativeTarget>(name, project, konanTarget) {
 
     override fun createTargetConfigurator(): KotlinTargetConfigurator<KotlinNativeTarget> =
-        KotlinNativeTargetConfigurator(kotlinPluginVersion)
+        KotlinNativeTargetConfigurator()
 
     override fun instantiateTarget(name: String): KotlinNativeTarget {
         return project.objects.newInstance(KotlinNativeTarget::class.java, project, konanTarget)
     }
 }
 
-open class KotlinNativeTargetWithHostTestsPreset(name: String, project: Project, konanTarget: KonanTarget, kotlinPluginVersion: String) :
-    AbstractKotlinNativeTargetPreset<KotlinNativeTargetWithHostTests>(name, project, konanTarget, kotlinPluginVersion) {
+open class KotlinNativeTargetWithHostTestsPreset(name: String, project: Project, konanTarget: KonanTarget) :
+    AbstractKotlinNativeTargetPreset<KotlinNativeTargetWithHostTests>(name, project, konanTarget) {
 
     override fun createTargetConfigurator(): KotlinNativeTargetWithHostTestsConfigurator =
-        KotlinNativeTargetWithHostTestsConfigurator(kotlinPluginVersion)
+        KotlinNativeTargetWithHostTestsConfigurator()
 
     override fun instantiateTarget(name: String): KotlinNativeTargetWithHostTests =
         project.objects.newInstance(KotlinNativeTargetWithHostTests::class.java, project, konanTarget)
 }
 
-open class KotlinNativeTargetWithSimulatorTestsPreset(name: String, project: Project, konanTarget: KonanTarget, kotlinPluginVersion: String) :
-    AbstractKotlinNativeTargetPreset<KotlinNativeTargetWithSimulatorTests>(name, project, konanTarget, kotlinPluginVersion) {
+open class KotlinNativeTargetWithSimulatorTestsPreset(name: String, project: Project, konanTarget: KonanTarget) :
+    AbstractKotlinNativeTargetPreset<KotlinNativeTargetWithSimulatorTests>(name, project, konanTarget) {
 
     override fun createTargetConfigurator(): KotlinNativeTargetWithSimulatorTestsConfigurator =
-        KotlinNativeTargetWithSimulatorTestsConfigurator(kotlinPluginVersion)
+        KotlinNativeTargetWithSimulatorTestsConfigurator()
 
     override fun instantiateTarget(name: String): KotlinNativeTargetWithSimulatorTests =
         project.objects.newInstance(KotlinNativeTargetWithSimulatorTests::class.java, project, konanTarget)
@@ -148,9 +143,6 @@ internal val KonanTarget.isCurrentHost: Boolean
 
 internal val KonanTarget.enabledOnCurrentHost
     get() = HostManager().isEnabled(this)
-
-internal val AbstractKotlinNativeCompilation.isMainCompilation: Boolean
-    get() = name == KotlinCompilation.MAIN_COMPILATION_NAME
 
 // KonanVersion doesn't provide an API to compare versions,
 // so we have to transform it to KotlinVersion first.

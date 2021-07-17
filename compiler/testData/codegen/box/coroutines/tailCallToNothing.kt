@@ -1,6 +1,6 @@
-// IGNORE_BACKEND_FIR: JVM_IR
 // WITH_RUNTIME
 // WITH_COROUTINES
+// SKIP_MANGLE_VERIFICATION
 import helpers.*
 import kotlin.coroutines.*
 import kotlin.coroutines.intrinsics.*

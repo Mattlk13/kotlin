@@ -6,28 +6,30 @@
 package org.jetbrains.kotlin.fir.scopes.impl
 
 import org.jetbrains.kotlin.fir.FirSession
-import org.jetbrains.kotlin.fir.resolve.FirSymbolProvider
+import org.jetbrains.kotlin.fir.resolve.symbolProvider
 import org.jetbrains.kotlin.fir.resolve.substitution.ConeSubstitutor
+import org.jetbrains.kotlin.fir.resolve.transformers.ensureResolvedForCalls
 import org.jetbrains.kotlin.fir.scopes.FirScope
-import org.jetbrains.kotlin.fir.symbols.impl.*
+import org.jetbrains.kotlin.fir.symbols.impl.FirClassifierSymbol
+import org.jetbrains.kotlin.fir.symbols.impl.FirNamedFunctionSymbol
+import org.jetbrains.kotlin.fir.symbols.impl.FirPropertySymbol
+import org.jetbrains.kotlin.fir.symbols.impl.FirVariableSymbol
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.utils.SmartList
 
 class FirPackageMemberScope(val fqName: FqName, val session: FirSession) : FirScope() {
-
-    private val symbolProvider = FirSymbolProvider.getInstance(session)
-
-    private val classifierCache = mutableMapOf<Name, FirClassifierSymbol<*>?>()
-
-    private val callableCache = mutableMapOf<Name, List<FirCallableSymbol<*>>>()
+    private val symbolProvider = session.symbolProvider
+    private val classifierCache: MutableMap<Name, FirClassifierSymbol<*>?> = mutableMapOf()
+    private val functionCache: MutableMap<Name, List<FirNamedFunctionSymbol>> = mutableMapOf()
+    private val propertyCache: MutableMap<Name, List<FirPropertySymbol>> = mutableMapOf()
 
     override fun processClassifiersByNameWithSubstitution(
         name: Name,
         processor: (FirClassifierSymbol<*>, ConeSubstitutor) -> Unit
     ) {
         if (name.asString().isEmpty()) return
-
 
         val symbol = classifierCache.getOrPut(name) {
             val unambiguousFqName = ClassId(fqName, name)
@@ -39,25 +41,25 @@ class FirPackageMemberScope(val fqName: FqName, val session: FirSession) : FirSc
         }
     }
 
-    override fun processFunctionsByName(name: Name, processor: (FirFunctionSymbol<*>) -> Unit) {
-        val symbols = callableCache.getOrPut(name) {
-            symbolProvider.getTopLevelCallableSymbols(fqName, name)
+    override fun processFunctionsByName(name: Name, processor: (FirNamedFunctionSymbol) -> Unit) {
+        val symbols = functionCache.getOrPut(name) {
+            symbolProvider.getTopLevelFunctionSymbols(fqName, name)
         }
         for (symbol in symbols) {
-            if (symbol is FirFunctionSymbol<*>) {
-                processor(symbol)
-            }
+            symbol.ensureResolvedForCalls()
+            processor(symbol)
         }
     }
 
     override fun processPropertiesByName(name: Name, processor: (FirVariableSymbol<*>) -> Unit) {
-        val symbols = callableCache.getOrPut(name) {
-            symbolProvider.getTopLevelCallableSymbols(fqName, name)
+        val symbols = propertyCache.getOrPut(name) {
+            symbolProvider.getTopLevelPropertySymbols(fqName, name)
         }
         for (symbol in symbols) {
-            if (symbol is FirPropertySymbol) {
-                processor(symbol)
-            }
+            symbol.ensureResolvedForCalls()
+            processor(symbol)
         }
     }
+
+    override val scopeOwnerLookupNames: List<String> = SmartList(fqName.asString())
 }

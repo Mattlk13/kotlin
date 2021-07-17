@@ -29,13 +29,13 @@ import org.jetbrains.kotlin.resolve.ImportedFromObjectCallableDescriptor
 import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
 import org.jetbrains.kotlin.resolve.calls.model.isReallySuccess
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameOrNull
-import org.jetbrains.kotlin.resolve.descriptorUtil.isCompanionObject
 import org.jetbrains.kotlin.resolve.descriptorUtil.isExtension
 import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
 import org.jetbrains.kotlin.resolve.scopes.receivers.ImplicitReceiver
 import org.jetbrains.kotlin.resolve.scopes.utils.findClassifier
 import org.jetbrains.kotlin.types.ErrorUtils
 import org.jetbrains.kotlin.types.KotlinType
+import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 import org.jetbrains.kotlin.utils.sure
 import java.util.*
 
@@ -49,14 +49,14 @@ class CodeToInlineBuilder(
     fun prepareCodeToInline(
         mainExpression: KtExpression?,
         statementsBefore: List<KtExpression>,
-        analyze: () -> BindingContext,
-        reformat: Boolean
+        analyze: (KtExpression) -> BindingContext,
+        reformat: Boolean,
     ): CodeToInline {
-        var bindingContext = analyze()
-        val alwaysKeepMainExpression = when (val descriptor = mainExpression.getResolvedCall(bindingContext)?.resultingDescriptor) {
-            is PropertyDescriptor -> descriptor.getter?.isDefault == false
-            else -> false
-        }
+        val alwaysKeepMainExpression =
+            when (val descriptor = mainExpression?.getResolvedCall(analyze(mainExpression))?.resultingDescriptor) {
+                is PropertyDescriptor -> descriptor.getter?.isDefault == false
+                else -> false
+            }
 
         val codeToInline = MutableCodeToInline(
             mainExpression,
@@ -65,14 +65,14 @@ class CodeToInlineBuilder(
             alwaysKeepMainExpression
         )
 
-        bindingContext = insertExplicitTypeArguments(codeToInline, bindingContext, analyze)
+        insertExplicitTypeArguments(codeToInline, analyze)
 
-        processReferences(codeToInline, bindingContext, reformat)
+        processReferences(codeToInline, analyze, reformat)
 
         if (mainExpression != null) {
             val functionLiteralExpression = mainExpression.unpackFunctionLiteral(true)
             if (functionLiteralExpression != null) {
-                val functionLiteralParameterTypes = getParametersForFunctionLiteral(functionLiteralExpression, bindingContext)
+                val functionLiteralParameterTypes = getParametersForFunctionLiteral(functionLiteralExpression, analyze)
                 if (functionLiteralParameterTypes != null) {
                     codeToInline.addPostInsertionAction(mainExpression) { inlinedExpression ->
                         addFunctionLiteralParameterTypes(functionLiteralParameterTypes, inlinedExpression)
@@ -84,7 +84,11 @@ class CodeToInlineBuilder(
         return codeToInline.toNonMutable()
     }
 
-    private fun getParametersForFunctionLiteral(functionLiteralExpression: KtLambdaExpression, context: BindingContext): String? {
+    private fun getParametersForFunctionLiteral(
+        functionLiteralExpression: KtLambdaExpression,
+        analyze: (KtExpression) -> BindingContext
+    ): String? {
+        val context = analyze(functionLiteralExpression)
         val lambdaDescriptor = context.get(BindingContext.FUNCTION, functionLiteralExpression.functionLiteral)
         if (lambdaDescriptor == null ||
             ErrorUtils.containsErrorTypeInParameters(lambdaDescriptor) ||
@@ -125,43 +129,36 @@ class CodeToInlineBuilder(
         }
     }
 
-    private fun insertExplicitTypeArguments(
-        codeToInline: MutableCodeToInline,
-        bindingContext: BindingContext,
-        analyze: () -> BindingContext
-    ): BindingContext {
-        val typeArgsToAdd = ArrayList<Pair<KtCallElement, KtTypeArgumentList>>()
-        codeToInline.forEachDescendantOfType<KtCallElement> {
+    private fun insertExplicitTypeArguments(codeToInline: MutableCodeToInline, analyze: (KtExpression) -> BindingContext) {
+        val typeArgsToAdd = ArrayList<Pair<KtCallExpression, KtTypeArgumentList>>()
+        codeToInline.forEachDescendantOfType<KtCallExpression> {
+            val expression = it.parent as? KtQualifiedExpression ?: it
+            val bindingContext = analyze(expression)
             if (InsertExplicitTypeArgumentsIntention.isApplicableTo(it, bindingContext)) {
                 typeArgsToAdd.add(it to InsertExplicitTypeArgumentsIntention.createTypeArguments(it, bindingContext)!!)
             }
         }
 
-        if (typeArgsToAdd.isEmpty()) return bindingContext
-
+        if (typeArgsToAdd.isEmpty()) return
         for ((callExpr, typeArgs) in typeArgsToAdd) {
             callExpr.addAfter(typeArgs, callExpr.calleeExpression)
         }
-
-        // reanalyze expression - new usages of type parameters may be added
-        return analyze()
     }
 
-    private fun processReferences(codeToInline: MutableCodeToInline, bindingContext: BindingContext, reformat: Boolean) {
+    private fun processReferences(codeToInline: MutableCodeToInline, analyze: (KtExpression) -> BindingContext, reformat: Boolean) {
         val receiversToAdd = ArrayList<Triple<KtExpression, KtExpression, KotlinType>>()
         val targetDispatchReceiverType = targetCallable.dispatchReceiverParameter?.value?.type
         val targetExtensionReceiverType = targetCallable.extensionReceiverParameter?.value?.type
 
         codeToInline.forEachDescendantOfType<KtSimpleNameExpression> { expression ->
-            val target = bindingContext[BindingContext.REFERENCE_TARGET, expression] ?: return@forEachDescendantOfType
+            val bindingContext = analyze(expression)
+            val target = bindingContext[BindingContext.SHORT_REFERENCE_TO_COMPANION_OBJECT, expression]
+                ?: bindingContext[BindingContext.REFERENCE_TARGET, expression]
+                ?: return@forEachDescendantOfType
 
             //TODO: other types of references ('[]' etc)
             if (expression.canBeResolvedViaImport(target, bindingContext)) {
-                val importableFqName = if (target.isCompanionObject()) {
-                    target.containingDeclaration?.importableFqName
-                } else {
-                    target.importableFqName
-                }
+                val importableFqName = target.importableFqName
 
                 if (importableFqName != null) {
                     val lexicalScope = (expression.containingFile as? KtFile)?.getResolutionScope(bindingContext, resolutionFacade)
@@ -175,10 +172,12 @@ class CodeToInlineBuilder(
             }
 
             if (expression.getReceiverExpression() == null) {
-                if (target is ValueParameterDescriptor && target.containingDeclaration == targetCallable) {
-                    expression.putCopyableUserData(CodeToInline.PARAMETER_USAGE_KEY, target.name)
-                } else if (target is TypeParameterDescriptor && target.containingDeclaration == targetCallable) {
-                    expression.putCopyableUserData(CodeToInline.TYPE_PARAMETER_USAGE_KEY, target.name)
+                (targetCallable.safeAs<ImportedFromObjectCallableDescriptor<*>>()?.callableFromObject ?: targetCallable).let {
+                    if (target is ValueParameterDescriptor && target.containingDeclaration == it) {
+                        expression.putCopyableUserData(CodeToInline.PARAMETER_USAGE_KEY, target.name)
+                    } else if (target is TypeParameterDescriptor && target.containingDeclaration == it) {
+                        expression.putCopyableUserData(CodeToInline.TYPE_PARAMETER_USAGE_KEY, target.name)
+                    }
                 }
 
                 if (targetCallable !is ImportedFromObjectCallableDescriptor<*>) {

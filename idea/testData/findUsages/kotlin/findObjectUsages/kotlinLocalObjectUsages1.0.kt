@@ -1,3 +1,4 @@
+// FIR_COMPARISON
 // PSI_ELEMENT: org.jetbrains.kotlin.psi.KtObjectDeclaration
 // OPTIONS: usages
 fun foo(): Any {
@@ -7,3 +8,5 @@ fun foo(): Any {
 }
 
 val x = Bar
+
+// DISABLE-ERRORS

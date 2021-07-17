@@ -8,28 +8,24 @@ plugins {
     id("jps-compatible")
 }
 
-repositories {
-    maven { setUrl("https://dl.bintray.com/kotlin/kotlinx.html/") }
-}
-
 dependencies {
-    compile(project(":core:descriptors"))
-    compile(project(":core:deserialization"))
-    compile(project(":compiler:fir:cones"))
-    compile(project(":compiler:fir:tree"))
-    compile(project(":compiler:fir:resolve"))
-    compile(project(":compiler:fir:java"))
-    compile(project(":compiler:cli"))
+    implementation(project(":core:descriptors"))
+    implementation(project(":core:deserialization"))
+    implementation(project(":compiler:fir:cones"))
+    implementation(project(":compiler:fir:tree"))
+    implementation(project(":compiler:fir:resolve"))
+    implementation(project(":compiler:fir:java"))
+    implementation(project(":compiler:cli"))
+
+    implementation("org.jetbrains.kotlinx:kotlinx-html-jvm:0.6.12")
 
     compileOnly(intellijCoreDep()) { includeJars("intellij-core") }
     compileOnly(intellijDep()) { includeJars("commons-lang-2.4") }
 
-    compile("org.jetbrains.kotlinx:kotlinx-html-jvm:0.6.12")
 }
 
 sourceSets {
     "main" { projectDefault() }
 }
-
 
 testsJar()

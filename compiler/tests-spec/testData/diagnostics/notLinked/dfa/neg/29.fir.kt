@@ -2,15 +2,6 @@
 // !DIAGNOSTICS: -UNUSED_EXPRESSION
 // SKIP_TXT
 
-/*
- * KOTLIN DIAGNOSTICS NOT LINKED SPEC TEST (NEGATIVE)
- *
- * SECTIONS: dfa
- * NUMBER: 29
- * DESCRIPTION: Raw data flow analysis test
- * HELPERS: classes, objects, typealiases, enumClasses, interfaces, sealedClasses
- */
-
 // TESTCASE NUMBER: 1
 fun case_1(a: Any?) {
     while (true) {
@@ -18,8 +9,8 @@ fun case_1(a: Any?) {
         if (true) continue
     }
 
-    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any?")!>a<!>
-    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any?")!>a<!>.<!INAPPLICABLE_CANDIDATE!>equals<!>(10)
+    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any? & kotlin.Any?")!>a<!>
+    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any? & kotlin.Any?")!>a<!><!UNSAFE_CALL!>.<!>equals(10)
 }
 
 // TESTCASE NUMBER: 2
@@ -31,8 +22,8 @@ fun case_2(a: Any?) {
         }
     })()
 
-    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any & kotlin.Any?")!>a<!>
-    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any & kotlin.Any?")!>a<!>.equals(10)
+    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any?")!>a<!>
+    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any?")!>a<!><!UNSAFE_CALL!>.<!>equals(10)
 }
 
 // TESTCASE NUMBER: 3
@@ -45,7 +36,7 @@ fun case_3(a: Any?) {
     }
 
     <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any?")!>a<!>
-    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any?")!>a<!>.<!INAPPLICABLE_CANDIDATE!>equals<!>(10)
+    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any?")!>a<!><!UNSAFE_CALL!>.<!>equals(10)
 }
 
 // TESTCASE NUMBER: 4
@@ -58,7 +49,7 @@ fun case_4(a: Any?) {
     }
 
     <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any?")!>a<!>
-    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any?")!>a<!>.<!INAPPLICABLE_CANDIDATE!>equals<!>(10)
+    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any?")!>a<!><!UNSAFE_CALL!>.<!>equals(10)
 }
 
 /*
@@ -74,7 +65,7 @@ fun case_5(a: Any?) {
     }
 
     <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any?")!>a<!>
-    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any?")!>a<!>.<!INAPPLICABLE_CANDIDATE!>equals<!>(10)
+    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any?")!>a<!><!UNSAFE_CALL!>.<!>equals(10)
 }
 
 /*
@@ -90,7 +81,7 @@ fun case_6(a: Any?) {
     }
 
     <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any?")!>a<!>
-    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any?")!>a<!>.<!INAPPLICABLE_CANDIDATE!>equals<!>(10)
+    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any?")!>a<!><!UNSAFE_CALL!>.<!>equals(10)
 }
 
 /*
@@ -106,7 +97,7 @@ fun case_7(a: Any?) {
     }
 
     <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any?")!>a<!>
-    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any?")!>a<!>.<!INAPPLICABLE_CANDIDATE!>equals<!>(10)
+    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any?")!>a<!><!UNSAFE_CALL!>.<!>equals(10)
 }
 
 // TESTCASE NUMBER: 8
@@ -121,5 +112,5 @@ fun case_8(a: Any?) {
     }
 
     <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any?")!>a<!>
-    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any?")!>a<!>.<!INAPPLICABLE_CANDIDATE!>equals<!>(10)
+    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any?")!>a<!><!UNSAFE_CALL!>.<!>equals(10)
 }

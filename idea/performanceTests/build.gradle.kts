@@ -18,12 +18,11 @@ dependencies {
     testRuntimeOnly(project(":allopen-ide-plugin"))
     testRuntimeOnly(project(":kotlin-scripting-idea"))
     testRuntimeOnly(project(":kotlinx-serialization-ide-plugin"))
+    testRuntimeOnly(project(":plugins:parcelize:parcelize-ide"))
+    testRuntimeOnly(project(":plugins:lombok:lombok-ide-plugin"))
     testRuntimeOnly(project(":nj2k:nj2k-services"))
     testRuntimeOnly(project(":kotlin-reflect"))
     testRuntimeOnly(project(":idea:kotlin-gradle-tooling"))
-    Platform[193].orLower {
-        testRuntimeOnly(project(":idea:idea-gradle-tooling-api"))
-    }
     testRuntimeOnly(project(":kotlin-gradle-statistics"))
 
     testImplementation(intellijPluginDep("gradle"))
@@ -35,22 +34,18 @@ dependencies {
     testImplementation(projectTests(":idea"))
     testImplementation(project(":idea:idea-gradle")) { isTransitive = false }
     testImplementation(commonDep("junit:junit"))
+    testImplementation("com.fasterxml.jackson.dataformat:jackson-dataformat-xml:2.11.4")
+    testImplementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.11.4")
+    testImplementation("khttp:khttp:1.0.0")
 
-    Platform[192].orHigher {
-        testCompileOnly(intellijPluginDep("java"))
-        testRuntimeOnly(intellijPluginDep("java"))
-    }
+    testCompileOnly(intellijPluginDep("java"))
+    testRuntimeOnly(intellijPluginDep("java"))
 
-    Platform[193].orHigher {
-        testImplementation(intellijPluginDep("gradle-java"))
-        testRuntimeOnly(intellijPluginDep("gradle-java"))
-    }
+    testImplementation(intellijPluginDep("gradle-java"))
+    testRuntimeOnly(intellijPluginDep("gradle-java"))
 
     testCompileOnly(intellijDep())
     testCompileOnly(project(":nj2k"))
-    Platform[193].orLower {
-        testCompileOnly(project(":idea:idea-gradle-tooling-api"))
-    }
     testCompileOnly(intellijDep()) { includeJars("slf4j-api-1.7.25") }
 }
 
@@ -64,9 +59,9 @@ sourcesJar()
 
 javadocJar()
 
-apply(from = "$rootDir/gradle/kotlinPluginPublication.gradle.kts")
-
 projectTest(taskName = "performanceTest") {
+    exclude("**/*WholeProjectPerformanceTest*")
+
     val currentOs = org.gradle.internal.os.OperatingSystem.current()
 
     if (!currentOs.isWindows) {
@@ -82,9 +77,10 @@ projectTest(taskName = "performanceTest") {
     maxHeapSize = "3g"
     jvmArgs("-Didea.debug.mode=true")
     jvmArgs("-XX:SoftRefLRUPolicyMSPerMB=50")
+
     jvmArgs(
-        "-XX:ReservedCodeCacheSize=240m",
         "-XX:+UseCompressedOops",
+        "-Didea.ProcessCanceledException=disabled",
         "-XX:+UseConcMarkSweepGC"
     )
 
@@ -95,7 +91,7 @@ projectTest(taskName = "performanceTest") {
                 classpath += files("$yourKitHome/lib/yjp-controller-api-redist.jar")
             }
             currentOs.isMacOsX -> {
-                jvmArgs("-agentpath:$yourKitHome/Contents/Resources/bin/mac/libyjpagent.dylib")
+                jvmArgs("-agentpath:$yourKitHome/Contents/Resources/bin/mac/libyjpagent.dylib=delay=5000,_socket_timeout_ms=120000,disablealloc,disable_async_sampling,disablenatives")
                 classpath += files("$yourKitHome/Contents/Resources/lib/yjp-controller-api-redist.jar")
             }
         }
@@ -108,5 +104,71 @@ projectTest(taskName = "performanceTest") {
         }
     }
 }
+
+projectTest(taskName = "wholeProjectsPerformanceTest") {
+    exclude(
+        "**/*Generated*",
+        "**/*PerformanceProjectsTest*",
+        "**/*PerformanceStressTest*",
+        "**/*PerformanceNativeProjectsTest*"
+    )
+    include("**/*WholeProjectPerformanceTest*")
+
+    workingDir = rootDir
+
+    jvmArgs?.removeAll { it.startsWith("-Xmx") }
+
+    maxHeapSize = "3g"
+    jvmArgs("-DperformanceProjects=${System.getProperty("performanceProjects")}")
+    jvmArgs("-Didea.debug.mode=true")
+    jvmArgs("-DemptyProfile=${System.getProperty("emptyProfile")}")
+    jvmArgs("-XX:SoftRefLRUPolicyMSPerMB=50")
+    jvmArgs(
+        "-XX:+UseCompressedOops",
+        "-XX:+UseConcMarkSweepGC"
+    )
+
+    doFirst {
+        systemProperty("idea.home.path", intellijRootDir().canonicalPath)
+        project.findProperty("cacheRedirectorEnabled")?.let {
+            systemProperty("kotlin.test.gradle.import.arguments", "-PcacheRedirectorEnabled=$it")
+        }
+    }
+}
+
+task("aggregateResults", JavaExec::class) {
+    dependsOn(":idea:performanceTests:performanceTest")
+
+    main = "org.jetbrains.kotlin.idea.perf.util.AggregateResultsKt"
+    classpath = sourceSets["test"].runtimeClasspath
+    workingDir = rootDir
+    args(listOf(File(rootDir, "build")))
+}
+
+projectTest(taskName = "fe10ProjectPerformanceTest") {
+    include("**/*WholeProjectPerformanceComparisonFE10ImplTest*")
+
+    workingDir = rootDir
+
+    jvmArgs?.removeAll { it.startsWith("-Xmx") }
+
+    maxHeapSize = "3g"
+    jvmArgs("-DperformanceProjects=${System.getProperty("performanceProjects")}")
+    jvmArgs("-Didea.debug.mode=true")
+    jvmArgs("-DemptyProfile=${System.getProperty("emptyProfile")}")
+    jvmArgs("-XX:SoftRefLRUPolicyMSPerMB=50")
+    jvmArgs(
+        "-XX:+UseCompressedOops",
+        "-XX:+UseConcMarkSweepGC"
+    )
+
+    doFirst {
+        systemProperty("idea.home.path", intellijRootDir().canonicalPath)
+        project.findProperty("cacheRedirectorEnabled")?.let {
+            systemProperty("kotlin.test.gradle.import.arguments", "-PcacheRedirectorEnabled=$it")
+        }
+    }
+}
+
 
 testsJar()

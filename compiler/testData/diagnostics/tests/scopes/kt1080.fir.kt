@@ -8,9 +8,9 @@ import reflect.Constructor
 import b.*
 import d
 import d.Test
-import b.d
+import b.<!PACKAGE_CANNOT_BE_IMPORTED!>d<!>
 
-class Some: Test()
+class Some: <!UNRESOLVED_REFERENCE!>Test<!>()
 
 //FILE:b.kt
 

@@ -95,7 +95,7 @@ abstract class AbstractFileRankingTest : LowLevelDebuggerTestBase() {
                     }
                 }
 
-                val fileWithMaxScore = fileWithRankings.maxBy { it.value }!!
+                val fileWithMaxScore = fileWithRankings.maxByOrNull { it.value }!!
                 val actualFile = fileWithMaxScore.key
 
                 if (strictMode) {
@@ -117,7 +117,7 @@ abstract class AbstractFileRankingTest : LowLevelDebuggerTestBase() {
 
         if (problems.isNotEmpty()) {
             throw AssertionError(buildString {
-                appendln("There were association errors:").appendln()
+                appendLine("There were association errors:").appendLine()
                 problems.joinTo(this, "\n\n")
             })
         }

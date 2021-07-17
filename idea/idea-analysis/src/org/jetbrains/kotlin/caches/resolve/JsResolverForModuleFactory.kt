@@ -5,6 +5,7 @@
 
 package org.jetbrains.kotlin.caches.resolve
 
+import com.intellij.openapi.diagnostic.Logger
 import org.jetbrains.kotlin.analyzer.*
 import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.container.StorageComponentContainer
@@ -19,12 +20,16 @@ import org.jetbrains.kotlin.js.resolve.JsPlatformAnalyzerServices
 import org.jetbrains.kotlin.platform.idePlatformKind
 import org.jetbrains.kotlin.platform.js.JsPlatforms
 import org.jetbrains.kotlin.resolve.BindingTraceContext
+import org.jetbrains.kotlin.resolve.SealedClassInheritorsProvider
 import org.jetbrains.kotlin.resolve.TargetEnvironment
 import org.jetbrains.kotlin.resolve.lazy.ResolveSession
 import org.jetbrains.kotlin.resolve.lazy.declarations.DeclarationProviderFactoryService
 import org.jetbrains.kotlin.serialization.js.KotlinJavascriptSerializationUtil
 import org.jetbrains.kotlin.serialization.js.createKotlinJavascriptPackageFragmentProvider
 import org.jetbrains.kotlin.utils.KotlinJavascriptMetadataUtils
+import java.io.File
+
+private val LOG = Logger.getInstance(JsResolverForModuleFactory::class.java)
 
 class JsResolverForModuleFactory(
     private val targetEnvironment: TargetEnvironment
@@ -34,7 +39,8 @@ class JsResolverForModuleFactory(
         moduleContext: ModuleContext,
         moduleContent: ModuleContent<M>,
         resolverForProject: ResolverForProject<M>,
-        languageVersionSettings: LanguageVersionSettings
+        languageVersionSettings: LanguageVersionSettings,
+        sealedInheritorsProvider: SealedClassInheritorsProvider
     ): ResolverForModule {
         val (moduleInfo, syntheticFiles, moduleContentScope) = moduleContent
         val project = moduleContext.project
@@ -60,7 +66,10 @@ class JsResolverForModuleFactory(
         val libraryProviders = createPackageFragmentProvider(moduleInfo, container, moduleContext, moduleDescriptor)
 
         if (libraryProviders.isNotEmpty()) {
-            packageFragmentProvider = CompositePackageFragmentProvider(listOf(packageFragmentProvider) + libraryProviders)
+            packageFragmentProvider = CompositePackageFragmentProvider(
+                listOf(packageFragmentProvider) + libraryProviders,
+                "CompositeProvider@JsResolver for $moduleDescriptor"
+            )
         }
 
         return ResolverForModule(packageFragmentProvider, container)
@@ -85,7 +94,15 @@ internal fun <M : ModuleInfo> createPackageFragmentProvider(
     }
     is LibraryModuleInfo -> {
         moduleInfo.getLibraryRoots()
-            .flatMap { KotlinJavascriptMetadataUtils.loadMetadata(it) }
+            .flatMap {
+                if (File(it).exists()) {
+                    KotlinJavascriptMetadataUtils.loadMetadata(it)
+                } else {
+                    // TODO can/should we warn a user about a problem in a library root? If so how?
+                    LOG.error("Library $it not found")
+                    emptyList()
+                }
+            }
             .filter { it.version.isCompatible() }
             .map { metadata ->
                 val (header, packageFragmentProtos) =

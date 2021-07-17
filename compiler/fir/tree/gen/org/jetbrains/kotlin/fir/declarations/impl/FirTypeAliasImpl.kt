@@ -1,12 +1,13 @@
 /*
- * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2021 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.fir.declarations.impl
 
-import org.jetbrains.kotlin.fir.FirSession
+import org.jetbrains.kotlin.fir.FirModuleData
 import org.jetbrains.kotlin.fir.FirSourceElement
+import org.jetbrains.kotlin.fir.declarations.DeprecationsPerUseSite
 import org.jetbrains.kotlin.fir.declarations.FirDeclarationAttributes
 import org.jetbrains.kotlin.fir.declarations.FirDeclarationOrigin
 import org.jetbrains.kotlin.fir.declarations.FirDeclarationStatus
@@ -26,9 +27,11 @@ import org.jetbrains.kotlin.fir.visitors.*
 
 internal class FirTypeAliasImpl(
     override val source: FirSourceElement?,
-    override val session: FirSession,
+    override val moduleData: FirModuleData,
     override var resolvePhase: FirResolvePhase,
     override val origin: FirDeclarationOrigin,
+    override val attributes: FirDeclarationAttributes,
+    override var deprecation: DeprecationsPerUseSite?,
     override var status: FirDeclarationStatus,
     override val typeParameters: MutableList<FirTypeParameter>,
     override val name: Name,
@@ -36,8 +39,6 @@ internal class FirTypeAliasImpl(
     override var expandedTypeRef: FirTypeRef,
     override val annotations: MutableList<FirAnnotationCall>,
 ) : FirTypeAlias() {
-    override val attributes: FirDeclarationAttributes = FirDeclarationAttributes()
-
     init {
         symbol.bind(this)
     }
@@ -51,14 +52,24 @@ internal class FirTypeAliasImpl(
 
     override fun <D> transformChildren(transformer: FirTransformer<D>, data: D): FirTypeAliasImpl {
         transformStatus(transformer, data)
-        typeParameters.transformInplace(transformer, data)
-        expandedTypeRef = expandedTypeRef.transformSingle(transformer, data)
+        transformTypeParameters(transformer, data)
+        transformExpandedTypeRef(transformer, data)
         transformAnnotations(transformer, data)
         return this
     }
 
     override fun <D> transformStatus(transformer: FirTransformer<D>, data: D): FirTypeAliasImpl {
-        status = status.transformSingle(transformer, data)
+        status = status.transform(transformer, data)
+        return this
+    }
+
+    override fun <D> transformTypeParameters(transformer: FirTransformer<D>, data: D): FirTypeAliasImpl {
+        typeParameters.transformInplace(transformer, data)
+        return this
+    }
+
+    override fun <D> transformExpandedTypeRef(transformer: FirTransformer<D>, data: D): FirTypeAliasImpl {
+        expandedTypeRef = expandedTypeRef.transform(transformer, data)
         return this
     }
 
@@ -69,6 +80,10 @@ internal class FirTypeAliasImpl(
 
     override fun replaceResolvePhase(newResolvePhase: FirResolvePhase) {
         resolvePhase = newResolvePhase
+    }
+
+    override fun replaceDeprecation(newDeprecation: DeprecationsPerUseSite?) {
+        deprecation = newDeprecation
     }
 
     override fun replaceExpandedTypeRef(newExpandedTypeRef: FirTypeRef) {

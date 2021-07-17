@@ -11,13 +11,13 @@ var x2: Int = 1
         field = 1
     }
 
-val x3 = run {
+val x3 = <!PROPERTY_INITIALIZER_NO_BACKING_FIELD!>run {
     fun foo() {
         val c = 1 + 1
         throw Exception()
     }
 
-    class LocalClass {
+    class InitializerLocalClass {
         init {
             throw Exception()
             1
@@ -25,9 +25,9 @@ val x3 = run {
     }
 
     throw Exception()
-}
+}<!>
     get() {
-        class LocalClass {
+        class GetterLocalClass {
             init {
                 throw Exception()
             }

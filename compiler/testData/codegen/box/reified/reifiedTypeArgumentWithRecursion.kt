@@ -1,3 +1,5 @@
+// DONT_TARGET_EXACT_BACKEND: WASM
+// WASM_MUTE_REASON: CLASS_REFERENCES
 // WITH_RUNTIME
 // KJS_WITH_FULL_RUNTIME
 
@@ -16,7 +18,7 @@ inline fun <reified T> T.causeBug() {
     T::class
     Array<T>(1) { x }
 
-    // Non-reified type parameters with recursive bounds are not yet supported
+    // Non-reified type parameters with recursive bounds are not yet supported, see Z from class Something
     // typeOf<T>()
 }
 

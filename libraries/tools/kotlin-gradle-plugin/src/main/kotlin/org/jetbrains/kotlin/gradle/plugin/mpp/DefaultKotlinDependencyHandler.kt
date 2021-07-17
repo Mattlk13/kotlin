@@ -1,14 +1,24 @@
+/*
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
+ */
+
 package org.jetbrains.kotlin.gradle.plugin.mpp
 
 import org.gradle.api.Project
 import org.gradle.api.artifacts.Dependency
 import org.gradle.api.artifacts.ExternalModuleDependency
+import org.gradle.api.artifacts.ModuleDependency
 import org.gradle.api.artifacts.ProjectDependency
 import org.jetbrains.kotlin.gradle.plugin.HasKotlinDependencies
 import org.jetbrains.kotlin.gradle.plugin.KotlinDependencyHandler
+import org.jetbrains.kotlin.gradle.plugin.PropertiesProvider
+import org.jetbrains.kotlin.gradle.plugin.mpp.pm20.KotlinGradleModule
+import org.jetbrains.kotlin.gradle.plugin.mpp.pm20.util.ComputedCapability
 import org.jetbrains.kotlin.gradle.targets.js.npm.NpmDependency
-import org.jetbrains.kotlin.gradle.targets.js.npm.fileVersion
+import org.jetbrains.kotlin.gradle.targets.js.npm.directoryNpmDependency
 import org.jetbrains.kotlin.gradle.targets.js.npm.moduleName
+import org.jetbrains.kotlin.gradle.targets.js.npm.onlyNameNpmDependency
 import java.io.File
 
 class DefaultKotlinDependencyHandler(
@@ -62,8 +72,19 @@ class DefaultKotlinDependencyHandler(
     private fun addDependencyByAnyNotation(
         configurationName: String,
         dependencyNotation: Any
-    ): Dependency? =
-        project.dependencies.add(configurationName, dependencyNotation)
+    ): Dependency? {
+        val dependency = when (dependencyNotation) {
+            is KotlinGradleModule -> project.dependencies.create(dependencyNotation.project).apply {
+                (this as ModuleDependency).capabilities {
+                    if (dependencyNotation.moduleClassifier != null) {
+                        it.requireCapability(ComputedCapability.fromModule(dependencyNotation))
+                    }
+                }
+            }
+            else -> dependencyNotation
+        }
+        return project.dependencies.add(configurationName, dependency)
+    }
 
     private fun addDependencyByStringNotation(
         configurationName: String,
@@ -82,26 +103,73 @@ class DefaultKotlinDependencyHandler(
             project.dependencies.add(configurationName, it)
         }
 
-    override fun npm(name: String, version: String): NpmDependency =
+    override fun npm(name: String): Dependency =
+        onlyNameNpmDependency(name)
+
+    override fun npm(
+        name: String,
+        version: String,
+        generateExternals: Boolean
+    ): NpmDependency =
         NpmDependency(
             project = project,
             name = name,
-            version = version
+            version = version,
+            generateExternals = generateExternals
         )
 
-    override fun npm(name: String, directory: File): NpmDependency =
-        directoryNpmDependency(name, directory, NpmDependency.Scope.NORMAL)
+    override fun npm(
+        name: String,
+        version: String
+    ): NpmDependency =
+        npm(
+            name = name,
+            version = version,
+            generateExternals = defaultGenerateExternals()
+        )
+
+    override fun npm(
+        name: String,
+        directory: File,
+        generateExternals: Boolean
+    ): NpmDependency =
+        directoryNpmDependency(
+            name = name,
+            directory = directory,
+            scope = NpmDependency.Scope.NORMAL,
+            generateExternals = generateExternals
+        )
+
+    override fun npm(
+        name: String,
+        directory: File
+    ): NpmDependency =
+        npm(
+            name = name,
+            directory = directory,
+            generateExternals = defaultGenerateExternals()
+        )
+
+    override fun npm(
+        directory: File,
+        generateExternals: Boolean
+    ): NpmDependency =
+        npm(
+            name = moduleName(directory),
+            directory = directory,
+            generateExternals = generateExternals
+        )
 
     override fun npm(directory: File): NpmDependency =
         npm(
-            name = moduleName(directory),
-            directory = directory
+            directory = directory,
+            generateExternals = defaultGenerateExternals()
         )
 
-    override fun npm(org: String?, packageName: String, version: String) =
-        npm("${if (org != null) "@$org/" else ""}$packageName", version)
-
-    override fun devNpm(name: String, version: String): NpmDependency =
+    override fun devNpm(
+        name: String,
+        version: String
+    ): NpmDependency =
         NpmDependency(
             project = project,
             name = name,
@@ -109,8 +177,16 @@ class DefaultKotlinDependencyHandler(
             scope = NpmDependency.Scope.DEV
         )
 
-    override fun devNpm(name: String, directory: File): NpmDependency =
-        directoryNpmDependency(name, directory, NpmDependency.Scope.DEV)
+    override fun devNpm(
+        name: String,
+        directory: File
+    ): NpmDependency =
+        directoryNpmDependency(
+            name = name,
+            directory = directory,
+            scope = NpmDependency.Scope.DEV,
+            generateExternals = false
+        )
 
     override fun devNpm(directory: File): NpmDependency =
         devNpm(
@@ -118,24 +194,68 @@ class DefaultKotlinDependencyHandler(
             directory = directory
         )
 
-    override fun optionalNpm(name: String, version: String): NpmDependency =
+    override fun optionalNpm(
+        name: String,
+        version: String,
+        generateExternals: Boolean
+    ): NpmDependency =
         NpmDependency(
             project = project,
             name = name,
             version = version,
-            scope = NpmDependency.Scope.OPTIONAL
+            scope = NpmDependency.Scope.OPTIONAL,
+            generateExternals = generateExternals
+        )
+
+    override fun optionalNpm(
+        name: String,
+        version: String
+    ): NpmDependency =
+        optionalNpm(
+            name,
+            version,
+            defaultGenerateExternals()
+        )
+
+    override fun optionalNpm(
+        name: String,
+        directory: File,
+        generateExternals: Boolean
+    ): NpmDependency =
+        directoryNpmDependency(
+            name = name,
+            directory = directory,
+            scope = NpmDependency.Scope.OPTIONAL,
+            generateExternals = generateExternals
         )
 
     override fun optionalNpm(name: String, directory: File): NpmDependency =
-        directoryNpmDependency(name, directory, NpmDependency.Scope.OPTIONAL)
+        optionalNpm(
+            name = name,
+            directory = directory,
+            generateExternals = defaultGenerateExternals()
+        )
+
+    override fun optionalNpm(
+        directory: File,
+        generateExternals: Boolean
+    ): NpmDependency =
+        optionalNpm(
+            name = moduleName(directory),
+            directory = directory,
+            generateExternals = generateExternals
+        )
 
     override fun optionalNpm(directory: File): NpmDependency =
         optionalNpm(
-            name = moduleName(directory),
-            directory = directory
+            directory = directory,
+            generateExternals = defaultGenerateExternals()
         )
 
-    override fun peerNpm(name: String, version: String): NpmDependency =
+    override fun peerNpm(
+        name: String,
+        version: String
+    ): NpmDependency =
         NpmDependency(
             project = project,
             name = name,
@@ -143,20 +263,20 @@ class DefaultKotlinDependencyHandler(
             scope = NpmDependency.Scope.PEER
         )
 
+    private fun defaultGenerateExternals(): Boolean =
+        PropertiesProvider(project).jsGenerateExternals
+
     private fun directoryNpmDependency(
         name: String,
         directory: File,
-        scope: NpmDependency.Scope
-    ): NpmDependency {
-        check(directory.isDirectory) {
-            "Dependency on local path should point on directory but $directory found"
-        }
-
-        return NpmDependency(
+        scope: NpmDependency.Scope,
+        generateExternals: Boolean
+    ): NpmDependency =
+        directoryNpmDependency(
             project = project,
             name = name,
-            version = fileVersion(directory),
-            scope = scope
+            directory = directory,
+            scope = scope,
+            generateExternals = generateExternals
         )
-    }
 }

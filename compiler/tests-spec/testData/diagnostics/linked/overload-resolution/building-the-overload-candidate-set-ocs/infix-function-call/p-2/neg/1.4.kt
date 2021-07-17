@@ -6,22 +6,22 @@
  * KOTLIN DIAGNOSTICS SPEC TEST (NEGATIVE)
  *
  * SPEC VERSION: 0.1-313
- * PLACE: overload-resolution, building-the-overload-candidate-set-ocs, infix-function-call -> paragraph 2 -> sentence 1
- * RELEVANT PLACES: overload-resolution, building-the-overload-candidate-set-ocs, infix-function-call -> paragraph 2 -> sentence 1
+ * MAIN LINK: overload-resolution, building-the-overload-candidate-set-ocs, infix-function-call -> paragraph 2 -> sentence 1
+ * PRIMARY LINKS: overload-resolution, building-the-overload-candidate-set-ocs, infix-function-call -> paragraph 2 -> sentence 1
  * overload-resolution, building-the-overload-candidate-set-ocs, infix-function-call -> paragraph 2 -> sentence 2
  * overload-resolution, building-the-overload-candidate-set-ocs, call-with-an-explicit-receiver -> paragraph 6 -> sentence 4
  * NUMBER: 4
  * DESCRIPTION: Star-imported infix extension callables
  */
 
-// FILE: Extensions.kt
+// FILE: Extensions1.kt
 package libPackage
 
  operator fun CharSequence.contains(regex: Regex): Boolean {
     println("my contains")
     return true
 }
-// FILE: Extensions.kt
+// FILE: Extensions2.kt
 
 package sentence3
 

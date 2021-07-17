@@ -1,10 +1,11 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.serialization
 
+import com.intellij.openapi.project.Project
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.builtins.isSuspendFunctionType
 import org.jetbrains.kotlin.builtins.isSuspendFunctionTypeOrSubtype
@@ -22,18 +23,17 @@ import org.jetbrains.kotlin.metadata.serialization.MutableTypeTable
 import org.jetbrains.kotlin.metadata.serialization.MutableVersionRequirementTable
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
-import org.jetbrains.kotlin.resolve.DescriptorUtils
+import org.jetbrains.kotlin.resolve.*
 import org.jetbrains.kotlin.resolve.DescriptorUtils.isEnumEntry
-import org.jetbrains.kotlin.resolve.MemberComparator
-import org.jetbrains.kotlin.resolve.RequireKotlinConstants
 import org.jetbrains.kotlin.resolve.calls.components.isActualParameterWithAnyExpectedDefault
 import org.jetbrains.kotlin.resolve.constants.EnumValue
 import org.jetbrains.kotlin.resolve.constants.IntValue
 import org.jetbrains.kotlin.resolve.constants.NullValue
 import org.jetbrains.kotlin.resolve.constants.StringValue
 import org.jetbrains.kotlin.resolve.descriptorUtil.nonSourceAnnotations
-import org.jetbrains.kotlin.resolve.isInlineClassType
 import org.jetbrains.kotlin.serialization.deserialization.ProtoEnumFlags
+import org.jetbrains.kotlin.serialization.deserialization.descriptorVisibility
+import org.jetbrains.kotlin.serialization.deserialization.memberKind
 import org.jetbrains.kotlin.types.*
 import org.jetbrains.kotlin.types.typeUtil.contains
 import org.jetbrains.kotlin.types.typeUtil.immediateSupertypes
@@ -45,9 +45,17 @@ class DescriptorSerializer private constructor(
     private val extension: SerializerExtension,
     val typeTable: MutableTypeTable,
     private val versionRequirementTable: MutableVersionRequirementTable?,
-    private val serializeTypeTableToFunction: Boolean
+    private val serializeTypeTableToFunction: Boolean,
+    val plugins: List<DescriptorSerializerPlugin> = emptyList()
 ) {
     private val contractSerializer = ContractSerializer()
+
+    private var metDefinitelyNotNullTypeStack: MutableList<Boolean> = mutableListOf(false)
+    private var metDefinitelyNotNullType: Boolean
+        get() = metDefinitelyNotNullTypeStack.last()
+        set(value) {
+            metDefinitelyNotNullTypeStack[metDefinitelyNotNullTypeStack.lastIndex] = value
+        }
 
     private fun createChildSerializer(descriptor: DeclarationDescriptor): DescriptorSerializer =
         DescriptorSerializer(
@@ -60,16 +68,27 @@ class DescriptorSerializer private constructor(
 
     private fun useTypeTable(): Boolean = extension.shouldUseTypeTable()
 
-    fun classProto(classDescriptor: ClassDescriptor): ProtoBuf.Class.Builder {
+    private inline fun <T> withNewMetDefinitelyNotNullType(block: () -> T): T {
+        metDefinitelyNotNullTypeStack.add(false)
+        return try {
+            block()
+        } finally {
+            metDefinitelyNotNullTypeStack.removeAt(metDefinitelyNotNullTypeStack.lastIndex)
+        }
+    }
+
+    fun classProto(classDescriptor: ClassDescriptor): ProtoBuf.Class.Builder = withNewMetDefinitelyNotNullType {
         val builder = ProtoBuf.Class.newBuilder()
 
         val flags = Flags.getClassFlags(
-            hasAnnotations(classDescriptor),
-            ProtoEnumFlags.visibility(normalizeVisibility(classDescriptor)),
+            // Since 1.4.30 isInline & isValue are the same flag. To distinguish them we generate @JvmInline annotation.
+            // See ClassDescriptor.isInlineClass() function.
+            hasAnnotations(classDescriptor) || classDescriptor.isInline,
+            ProtoEnumFlags.descriptorVisibility(normalizeVisibility(classDescriptor)),
             ProtoEnumFlags.modality(classDescriptor.modality),
             ProtoEnumFlags.classKind(classDescriptor.kind, classDescriptor.isCompanionObject),
             classDescriptor.isInner, classDescriptor.isData, classDescriptor.isExternal, classDescriptor.isExpect,
-            classDescriptor.isInline, classDescriptor.isFun
+            classDescriptor.isInlineClass(), classDescriptor.isFun
         )
         if (flags != builder.flags) {
             builder.flags = flags
@@ -146,18 +165,43 @@ class DescriptorSerializer private constructor(
             builder.typeTable = typeTableProto
         }
 
+        val representation = classDescriptor.inlineClassRepresentation
+        if (representation != null) {
+            builder.inlineClassUnderlyingPropertyName = getSimpleNameIndex(representation.underlyingPropertyName)
+
+            val property = callableMembers.single {
+                it is PropertyDescriptor && it.extensionReceiverParameter == null && it.name == representation.underlyingPropertyName
+            }
+            if (!property.visibility.isPublicAPI) {
+                if (useTypeTable()) {
+                    builder.inlineClassUnderlyingTypeId = typeId(representation.underlyingType)
+                } else {
+                    builder.setInlineClassUnderlyingType(type(representation.underlyingType))
+                }
+            }
+        }
+
         if (versionRequirementTable == null) error("Version requirements must be serialized for classes: $classDescriptor")
 
         builder.addAllVersionRequirement(versionRequirementTable.serializeVersionRequirements(classDescriptor))
 
         extension.serializeClass(classDescriptor, builder, versionRequirementTable, this)
 
+        plugins.forEach { it.afterClass(classDescriptor, builder, versionRequirementTable, this, extension) }
+
         writeVersionRequirementForInlineClasses(classDescriptor, builder, versionRequirementTable)
+
+        if (metDefinitelyNotNullType) {
+            builder.addVersionRequirement(
+                writeLanguageVersionRequirement(LanguageFeature.DefinitelyNotNullTypeParameters, versionRequirementTable)
+            )
+        }
 
         val versionRequirementTableProto = versionRequirementTable.serialize()
         if (versionRequirementTableProto != null) {
             builder.versionRequirementTable = versionRequirementTableProto
         }
+
         return builder
     }
 
@@ -166,7 +210,7 @@ class DescriptorSerializer private constructor(
         builder: ProtoBuf.Class.Builder,
         versionRequirementTable: MutableVersionRequirementTable
     ) {
-        if (!classDescriptor.isInline && !classDescriptor.hasInlineClassTypesInSignature()) return
+        if (!classDescriptor.isInlineClass() && !classDescriptor.hasInlineClassTypesInSignature()) return
 
         builder.addVersionRequirement(
             writeLanguageVersionRequirement(LanguageFeature.InlineClasses, versionRequirementTable)
@@ -201,7 +245,7 @@ class DescriptorSerializer private constructor(
 
         val defaultAccessorFlags = Flags.getAccessorFlags(
             hasAnnotations,
-            ProtoEnumFlags.visibility(normalizeVisibility(descriptor)),
+            ProtoEnumFlags.descriptorVisibility(normalizeVisibility(descriptor)),
             ProtoEnumFlags.modality(descriptor.modality),
             false, false, false
         )
@@ -233,11 +277,11 @@ class DescriptorSerializer private constructor(
 
         val flags = Flags.getPropertyFlags(
             hasAnnotations,
-            ProtoEnumFlags.visibility(normalizeVisibility(descriptor)),
+            ProtoEnumFlags.descriptorVisibility(normalizeVisibility(descriptor)),
             ProtoEnumFlags.modality(descriptor.modality),
             ProtoEnumFlags.memberKind(descriptor.kind),
             descriptor.isVar, hasGetter, hasSetter, hasConstant, descriptor.isConst, descriptor.isLateInit, descriptor.isExternal,
-            @Suppress("DEPRECATION") descriptor.isDelegated, descriptor.isExpect
+            descriptor.isDelegated, descriptor.isExpect
         )
         if (flags != builder.flags) {
             builder.flags = flags
@@ -274,6 +318,10 @@ class DescriptorSerializer private constructor(
             if (descriptor.hasInlineClassTypesInSignature()) {
                 builder.addVersionRequirement(writeVersionRequirement(LanguageFeature.InlineClasses))
             }
+
+            if (local.metDefinitelyNotNullType) {
+                builder.addVersionRequirement(writeVersionRequirement(LanguageFeature.DefinitelyNotNullTypeParameters))
+            }
         }
 
         extension.serializeProperty(descriptor, builder, versionRequirementTable, local)
@@ -288,6 +336,14 @@ class DescriptorSerializer private constructor(
         else
             descriptor.visibility
 
+    private fun shouldSerializeHasStableParameterNames(descriptor: CallableMemberDescriptor): Boolean {
+        return when {
+            descriptor.hasStableParameterNames() -> true
+            descriptor.kind == CallableMemberDescriptor.Kind.DELEGATION -> true // remove this line to fix KT-4758
+            else -> false
+        }
+    }
+
     fun functionProto(descriptor: FunctionDescriptor): ProtoBuf.Function.Builder? {
         if (!extension.shouldSerializeFunction(descriptor)) return null
 
@@ -297,11 +353,11 @@ class DescriptorSerializer private constructor(
 
         val flags = Flags.getFunctionFlags(
             hasAnnotations(descriptor),
-            ProtoEnumFlags.visibility(normalizeVisibility(descriptor)),
+            ProtoEnumFlags.descriptorVisibility(normalizeVisibility(descriptor)),
             ProtoEnumFlags.modality(descriptor.modality),
             ProtoEnumFlags.memberKind(descriptor.kind),
             descriptor.isOperator, descriptor.isInfix, descriptor.isInline, descriptor.isTailrec, descriptor.isExternal,
-            descriptor.isSuspend, descriptor.isExpect
+            descriptor.isSuspend, descriptor.isExpect, shouldSerializeHasStableParameterNames(descriptor)
         )
         if (flags != builder.flags) {
             builder.flags = flags
@@ -349,6 +405,10 @@ class DescriptorSerializer private constructor(
             if (descriptor.hasInlineClassTypesInSignature()) {
                 builder.addVersionRequirement(writeVersionRequirement(LanguageFeature.InlineClasses))
             }
+
+            if (local.metDefinitelyNotNullType) {
+                builder.addVersionRequirement(writeVersionRequirement(LanguageFeature.DefinitelyNotNullTypeParameters))
+            }
         }
 
         contractSerializer.serializeContractOfFunctionIfAny(descriptor, builder, this)
@@ -364,7 +424,8 @@ class DescriptorSerializer private constructor(
         val local = createChildSerializer(descriptor)
 
         val flags = Flags.getConstructorFlags(
-            hasAnnotations(descriptor), ProtoEnumFlags.visibility(normalizeVisibility(descriptor)), !descriptor.isPrimary
+            hasAnnotations(descriptor), ProtoEnumFlags.descriptorVisibility(normalizeVisibility(descriptor)), !descriptor.isPrimary,
+            shouldSerializeHasStableParameterNames(descriptor)
         )
         if (flags != builder.flags) {
             builder.flags = flags
@@ -383,6 +444,10 @@ class DescriptorSerializer private constructor(
 
             if (descriptor.hasInlineClassTypesInSignature()) {
                 builder.addVersionRequirement(writeVersionRequirement(LanguageFeature.InlineClasses))
+            }
+
+            if (local.metDefinitelyNotNullType) {
+                builder.addVersionRequirement(writeVersionRequirement(LanguageFeature.DefinitelyNotNullTypeParameters))
             }
         }
 
@@ -413,13 +478,13 @@ class DescriptorSerializer private constructor(
         )
     }
 
-    private fun typeAliasProto(descriptor: TypeAliasDescriptor): ProtoBuf.TypeAlias.Builder? {
+    private fun typeAliasProto(descriptor: TypeAliasDescriptor): ProtoBuf.TypeAlias.Builder? = withNewMetDefinitelyNotNullType {
         if (!extension.shouldSerializeTypeAlias(descriptor)) return null
 
         val builder = ProtoBuf.TypeAlias.newBuilder()
         val local = createChildSerializer(descriptor)
 
-        val flags = Flags.getTypeAliasFlags(hasAnnotations(descriptor), ProtoEnumFlags.visibility(normalizeVisibility(descriptor)))
+        val flags = Flags.getTypeAliasFlags(hasAnnotations(descriptor), ProtoEnumFlags.descriptorVisibility(normalizeVisibility(descriptor)))
         if (flags != builder.flags) {
             builder.flags = flags
         }
@@ -446,10 +511,15 @@ class DescriptorSerializer private constructor(
 
         versionRequirementTable?.run {
             builder.addAllVersionRequirement(serializeVersionRequirements(descriptor))
+            if (local.metDefinitelyNotNullType) {
+                builder.addVersionRequirement(
+                    writeLanguageVersionRequirement(LanguageFeature.DefinitelyNotNullTypeParameters, versionRequirementTable)
+                )
+            }
         }
 
         for (annotation in descriptor.nonSourceAnnotations) {
-            builder.addAnnotation(extension.annotationSerializer.serializeAnnotation(annotation))
+            builder.addAnnotation(extension.annotationSerializer.serializeAnnotation(annotation)!!)
         }
 
         extension.serializeTypeAlias(descriptor, builder)
@@ -555,7 +625,7 @@ class DescriptorSerializer private constructor(
 
         if (type.isSuspendFunctionType) {
             val functionType = type(transformSuspendFunctionToRuntimeFunctionType(type, extension.releaseCoroutines()))
-            functionType.flags = Flags.getTypeFlags(true)
+            functionType.flags = Flags.getTypeFlags(true, false)
             return functionType
         }
 
@@ -569,6 +639,11 @@ class DescriptorSerializer private constructor(
                     builder.typeParameterName = getSimpleNameIndex(descriptor.name)
                 } else {
                     builder.typeParameter = getTypeParameterId(descriptor)
+                }
+
+                if (type.unwrap() is DefinitelyNotNullType) {
+                    metDefinitelyNotNullType = true
+                    builder.flags = Flags.getTypeFlags(false, true)
                 }
 
                 assert(type.arguments.isEmpty()) { "Found arguments for type constructor build on type parameter: $descriptor" }
@@ -596,13 +671,17 @@ class DescriptorSerializer private constructor(
     private fun fillFromPossiblyInnerType(builder: ProtoBuf.Type.Builder, type: PossiblyInnerType) {
         val classifierDescriptor = type.classifierDescriptor
         val classifierId = getClassifierId(classifierDescriptor)
+
         when (classifierDescriptor) {
             is ClassDescriptor -> builder.className = classifierId
             is TypeAliasDescriptor -> builder.typeAliasName = classifierId
         }
 
-        for (projection in type.arguments) {
-            builder.addArgument(typeArgument(projection))
+        // Shouldn't write type parameters of a generic local anonymous type if it was replaced with Any
+        if (stringTable.isLocalClassIdReplacementKeptGeneric || !DescriptorUtils.isLocal(classifierDescriptor)) {
+            for (projection in type.arguments) {
+                builder.addArgument(typeArgument(projection))
+            }
         }
 
         if (type.outerType != null) {
@@ -733,7 +812,7 @@ class DescriptorSerializer private constructor(
 
     private fun getAccessorFlags(accessor: PropertyAccessorDescriptor): Int = Flags.getAccessorFlags(
         hasAnnotations(accessor),
-        ProtoEnumFlags.visibility(normalizeVisibility(accessor)),
+        ProtoEnumFlags.descriptorVisibility(normalizeVisibility(accessor)),
         ProtoEnumFlags.modality(accessor.modality),
         !accessor.isDefault,
         accessor.isExternal,
@@ -757,13 +836,15 @@ class DescriptorSerializer private constructor(
         fun create(
             descriptor: ClassDescriptor,
             extension: SerializerExtension,
-            parentSerializer: DescriptorSerializer?
+            parentSerializer: DescriptorSerializer?,
+            project: Project? = null
         ): DescriptorSerializer {
             val container = descriptor.containingDeclaration
             val parent = if (container is ClassDescriptor)
-                parentSerializer ?: create(container, extension, null)
+                parentSerializer ?: create(container, extension, null, project)
             else
                 createTopLevel(extension)
+            val plugins = project?.let { DescriptorSerializerPlugin.getInstances(it) }.orEmpty()
 
             // Calculate type parameter ids for the outer class beforehand, as it would've had happened if we were always
             // serializing outer classes before nested classes.
@@ -775,7 +856,8 @@ class DescriptorSerializer private constructor(
                 MutableTypeTable(),
                 if (container is ClassDescriptor && !isVersionRequirementTableWrittenCorrectly(extension.metadataVersion))
                     parent.versionRequirementTable else MutableVersionRequirementTable(),
-                serializeTypeTableToFunction = false
+                serializeTypeTableToFunction = false,
+                plugins
             )
             for (typeParameter in descriptor.declaredTypeParameters) {
                 serializer.typeParameters.intern(typeParameter)

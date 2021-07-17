@@ -1,11 +1,12 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.cli.metadata
 
-import org.jetbrains.kotlin.analyzer.*
+import com.intellij.openapi.project.Project
+import org.jetbrains.kotlin.analyzer.ModuleInfo
 import org.jetbrains.kotlin.analyzer.common.CommonDependenciesContainer
 import org.jetbrains.kotlin.analyzer.common.CommonPlatformAnalyzerServices
 import org.jetbrains.kotlin.backend.common.serialization.metadata.KlibMetadataMonolithicSerializer
@@ -28,7 +29,7 @@ import org.jetbrains.kotlin.incremental.components.LookupTracker
 import org.jetbrains.kotlin.konan.util.KlibMetadataFactories
 import org.jetbrains.kotlin.library.*
 import org.jetbrains.kotlin.library.impl.BuiltInsPlatform
-import org.jetbrains.kotlin.library.impl.buildKoltinLibrary
+import org.jetbrains.kotlin.library.impl.buildKotlinLibrary
 import org.jetbrains.kotlin.library.metadata.NativeTypeTransformer
 import org.jetbrains.kotlin.library.metadata.NullFlexibleTypeDeserializer
 import org.jetbrains.kotlin.library.metadata.parseModuleHeader
@@ -60,17 +61,20 @@ internal class K2MetadataKlibSerializer(private val metadataVersion: BuiltInsBin
         val (_, moduleDescriptor) = analyzer.analysisResult
 
         val destDir = checkNotNull(environment.destDir)
-        performSerialization(configuration, moduleDescriptor, destDir)
+        performSerialization(configuration, moduleDescriptor, destDir, environment.project)
     }
 
     private fun performSerialization(
         configuration: CompilerConfiguration,
         module: ModuleDescriptor,
-        destDir: File
+        destDir: File,
+        project: Project
     ) {
         val serializedMetadata: SerializedMetadata = KlibMetadataMonolithicSerializer(
             configuration.languageVersionSettings,
             metadataVersion,
+            project,
+            exportKDoc = false,
             skipExpects = false,
             includeOnlyModuleContent = true
         ).serializeModule(module)
@@ -83,7 +87,7 @@ internal class K2MetadataKlibSerializer(private val metadataVersion: BuiltInsBin
             irVersion = null
         )
 
-        buildKoltinLibrary(
+        buildKotlinLibrary(
             emptyList(),
             serializedMetadata,
             null,
@@ -91,6 +95,7 @@ internal class K2MetadataKlibSerializer(private val metadataVersion: BuiltInsBin
             destDir.absolutePath,
             configuration[CommonConfigurationKeys.MODULE_NAME]!!,
             nopack = true,
+            perFile = false,
             manifestProperties = null,
             dataFlowGraph = null,
             builtInsPlatform = BuiltInsPlatform.COMMON

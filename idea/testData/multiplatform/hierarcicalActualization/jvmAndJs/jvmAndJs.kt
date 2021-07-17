@@ -1,7 +1,7 @@
 package foo
 
-actual class ExpectInCommonActualInMiddle
+actual class <!LINE_MARKER("descr='Has declaration in common module'")!>ExpectInCommonActualInMiddle<!>
 
-expect class ExpectInMiddleActualInPlatforms
+expect class <!LINE_MARKER("descr='Has actuals in JVM, JS'")!>ExpectInMiddleActualInPlatforms<!>
 
-expect class <!NO_ACTUAL_FOR_EXPECT("class 'ExpectInMiddleWithoutActual'", "js for JS", ""), NO_ACTUAL_FOR_EXPECT("class 'ExpectInMiddleWithoutActual'", "jvm for JVM", "")!>ExpectInMiddleWithoutActual<!>
+expect class <!NO_ACTUAL_FOR_EXPECT, NO_ACTUAL_FOR_EXPECT!>ExpectInMiddleWithoutActual<!>

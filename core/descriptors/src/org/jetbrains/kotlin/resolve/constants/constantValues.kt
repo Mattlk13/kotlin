@@ -17,6 +17,7 @@
 package org.jetbrains.kotlin.resolve.constants
 
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
+import org.jetbrains.kotlin.builtins.StandardNames
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
 import org.jetbrains.kotlin.descriptors.TypeParameterDescriptor
@@ -42,7 +43,7 @@ abstract class ConstantValue<out T>(open val value: T) {
 
     override fun toString(): String = value.toString()
 
-    open fun stringTemplateValue(): String = value.toString()
+    open fun boxedValue(): Any? = value
 }
 
 abstract class IntegerValueConstant<out T> protected constructor(value: T) : ConstantValue<T>(value)
@@ -54,12 +55,14 @@ class AnnotationValue(value: AnnotationDescriptor) : ConstantValue<AnnotationDes
     override fun <R, D> accept(visitor: AnnotationArgumentVisitor<R, D>, data: D) = visitor.visitAnnotationValue(this, data)
 }
 
-class ArrayValue(
-        value: List<ConstantValue<*>>,
-        private val computeType: (ModuleDescriptor) -> KotlinType
+open class ArrayValue(
+    value: List<ConstantValue<*>>,
+    private val computeType: (ModuleDescriptor) -> KotlinType
 ) : ConstantValue<List<ConstantValue<*>>>(value) {
     override fun getType(module: ModuleDescriptor): KotlinType = computeType(module).also { type ->
-        assert(KotlinBuiltIns.isArray(type) || KotlinBuiltIns.isPrimitiveArray(type)) { "Type should be an array, but was $type: $value" }
+        assert(KotlinBuiltIns.isArray(type) || KotlinBuiltIns.isPrimitiveArray(type) || KotlinBuiltIns.isUnsignedArrayType(type)) {
+            "Type should be an array, but was $type: $value"
+        }
     }
 
     override fun <R, D> accept(visitor: AnnotationArgumentVisitor<R, D>, data: D) = visitor.visitArrayValue(this, data)
@@ -82,7 +85,7 @@ class CharValue(value: Char) : IntegerValueConstant<Char>(value) {
 
     override fun <R, D> accept(visitor: AnnotationArgumentVisitor<R, D>, data: D) = visitor.visitCharValue(this, data)
 
-    override fun toString() = "\\u%04X ('%s')".format(value.toInt(), getPrintablePart(value))
+    override fun toString() = "\\u%04X ('%s')".format(value.code, getPrintablePart(value))
 
     private fun getPrintablePart(c: Char): String = when (c) {
         '\b' -> "\\b"
@@ -218,7 +221,7 @@ class KClassValue(value: Value) : ConstantValue<KClassValue.Value>(value) {
                     // In JVM class file, we can't represent such literal properly, so we're writing java.lang.Object instead.
                     // This has no effect on the compiler front-end or other back-ends, so we use kotlin.Any for simplicity here.
                     // See LanguageFeature.ProhibitTypeParametersInClassLiteralsInAnnotationArguments
-                    KClassValue(ClassId.topLevel(KotlinBuiltIns.FQ_NAMES.any.toSafe()), 0)
+                    KClassValue(ClassId.topLevel(StandardNames.FqNames.any.toSafe()), 0)
                 }
                 else -> null
             }
@@ -258,7 +261,7 @@ class StringValue(value: String) : ConstantValue<String>(value) {
 
 class UByteValue(byteValue: Byte) : UnsignedValueConstant<Byte>(byteValue) {
     override fun getType(module: ModuleDescriptor): KotlinType {
-        return module.findClassAcrossModuleDependencies(KotlinBuiltIns.FQ_NAMES.uByte)?.defaultType
+        return module.findClassAcrossModuleDependencies(StandardNames.FqNames.uByte)?.defaultType
                 ?: ErrorUtils.createErrorType("Unsigned type UByte not found")
     }
 
@@ -266,12 +269,12 @@ class UByteValue(byteValue: Byte) : UnsignedValueConstant<Byte>(byteValue) {
 
     override fun toString() = "$value.toUByte()"
 
-    override fun stringTemplateValue(): String = (value.toInt() and 0xFF).toString()
+    override fun boxedValue(): Any = value.toUByte()
 }
 
 class UShortValue(shortValue: Short) : UnsignedValueConstant<Short>(shortValue) {
     override fun getType(module: ModuleDescriptor): KotlinType {
-        return module.findClassAcrossModuleDependencies(KotlinBuiltIns.FQ_NAMES.uShort)?.defaultType
+        return module.findClassAcrossModuleDependencies(StandardNames.FqNames.uShort)?.defaultType
                 ?: ErrorUtils.createErrorType("Unsigned type UShort not found")
     }
 
@@ -279,12 +282,12 @@ class UShortValue(shortValue: Short) : UnsignedValueConstant<Short>(shortValue) 
 
     override fun toString() = "$value.toUShort()"
 
-    override fun stringTemplateValue(): String = (value.toInt() and 0xFFFF).toString()
+    override fun boxedValue(): Any = value.toUShort()
 }
 
 class UIntValue(intValue: Int) : UnsignedValueConstant<Int>(intValue) {
     override fun getType(module: ModuleDescriptor): KotlinType {
-        return module.findClassAcrossModuleDependencies(KotlinBuiltIns.FQ_NAMES.uInt)?.defaultType
+        return module.findClassAcrossModuleDependencies(StandardNames.FqNames.uInt)?.defaultType
                 ?: ErrorUtils.createErrorType("Unsigned type UInt not found")
     }
 
@@ -292,12 +295,12 @@ class UIntValue(intValue: Int) : UnsignedValueConstant<Int>(intValue) {
 
     override fun toString() = "$value.toUInt()"
 
-    override fun stringTemplateValue(): String = (value.toLong() and 0xFFFFFFFFL).toString()
+    override fun boxedValue(): Any = value.toUInt()
 }
 
 class ULongValue(longValue: Long) : UnsignedValueConstant<Long>(longValue) {
     override fun getType(module: ModuleDescriptor): KotlinType {
-        return module.findClassAcrossModuleDependencies(KotlinBuiltIns.FQ_NAMES.uLong)?.defaultType
+        return module.findClassAcrossModuleDependencies(StandardNames.FqNames.uLong)?.defaultType
                 ?: ErrorUtils.createErrorType("Unsigned type ULong not found")
     }
 
@@ -305,12 +308,5 @@ class ULongValue(longValue: Long) : UnsignedValueConstant<Long>(longValue) {
 
     override fun toString() = "$value.toULong()"
 
-    override fun stringTemplateValue(): String {
-        if (value >= 0) return value.toString()
-
-        val div10 = (value ushr 1) / 5
-        val mod10 = value - 10 * div10
-
-        return "$div10$mod10"
-    }
+    override fun boxedValue(): Any = value.toULong()
 }

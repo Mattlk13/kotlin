@@ -1,6 +1,6 @@
+// DONT_TARGET_EXACT_BACKEND: WASM
+// WASM_MUTE_REASON: SAM_CONVERSIONS
 // !LANGUAGE: +FunctionalInterfaceConversion
-// IGNORE_BACKEND_FIR: JVM_IR
-// SKIP_DCE_DRIVEN
 
 fun interface S {
     fun invoke(): String

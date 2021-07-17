@@ -158,7 +158,7 @@ public class KotlinExpressionParsing extends AbstractKotlinParsing {
         AS(AS_KEYWORD, AS_SAFE) {
             @Override
             public IElementType parseRightHandSide(IElementType operation, KotlinExpressionParsing parser) {
-                parser.myKotlinParsing.parseTypeRef();
+                parser.myKotlinParsing.parseTypeRefWithoutDefinitelyNotNull();
                 return BINARY_WITH_TYPE;
             }
 
@@ -177,7 +177,7 @@ public class KotlinExpressionParsing extends AbstractKotlinParsing {
             @Override
             public IElementType parseRightHandSide(IElementType operation, KotlinExpressionParsing parser) {
                 if (operation == IS_KEYWORD || operation == NOT_IS) {
-                    parser.myKotlinParsing.parseTypeRef();
+                    parser.myKotlinParsing.parseTypeRefWithoutDefinitelyNotNull();
                     return IS_EXPRESSION;
                 }
 
@@ -459,17 +459,13 @@ public class KotlinExpressionParsing extends AbstractKotlinParsing {
                 if (!firstExpressionParsed) {
                     expression.drop();
                     expression = mark();
+                    firstExpressionParsed = parseAtomicExpression();
+                    continue;
                 }
 
                 parseSelectorCallExpression();
 
-                if (firstExpressionParsed) {
-                    expression.done(expressionType);
-                }
-                else {
-                    firstExpressionParsed = true;
-                    continue;
-                }
+                expression.done(expressionType);
             }
             else if (atSet(Precedence.POSTFIX.getOperations())) {
                 parseOperationReference();
@@ -686,7 +682,7 @@ public class KotlinExpressionParsing extends AbstractKotlinParsing {
         else if (!parseLiteralConstant()) {
             ok = false;
             // TODO: better recovery if FIRST(element) did not match
-            errorWithRecovery("Expecting an element", EXPRESSION_FOLLOW);
+            errorWithRecovery("Expecting an element", TokenSet.orSet(EXPRESSION_FOLLOW, TokenSet.create(LONG_TEMPLATE_ENTRY_END)));
         }
 
         return ok;
@@ -1041,6 +1037,43 @@ public class KotlinExpressionParsing extends AbstractKotlinParsing {
                 break;
             }
             parseExpression();
+
+            if (!at(COMMA)) break;
+            advance(); // COMMA
+        }
+    }
+
+    public void parseContractDescriptionBlock() {
+        assert _at(CONTRACT_KEYWORD);
+
+        advance(); // CONTRACT_KEYWORD
+
+        parseContractEffectList();
+    }
+
+    private void parseContractEffectList() {
+        PsiBuilder.Marker block = mark();
+
+        expect(LBRACKET, "Expecting '['");
+        myBuilder.enableNewlines();
+
+        parseContractEffects();
+
+        expect(RBRACKET, "Expecting ']'");
+        myBuilder.restoreNewlinesState();
+
+        block.done(CONTRACT_EFFECT_LIST);
+    }
+
+    private void parseContractEffects() {
+        while (true) {
+            if (at(COMMA)) errorAndAdvance("Expecting a contract effect");
+            if (at(RBRACKET)) {
+                break;
+            }
+            PsiBuilder.Marker effect = mark();
+            parseExpression();
+            effect.done(CONTRACT_EFFECT);
 
             if (!at(COMMA)) break;
             advance(); // COMMA

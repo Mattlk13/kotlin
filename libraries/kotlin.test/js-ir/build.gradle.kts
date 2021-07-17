@@ -6,10 +6,15 @@ plugins {
 
 val commonMainSources by task<Sync> {
     from(
-        "$rootDir/libraries/kotlin.test/common",
-        "$rootDir/libraries/kotlin.test/annotations-common"
+        "$rootDir/libraries/kotlin.test/common/src",
+        "$rootDir/libraries/kotlin.test/annotations-common/src"
     )
     into("$buildDir/commonMainSources")
+}
+
+val commonTestSources by task<Sync> {
+    from("$rootDir/libraries/kotlin.test/common/src/test/kotlin")
+    into("$buildDir/commonTestSources")
 }
 
 val jsMainSources by task<Sync> {
@@ -29,6 +34,9 @@ kotlin {
             }
             kotlin.srcDir(commonMainSources.get().destinationDir)
         }
+        val commonTest by getting {
+            kotlin.srcDir(commonTestSources.get().destinationDir)
+        }
         val jsMain by getting {
             dependencies {
                 api(project(":kotlin-stdlib-js-ir"))
@@ -42,9 +50,8 @@ tasks.withType<KotlinCompile<*>>().configureEach {
     kotlinOptions.freeCompilerArgs += listOf(
         "-Xallow-kotlin-package",
         "-Xallow-result-return-type",
-        "-Xuse-experimental=kotlin.Experimental",
-        "-Xuse-experimental=kotlin.ExperimentalMultiplatform",
-        "-Xuse-experimental=kotlin.contracts.ExperimentalContracts",
+        "-Xopt-in=kotlin.ExperimentalMultiplatform",
+        "-Xopt-in=kotlin.contracts.ExperimentalContracts",
         "-Xinline-classes"
     )
 }
@@ -53,5 +60,9 @@ tasks.named("compileKotlinJs") {
     (this as KotlinCompile<*>).kotlinOptions.freeCompilerArgs += "-Xir-module-name=kotlin-test"
     dependsOn(commonMainSources)
     dependsOn(jsMainSources)
+}
+
+tasks.named("compileTestKotlinJs") {
+    dependsOn(commonTestSources)
 }
 

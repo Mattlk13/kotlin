@@ -25,9 +25,9 @@ import com.intellij.psi.stubs.StringStubIndexExtension
 import com.intellij.util.indexing.IdFilter
 import org.jetbrains.kotlin.asJava.elements.KtLightElement
 import org.jetbrains.kotlin.descriptors.*
+import org.jetbrains.kotlin.idea.FrontendInternals
 import org.jetbrains.kotlin.idea.caches.KotlinShortNamesCache
-import org.jetbrains.kotlin.idea.caches.resolve.resolveImportReference
-import org.jetbrains.kotlin.idea.caches.resolve.unsafeResolveToDescriptor
+import org.jetbrains.kotlin.idea.caches.resolve.*
 import org.jetbrains.kotlin.idea.caches.resolve.util.getJavaMemberDescriptor
 import org.jetbrains.kotlin.idea.caches.resolve.util.resolveToDescriptor
 import org.jetbrains.kotlin.idea.codeInsight.forceEnableSamAdapters
@@ -35,7 +35,6 @@ import org.jetbrains.kotlin.idea.core.extension.KotlinIndicesHelperExtension
 import org.jetbrains.kotlin.idea.resolve.ResolutionFacade
 import org.jetbrains.kotlin.idea.resolve.frontendService
 import org.jetbrains.kotlin.idea.search.excludeKotlinSources
-import org.jetbrains.kotlin.idea.search.usagesSearch.descriptor
 import org.jetbrains.kotlin.idea.stubindex.*
 import org.jetbrains.kotlin.idea.util.CallType
 import org.jetbrains.kotlin.idea.util.CallTypeAndReceiver
@@ -55,6 +54,7 @@ import org.jetbrains.kotlin.resolve.scopes.DescriptorKindFilter
 import org.jetbrains.kotlin.resolve.scopes.SyntheticScopes
 import org.jetbrains.kotlin.resolve.scopes.collectSyntheticStaticFunctions
 import org.jetbrains.kotlin.types.KotlinType
+import org.jetbrains.kotlin.types.isError
 import java.lang.reflect.Field
 import java.lang.reflect.Modifier
 import java.util.*
@@ -73,6 +73,7 @@ class KotlinIndicesHelper(
     private val project = resolutionFacade.project
     private val scopeWithoutKotlin = scope.excludeKotlinSources() as GlobalSearchScope
 
+    @OptIn(FrontendInternals::class)
     private val descriptorFilter: (DeclarationDescriptor) -> Boolean = filter@{
         if (resolutionFacade.frontendService<DeprecationResolver>().isHiddenInResolution(it)) return@filter false
         if (!visibilityFilter(it)) return@filter false
@@ -139,12 +140,21 @@ class KotlinIndicesHelper(
         callTypeAndReceiver: CallTypeAndReceiver<*, *>,
         position: KtExpression,
         bindingContext: BindingContext,
+        receiverTypeFromDiagnostic: KotlinType?,
         nameFilter: (String) -> Boolean
     ): Collection<CallableDescriptor> {
-        val receiverTypes =
-            callTypeAndReceiver.receiverTypes(bindingContext, position, moduleDescriptor, resolutionFacade, stableSmartCastsOnly = false)
-                ?: return emptyList()
-        return getCallableTopLevelExtensions(callTypeAndReceiver, receiverTypes, nameFilter)
+        val receiverTypes = callTypeAndReceiver.receiverTypes(
+            bindingContext, position, moduleDescriptor, resolutionFacade, stableSmartCastsOnly = false
+        )
+
+        return if (receiverTypes == null || receiverTypes.all { it.isError }) {
+            if (receiverTypeFromDiagnostic != null)
+                getCallableTopLevelExtensions(callTypeAndReceiver, listOf(receiverTypeFromDiagnostic), nameFilter)
+            else
+                emptyList()
+        } else {
+            getCallableTopLevelExtensions(callTypeAndReceiver, receiverTypes, nameFilter)
+        }
     }
 
     fun getCallableTopLevelExtensions(
@@ -264,7 +274,7 @@ class KotlinIndicesHelper(
     fun getKotlinEnumsByName(name: String): Collection<DeclarationDescriptor> {
         return KotlinClassShortNameIndex.getInstance()[name, project, scope]
             .filter { it is KtEnumEntry && it in scope }
-            .mapNotNull { it.unsafeResolveToDescriptor() }
+            .flatMap { it.resolveToDescriptors<DeclarationDescriptor>() }
             .filter(descriptorFilter)
             .toSet()
     }
@@ -367,10 +377,12 @@ class KotlinIndicesHelper(
         for (declaration in functions + properties) {
             ProgressManager.checkCanceled()
             if (!filter(declaration)) continue
-            val descriptor = declaration.descriptor as? CallableDescriptor ?: continue
-            if (!processed.add(descriptor)) continue
-            if (!descriptorFilter(descriptor)) continue
-            processor(descriptor)
+
+            for (descriptor in declaration.resolveToDescriptors<CallableDescriptor>()) {
+                if (!processed.add(descriptor)) continue
+                if (!descriptorFilter(descriptor)) continue
+                processor(descriptor)
+            }
         }
     }
 
@@ -470,8 +482,11 @@ class KotlinIndicesHelper(
                     processor(descriptor)
 
                     // SAM-adapter
+                    @OptIn(FrontendInternals::class)
                     val syntheticScopes = resolutionFacade.getFrontendService(SyntheticScopes::class.java).forceEnableSamAdapters()
-                    syntheticScopes.collectSyntheticStaticFunctions(container.staticScope, descriptor.name, NoLookupLocation.FROM_IDE)
+                    val contributedFunctions = container.staticScope.getContributedFunctions(descriptor.name, NoLookupLocation.FROM_IDE)
+
+                    syntheticScopes.collectSyntheticStaticFunctions(contributedFunctions, NoLookupLocation.FROM_IDE)
                         .filterIsInstance<SamAdapterDescriptor<*>>()
                         .firstOrNull { it.baseDescriptorForSynthetic.original == descriptor.original }
                         ?.let { processor(it) }
@@ -487,7 +502,7 @@ class KotlinIndicesHelper(
             for (field in shortNamesCache.getFieldsByName(name, scopeWithoutKotlin).filterNot { it is KtLightElement<*, *> }) {
                 if (!field.hasModifierProperty(PsiModifier.STATIC)) continue
                 if (filterOutPrivate && field.hasModifierProperty(PsiModifier.PRIVATE)) continue
-                val descriptor = field.getJavaMemberDescriptor() ?: continue
+                val descriptor = field.getJavaMemberDescriptor(resolutionFacade) ?: continue
                 if (descriptorKindFilter.accepts(descriptor) && descriptorFilter(descriptor)) {
                     processor(descriptor)
                 }

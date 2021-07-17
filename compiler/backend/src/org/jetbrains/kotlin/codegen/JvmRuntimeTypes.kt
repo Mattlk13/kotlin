@@ -24,6 +24,8 @@ import org.jetbrains.kotlin.resolve.calls.checkers.isRestrictsSuspensionReceiver
 import org.jetbrains.kotlin.resolve.descriptorUtil.builtIns
 import org.jetbrains.kotlin.storage.LockBasedStorageManager
 import org.jetbrains.kotlin.types.KotlinType
+import org.jetbrains.kotlin.utils.KotlinExceptionWithAttachments
+
 
 class JvmRuntimeTypes(
     module: ModuleDescriptor,
@@ -84,7 +86,7 @@ class JvmRuntimeTypes(
             packageFragment, classKind, false, false, Name.identifier(name), SourceElement.NO_SOURCE, LockBasedStorageManager.NO_LOCKS
         ).apply {
             modality = Modality.FINAL
-            visibility = Visibilities.PUBLIC
+            visibility = DescriptorVisibilities.PUBLIC
             setTypeParameterDescriptors(emptyList())
             createTypeConstructor()
         }
@@ -95,6 +97,14 @@ class JvmRuntimeTypes(
                 getOrCreateJvmSuspendFunctionView(descriptor, languageVersionSettings.supportsFeature(LanguageFeature.ReleaseCoroutines))
             else
                 descriptor
+
+        if (actualFunctionDescriptor.returnType == null)
+            throw KotlinExceptionWithAttachments(
+                "Return type for function description is null. Super type cannot be calculated." +
+                        "initDesc=${descriptor}, actDesc=${actualFunctionDescriptor}, isReleaseCoroutines=${
+                            languageVersionSettings.supportsFeature(LanguageFeature.ReleaseCoroutines)
+                        }"
+            )
 
         val functionType = createFunctionType(
             descriptor.builtIns,
@@ -152,7 +162,7 @@ class JvmRuntimeTypes(
             referencedFunction.isSuspend || isSuspendConversion
         )
 
-        val suspendFunctionType = if (referencedFunction.isSuspend) suspendFunctionInterface?.defaultType else null
+        val suspendFunctionType = if (referencedFunction.isSuspend || isSuspendConversion) suspendFunctionInterface?.defaultType else null
         val superClass = when {
             generateOptimizedCallableReferenceSuperClasses -> when {
                 isAdaptedCallableReference || isSuspendConversion -> adaptedFunctionReference
@@ -178,6 +188,12 @@ class JvmRuntimeTypes(
             else -> if (isMutable) mutablePropertyReferences else propertyReferences
         }
 
-        return classes[arity].defaultType
+        return if (arity >= 0) {
+            classes[arity].defaultType
+        } else {
+            //in case of ErrorUtils.ERROR_PROPERTY there would be no dispatchReceiverParameter and arity becomes negative
+            //so we just take zero argument reference class (because it is incorrect anyway)
+            classes[0].defaultType
+        }
     }
 }

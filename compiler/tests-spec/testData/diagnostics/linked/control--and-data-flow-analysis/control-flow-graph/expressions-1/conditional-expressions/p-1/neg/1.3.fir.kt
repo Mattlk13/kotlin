@@ -6,7 +6,7 @@
  * KOTLIN DIAGNOSTICS SPEC TEST (NEGATIVE)
  *
  * SPEC VERSION: 0.1-296
- * PLACE: control--and-data-flow-analysis, control-flow-graph, expressions-1, conditional-expressions -> paragraph 1 -> sentence 1
+ * MAIN LINK: control--and-data-flow-analysis, control-flow-graph, expressions-1, conditional-expressions -> paragraph 1 -> sentence 1
  * NUMBER: 3
  * DESCRIPTION: check if-expressions must have both branches. (attempt to pass Nothing to if-condition without 'else' key word)
  */
@@ -18,13 +18,13 @@ fun throwExc(b: Boolean): Boolean {
 
 // TESTCASE NUMBER: 1
 fun case1() {
-    val x1 = if (throwExc(false)) true
+    val x1 = <!INVALID_IF_AS_EXPRESSION!>if<!> (throwExc(false)) true
 }
 
 
 // TESTCASE NUMBER: 3
 fun case3() {
-    val x1 = if (throwExc(true)) true
+    val x1 = <!INVALID_IF_AS_EXPRESSION!>if<!> (throwExc(true)) true
 }
 
 /*
@@ -33,18 +33,18 @@ fun case3() {
  * ISSUES: KT-35510
  */
 fun case4() {
-    val x1 = if (throw Exception()) true
+    val x1 = <!INVALID_IF_AS_EXPRESSION!>if<!> (throw Exception()) true
 
-    val x2 = if (TODO()) true
+    val x2 = <!INVALID_IF_AS_EXPRESSION!>if<!> (TODO()) true
 
-    val x0 = if (false) true else if (throw Exception()) ;
+    val x0 = if (false) true else <!INVALID_IF_AS_EXPRESSION!>if<!> (throw Exception()) ;
 
 }
 
 // TESTCASE NUMBER: 5
 fun case5() {
     var flag: Boolean? = null
-    val x1 = if (flag ?: throw Exception()) true
+    val x1 = <!INVALID_IF_AS_EXPRESSION!>if<!> (flag ?: throw Exception()) true
 }
 
 /*
@@ -53,7 +53,7 @@ fun case5() {
  * ISSUES: KT-35510
  */
 fun case6() {
-    val k1 = if(throw Exception());
+    val k1 = <!INVALID_IF_AS_EXPRESSION!>if<!>(throw Exception());
 }
 
 /*
@@ -71,7 +71,7 @@ fun case7(nothing: Nothing) {
  * ISSUES: KT-35510
  */
 fun case8(nothing: Nothing) {
-    val x1 = if (nothing) true
+    val x1 = <!INVALID_IF_AS_EXPRESSION!>if<!> (nothing) true
 }
 
 /*

@@ -27,6 +27,7 @@ import org.jetbrains.kotlin.container.useImpl
 import org.jetbrains.kotlin.container.useInstance
 import org.jetbrains.kotlin.context.ModuleContext
 import org.jetbrains.kotlin.context.ProjectContext
+import org.jetbrains.kotlin.descriptors.ModuleCapability
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
 import org.jetbrains.kotlin.descriptors.PackageFragmentProvider
 import org.jetbrains.kotlin.descriptors.impl.CompositePackageFragmentProvider
@@ -39,6 +40,7 @@ import org.jetbrains.kotlin.platform.TargetPlatform
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.resolve.*
 import org.jetbrains.kotlin.resolve.checkers.ExpectedActualDeclarationChecker
+import org.jetbrains.kotlin.resolve.extensions.AnalysisHandlerExtension
 import org.jetbrains.kotlin.resolve.lazy.ResolveSession
 import org.jetbrains.kotlin.resolve.lazy.declarations.DeclarationProviderFactory
 import org.jetbrains.kotlin.resolve.lazy.declarations.DeclarationProviderFactoryService
@@ -61,7 +63,7 @@ class CommonResolverForModuleFactory(
 ) : ResolverForModuleFactory() {
     private class SourceModuleInfo(
         override val name: Name,
-        override val capabilities: Map<ModuleDescriptor.Capability<*>, Any?>,
+        override val capabilities: Map<ModuleCapability<*>, Any?>,
         private val dependencies: Iterable<ModuleInfo>,
         override val expectedBy: List<ModuleInfo>,
         override val platform: TargetPlatform,
@@ -84,7 +86,8 @@ class CommonResolverForModuleFactory(
         moduleContext: ModuleContext,
         moduleContent: ModuleContent<M>,
         resolverForProject: ResolverForProject<M>,
-        languageVersionSettings: LanguageVersionSettings
+        languageVersionSettings: LanguageVersionSettings,
+        sealedInheritorsProvider: SealedClassInheritorsProvider
     ): ResolverForModule {
         val (moduleInfo, syntheticFiles, moduleContentScope) = moduleContent
         val project = moduleContext.project
@@ -109,14 +112,18 @@ class CommonResolverForModuleFactory(
                     container.get<MetadataPackageFragmentProvider>()
                 )
 
-        return ResolverForModule(CompositePackageFragmentProvider(packageFragmentProviders), container)
+        return ResolverForModule(
+            CompositePackageFragmentProvider(packageFragmentProviders, "CompositeProvider@CommonResolver for $moduleDescriptor"),
+            container
+        )
     }
 
     companion object {
         fun analyzeFiles(
             files: Collection<KtFile>, moduleName: Name, dependOnBuiltIns: Boolean, languageVersionSettings: LanguageVersionSettings,
             targetPlatform: TargetPlatform,
-            capabilities: Map<ModuleDescriptor.Capability<*>, Any?> = emptyMap(),
+            targetEnvironment: TargetEnvironment,
+            capabilities: Map<ModuleCapability<*>, Any?> = emptyMap(),
             dependenciesContainer: CommonDependenciesContainer? = null,
             metadataPartProviderFactory: (ModuleContent<ModuleInfo>) -> MetadataPartProvider
         ): AnalysisResult {
@@ -139,16 +146,17 @@ class CommonResolverForModuleFactory(
 
             val resolverForModuleFactory = CommonResolverForModuleFactory(
                 CommonAnalysisParameters(metadataPartProviderFactory),
-                CompilerEnvironment,
+                targetEnvironment,
                 targetPlatform,
                 shouldCheckExpectActual = false,
                 dependenciesContainer
             )
 
+            val projectContext = ProjectContext(project, "metadata serializer")
             @Suppress("NAME_SHADOWING")
             val resolver = ResolverForSingleModuleProject<ModuleInfo>(
                 "sources for metadata serializer",
-                ProjectContext(project, "metadata serializer"),
+                projectContext,
                 moduleInfo,
                 resolverForModuleFactory,
                 GlobalSearchScope.allScope(project),
@@ -164,9 +172,24 @@ class CommonResolverForModuleFactory(
 
             val container = resolver.resolverForModule(moduleInfo).componentProvider
 
-            container.get<LazyTopDownAnalyzer>().analyzeDeclarations(TopDownAnalysisMode.TopLevelDeclarations, files)
+            val analysisHandlerExtensions = AnalysisHandlerExtension.getInstances(project)
+            val trace = container.get<BindingTrace>()
 
-            return AnalysisResult.success(container.get<BindingTrace>().bindingContext, moduleDescriptor)
+            // Mimic the behavior in the jvm frontend. The extensions have 2 chances to override the normal analysis:
+            // * If any of the extensions returns a non-null result, it. Otherwise do the normal analysis.
+            // * `analysisCompleted` can be used to override the result, too.
+            var result = analysisHandlerExtensions.firstNotNullOfOrNull { extension ->
+                extension.doAnalysis(project, moduleDescriptor, projectContext, files, trace, container)
+            } ?: run {
+                container.get<LazyTopDownAnalyzer>().analyzeDeclarations(TopDownAnalysisMode.TopLevelDeclarations, files)
+                AnalysisResult.success(trace.bindingContext, moduleDescriptor)
+            }
+
+            result = analysisHandlerExtensions.firstNotNullOfOrNull { extension ->
+                extension.analysisCompleted(project, moduleDescriptor, trace, files)
+            } ?: result
+
+            return result
         }
     }
 }

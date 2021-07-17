@@ -12,25 +12,19 @@ import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.Variance
 
-class IrSimpleTypeImpl(
-    kotlinType: KotlinType?,
-    override val classifier: IrClassifierSymbol,
-    override val hasQuestionMark: Boolean,
-    override val arguments: List<IrTypeArgument>,
-    annotations: List<IrConstructorCall>,
-    override val abbreviation: IrTypeAbbreviation? = null
-) : IrTypeBase(kotlinType, annotations, Variance.INVARIANT), IrSimpleType, IrTypeProjection {
+abstract class IrAbstractSimpleType(kotlinType: KotlinType?) : IrTypeBase(kotlinType), IrSimpleType {
 
-    constructor(
-        classifier: IrClassifierSymbol,
-        hasQuestionMark: Boolean,
-        arguments: List<IrTypeArgument>,
-        annotations: List<IrConstructorCall>,
-        abbreviation: IrTypeAbbreviation? = null
-    ) : this(null, classifier, hasQuestionMark, arguments, annotations, abbreviation)
+    override val variance: Variance
+        get() = Variance.INVARIANT
+
+    abstract override val classifier: IrClassifierSymbol
+    abstract override val hasQuestionMark: Boolean
+    abstract override val arguments: List<IrTypeArgument>
+    abstract override val annotations: List<IrConstructorCall>
+    abstract override val abbreviation: IrTypeAbbreviation?
 
     override fun equals(other: Any?): Boolean =
-        other is IrSimpleTypeImpl &&
+        other is IrAbstractSimpleType &&
                 FqNameEqualityChecker.areEqual(classifier, other.classifier) &&
                 hasQuestionMark == other.hasQuestionMark &&
                 arguments == other.arguments
@@ -39,6 +33,41 @@ class IrSimpleTypeImpl(
         (FqNameEqualityChecker.getHashCode(classifier) * 31 +
                 hasQuestionMark.hashCode()) * 31 +
                 arguments.hashCode()
+}
+
+abstract class IrDelegatedSimpleType : IrAbstractSimpleType(null) {
+
+    protected abstract val delegate: IrSimpleType
+
+    override val classifier: IrClassifierSymbol
+        get() = delegate.classifier
+    override val hasQuestionMark: Boolean
+        get() = delegate.hasQuestionMark
+    override val arguments: List<IrTypeArgument>
+        get() = delegate.arguments
+    override val abbreviation: IrTypeAbbreviation?
+        get() = delegate.abbreviation
+    override val annotations: List<IrConstructorCall>
+        get() = delegate.annotations
+}
+
+
+class IrSimpleTypeImpl(
+    kotlinType: KotlinType?,
+    override val classifier: IrClassifierSymbol,
+    override val hasQuestionMark: Boolean,
+    override val arguments: List<IrTypeArgument>,
+    override val annotations: List<IrConstructorCall>,
+    override val abbreviation: IrTypeAbbreviation? = null
+) : IrAbstractSimpleType(kotlinType) {
+
+    constructor(
+        classifier: IrClassifierSymbol,
+        hasQuestionMark: Boolean,
+        arguments: List<IrTypeArgument>,
+        annotations: List<IrConstructorCall>,
+        abbreviation: IrTypeAbbreviation? = null
+    ) : this(null, classifier, hasQuestionMark, arguments, annotations, abbreviation)
 }
 
 class IrSimpleTypeBuilder {
@@ -80,9 +109,6 @@ fun IrSimpleTypeBuilder.buildTypeProjection() =
 inline fun IrSimpleType.buildSimpleType(b: IrSimpleTypeBuilder.() -> Unit): IrSimpleType =
     toBuilder().apply(b).buildSimpleType()
 
-inline fun IrSimpleType.buildTypeProjection(b: IrSimpleTypeBuilder.() -> Unit): IrTypeProjection =
-    toBuilder().apply(b).buildTypeProjection()
-
 class IrTypeProjectionImpl internal constructor(
     override val type: IrType,
     override val variance: Variance
@@ -96,6 +122,7 @@ class IrTypeProjectionImpl internal constructor(
 
 fun makeTypeProjection(type: IrType, variance: Variance): IrTypeProjection =
     when {
+        type is IrCapturedType -> IrTypeProjectionImpl(type, variance)
         type is IrTypeProjection && type.variance == variance -> type
         type is IrSimpleType -> type.toBuilder().apply { this.variance = variance }.buildTypeProjection()
         type is IrDynamicType -> IrDynamicTypeImpl(null, type.annotations, variance)

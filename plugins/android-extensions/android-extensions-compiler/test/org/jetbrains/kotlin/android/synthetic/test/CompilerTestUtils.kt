@@ -5,7 +5,7 @@
 
 package org.jetbrains.kotlin.android.synthetic.test
 
-import com.intellij.testFramework.registerServiceInstance
+import com.intellij.mock.MockProject
 import kotlinx.android.extensions.CacheImplementation
 import org.jetbrains.kotlin.android.synthetic.AndroidConfigurationKeys
 import org.jetbrains.kotlin.android.synthetic.AndroidExtensionPropertiesComponentContainerContributor
@@ -37,7 +37,7 @@ fun KtUsefulTestCase.createTestEnvironment(configuration: CompilerConfiguration,
     val project = myEnvironment.project
 
     val variants = listOf(AndroidVariant.createMainVariant(resDirectories))
-    project.registerServiceInstance(AndroidLayoutXmlFileManager::class.java, CliAndroidLayoutXmlFileManager(project, "test", variants))
+    (project as MockProject).registerService(AndroidLayoutXmlFileManager::class.java, CliAndroidLayoutXmlFileManager(project, "test", variants))
 
     ExpressionCodegenExtension.registerExtension(project, CliAndroidExtensionsExpressionCodegenExtension(true, CacheImplementation.DEFAULT))
     IrGenerationExtension.registerExtension(project, CliAndroidIrExtension(true, CacheImplementation.DEFAULT))

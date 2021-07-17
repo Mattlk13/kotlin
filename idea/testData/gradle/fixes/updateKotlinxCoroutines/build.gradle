@@ -4,10 +4,11 @@ version '1.0-SNAPSHOT'
 buildscript {
     repositories {
         mavenCentral()
+        mavenLocal()
     }
 
     dependencies {
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:1.2.50")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:{{kotlin_plugin_version}}")
     }
 }
 
@@ -15,7 +16,6 @@ apply plugin: 'kotlin'
 
 repositories {
     mavenCentral()
-    maven { url "https://kotlin.bintray.com/kotlinx" }
 }
 
 dependencies {

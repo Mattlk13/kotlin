@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -7,33 +7,33 @@ package org.jetbrains.kotlin.fir.lightTree.converter
 
 import com.intellij.lang.LighterASTNode
 import com.intellij.openapi.util.Ref
+import com.intellij.psi.TokenType
 import com.intellij.psi.tree.IElementType
 import com.intellij.util.diff.FlyweightCapableTreeStructure
 import org.jetbrains.kotlin.KtNodeTypes
-import org.jetbrains.kotlin.fir.FirLightSourceElement
-import org.jetbrains.kotlin.fir.FirSession
+import org.jetbrains.kotlin.fir.*
 import org.jetbrains.kotlin.fir.builder.BaseFirBuilder
 import org.jetbrains.kotlin.fir.builder.Context
 import org.jetbrains.kotlin.fir.builder.escapedStringToCharacter
-import org.jetbrains.kotlin.fir.toFirLightSourceElement
 import org.jetbrains.kotlin.fir.types.builder.buildImplicitTypeRef
 import org.jetbrains.kotlin.lexer.KtToken
 import org.jetbrains.kotlin.lexer.KtTokens.*
 import org.jetbrains.kotlin.name.Name
 import kotlin.contracts.ExperimentalContracts
 
-open class BaseConverter(
+abstract class BaseConverter(
     baseSession: FirSession,
     val tree: FlyweightCapableTreeStructure<LighterASTNode>,
-    val offset: Int,
     context: Context<LighterASTNode> = Context()
 ) : BaseFirBuilder<LighterASTNode>(baseSession, context) {
+    abstract val offset: Int
+
     protected val implicitType = buildImplicitTypeRef()
 
-    override fun LighterASTNode.toFirSourceElement(): FirLightSourceElement {
+    override fun LighterASTNode.toFirSourceElement(kind: FirFakeSourceElementKind?): FirLightSourceElement {
         val startOffset = offset + tree.getStartOffset(this)
         val endOffset = offset + tree.getEndOffset(this)
-        return toFirLightSourceElement(startOffset, endOffset, tree)
+        return toFirLightSourceElement(tree, kind ?: FirRealSourceElementKind, startOffset, endOffset)
     }
 
     override val LighterASTNode.elementType: IElementType
@@ -45,7 +45,7 @@ open class BaseConverter(
     override val LighterASTNode.unescapedValue: String
         get() {
             val escape = this.asText
-            return escapedStringToCharacter(escape)?.toString()
+            return escapedStringToCharacter(escape).value?.toString()
                 ?: escape.replace("\\", "").replace("u", "\\u")
         }
 
@@ -54,6 +54,9 @@ open class BaseConverter(
     }
 
     override fun LighterASTNode.getLabelName(): String? {
+        if (tokenType == KtNodeTypes.FUN) {
+            return getParent()?.getLabelName()
+        }
         this.forEachChildren {
             when (it.tokenType) {
                 KtNodeTypes.LABEL_QUALIFIER -> return it.asText.replaceFirst("@", "")
@@ -63,25 +66,55 @@ open class BaseConverter(
         return null
     }
 
-    override fun LighterASTNode.getExpressionInParentheses(): LighterASTNode? {
-        this.forEachChildren {
+    override fun LighterASTNode.getExpressionInParentheses() = getFirstChildExpression()
+
+    override fun LighterASTNode.getAnnotatedExpression() = getFirstChildExpression()
+
+    override fun LighterASTNode.getLabeledExpression() = getLastChildExpression()
+
+    private fun LighterASTNode.getFirstChildExpression(): LighterASTNode? {
+        forEachChildren {
             if (it.isExpression()) return it
         }
 
         return null
     }
 
-    override fun LighterASTNode.getAnnotatedExpression(): LighterASTNode? {
-        this.forEachChildren {
-            if (it.isExpression()) return it
+    protected fun LighterASTNode.getFirstChildExpressionUnwrapped(): LighterASTNode? {
+        val expression = getFirstChildExpression() ?: return null
+        return if (expression.tokenType == KtNodeTypes.PARENTHESIZED) {
+            expression.getFirstChildExpressionUnwrapped()
+        } else {
+            expression
+        }
+    }
+
+    private fun LighterASTNode.getLastChildExpression(): LighterASTNode? {
+        var result: LighterASTNode? = null
+        forEachChildren {
+            if (it.isExpression()) {
+                result = it
+            }
         }
 
-        return null
+        return result
     }
 
     override fun LighterASTNode.getChildNodeByType(type: IElementType): LighterASTNode? {
         return this.getChildNodesByType(type).firstOrNull()
     }
+
+    override val LighterASTNode?.receiverExpression: LighterASTNode?
+        get() {
+            var candidate: LighterASTNode? = null
+            this?.forEachChildren {
+                when (it.tokenType) {
+                    DOT, SAFE_ACCESS -> return if (candidate?.elementType != TokenType.ERROR_ELEMENT) candidate else null
+                    else -> candidate = it
+                }
+            }
+            return null
+        }
 
     override val LighterASTNode?.selectorExpression: LighterASTNode?
         get() {
@@ -89,14 +122,30 @@ open class BaseConverter(
             this?.forEachChildren {
                 when (it.tokenType) {
                     DOT, SAFE_ACCESS -> isSelector = true
-                    else -> if (isSelector) return it
+                    else -> if (isSelector) return if (it.elementType != TokenType.ERROR_ELEMENT) it else null
                 }
             }
             return null
         }
 
+    override val LighterASTNode?.arrayExpression: LighterASTNode?
+        get() = this?.getFirstChildExpression()
+
+    override val LighterASTNode?.indexExpressions: List<LighterASTNode>?
+        get() = this?.getLastChildExpression()?.getChildrenAsArray()?.filterNotNull()?.filter { it.isExpression() }
+
     fun LighterASTNode.getParent(): LighterASTNode? {
         return tree.getParent(this)
+    }
+
+    fun LighterASTNode.getParents(): Sequence<LighterASTNode> {
+        var node = this
+        return sequence {
+            while (true) {
+                yield(node)
+                node = node.getParent() ?: break
+            }
+        }
     }
 
     fun LighterASTNode?.getChildNodesByType(type: IElementType): List<LighterASTNode> {
@@ -113,6 +162,16 @@ open class BaseConverter(
         val kidsRef = Ref<Array<LighterASTNode?>>()
         tree.getChildren(this, kidsRef)
         return kidsRef.get()
+    }
+
+    fun LighterASTNode?.getFirstChild(): LighterASTNode? {
+        val firstChild: LighterASTNode?
+        try {
+            firstChild = getChildrenAsArray()[0]
+        } catch (e: ArrayIndexOutOfBoundsException) {
+            return null
+        }
+        return firstChild
     }
 
     @OptIn(ExperimentalContracts::class)

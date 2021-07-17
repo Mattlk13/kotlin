@@ -1,48 +1,42 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.compilerRunner
 
 import org.gradle.api.Project
-import org.gradle.api.Task
 import org.gradle.api.invocation.Gradle
+import org.gradle.api.logging.Logger
 import org.gradle.api.plugins.JavaPluginConvention
 import org.gradle.api.tasks.bundling.AbstractArchiveTask
 import org.gradle.jvm.tasks.Jar
-import org.jetbrains.kotlin.cli.common.arguments.CommonCompilerArguments
-import org.jetbrains.kotlin.cli.common.arguments.K2JSCompilerArguments
-import org.jetbrains.kotlin.cli.common.arguments.K2JVMCompilerArguments
-import org.jetbrains.kotlin.cli.common.arguments.K2MetadataCompilerArguments
+import org.gradle.workers.WorkQueue
+import org.jetbrains.kotlin.cli.common.arguments.*
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.daemon.client.CompileServiceSession
-import org.jetbrains.kotlin.daemon.common.*
-import org.jetbrains.kotlin.gradle.dsl.kotlinExtensionOrNull
+import org.jetbrains.kotlin.daemon.common.CompilerId
+import org.jetbrains.kotlin.daemon.common.configureDaemonJVMOptions
+import org.jetbrains.kotlin.daemon.common.filterExtractProps
+import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
 import org.jetbrains.kotlin.gradle.dsl.multiplatformExtensionOrNull
 import org.jetbrains.kotlin.gradle.logging.kotlinDebug
-import org.jetbrains.kotlin.gradle.plugin.internal.state.TaskLoggers
+import org.jetbrains.kotlin.gradle.logging.kotlinInfo
 import org.jetbrains.kotlin.gradle.plugin.KotlinCompilation
-import org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompileTaskData
+import org.jetbrains.kotlin.gradle.plugin.internal.state.TaskLoggers
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinWithJavaTarget
-import org.jetbrains.kotlin.gradle.plugin.mpp.ownModuleName
+import org.jetbrains.kotlin.gradle.plugin.statistics.KotlinBuildStatsService
+import org.jetbrains.kotlin.gradle.tasks.AbstractKotlinCompile
+import org.jetbrains.kotlin.gradle.tasks.GradleCompileTaskProvider
+import org.jetbrains.kotlin.gradle.tasks.InspectClassesForMultiModuleIC
+import org.jetbrains.kotlin.gradle.tasks.Kotlin2JsCompile
 import org.jetbrains.kotlin.gradle.utils.archivePathCompatible
 import org.jetbrains.kotlin.gradle.utils.newTmpFile
-import org.jetbrains.kotlin.gradle.utils.relativeToRoot
-import org.jetbrains.kotlin.incremental.IncrementalModuleInfo
+import org.jetbrains.kotlin.gradle.utils.relativeOrCanonical
 import org.jetbrains.kotlin.incremental.IncrementalModuleEntry
+import org.jetbrains.kotlin.incremental.IncrementalModuleInfo
+import org.jetbrains.kotlin.statistics.metrics.BooleanMetrics
+import org.jetbrains.kotlin.statistics.metrics.StringMetrics
 import java.io.File
 import java.lang.ref.WeakReference
 
@@ -60,9 +54,25 @@ const val COULD_NOT_CONNECT_TO_DAEMON_MESSAGE = "Could not connect to Kotlin com
 internal fun kotlinCompilerExecutionStrategy(): String =
     System.getProperty(KOTLIN_COMPILER_EXECUTION_STRATEGY_PROPERTY) ?: DAEMON_EXECUTION_STRATEGY
 
-internal open class GradleCompilerRunner(protected val task: Task) {
-    protected val project: Project
-        get() = task.project
+/*
+Using real taskProvider cause "field 'taskProvider' from type 'org.jetbrains.kotlin.compilerRunner.GradleCompilerRunner':
+value 'fixed(class org.jetbrains.kotlin.gradle.tasks.KotlinCompile_Decorated, task ':compileKotlin')'
+is not assignable to 'org.gradle.api.tasks.TaskProvider'" exception
+ */
+internal open class GradleCompilerRunner(
+    protected val taskProvider: GradleCompileTaskProvider,
+    protected val jdkToolsJar: File?,
+    protected val kotlinDaemonJvmArgs: List<String>?
+) {
+
+    internal val pathProvider = taskProvider.path.get()
+    internal val loggerProvider = taskProvider.logger.get()
+    internal val buildDirProvider = taskProvider.buildDir.get().asFile
+    internal val projectDirProvider = taskProvider.projectDir.get()
+    internal val projectRootDirProvider = taskProvider.rootDir.get()
+    internal val sessionDirProvider = taskProvider.sessionsDir.get()
+    internal val projectNameProvider = taskProvider.projectName.get()
+    internal val incrementalModuleInfoProvider = taskProvider.buildModulesInfo
 
     /**
      * Compiler might be executed asynchronously. Do not do anything requiring end of compilation after this function is called.
@@ -74,13 +84,16 @@ internal open class GradleCompilerRunner(protected val task: Task) {
         javaSourceRoots: Iterable<File>,
         javaPackagePrefix: String?,
         args: K2JVMCompilerArguments,
-        environment: GradleCompilerEnvironment
-    ) {
+        environment: GradleCompilerEnvironment,
+        jdkHome: File
+    ): WorkQueue? {
         args.freeArgs += sourcesToCompile.map { it.absolutePath }
         args.commonSources = commonSources.map { it.absolutePath }.toTypedArray()
         args.javaSourceRoots = javaSourceRoots.map { it.absolutePath }.toTypedArray()
         args.javaPackagePrefix = javaPackagePrefix
-        runCompilerAsync(KotlinCompilerClass.JVM, args, environment)
+        if (args.jdkHome == null) args.jdkHome = jdkHome.absolutePath
+        loggerProvider.kotlinInfo("Kotlin compilation 'jdkHome' argument: ${args.jdkHome}")
+        return runCompilerAsync(KotlinCompilerClass.JVM, args, environment)
     }
 
     /**
@@ -92,10 +105,10 @@ internal open class GradleCompilerRunner(protected val task: Task) {
         kotlinCommonSources: List<File>,
         args: K2JSCompilerArguments,
         environment: GradleCompilerEnvironment
-    ) {
+    ): WorkQueue? {
         args.freeArgs += kotlinSources.map { it.absolutePath }
         args.commonSources = kotlinCommonSources.map { it.absolutePath }.toTypedArray()
-        runCompilerAsync(KotlinCompilerClass.JS, args, environment)
+        return runCompilerAsync(KotlinCompilerClass.JS, args, environment)
     }
 
     /**
@@ -106,47 +119,86 @@ internal open class GradleCompilerRunner(protected val task: Task) {
         kotlinSources: List<File>,
         args: K2MetadataCompilerArguments,
         environment: GradleCompilerEnvironment
-    ) {
+    ): WorkQueue? {
         args.freeArgs += kotlinSources.map { it.absolutePath }
-        runCompilerAsync(KotlinCompilerClass.METADATA, args, environment)
+        return runCompilerAsync(KotlinCompilerClass.METADATA, args, environment)
     }
 
     private fun runCompilerAsync(
         compilerClassName: String,
         compilerArgs: CommonCompilerArguments,
         environment: GradleCompilerEnvironment
-    ) {
+    ): WorkQueue? {
         if (compilerArgs.version) {
-            task.logger.lifecycle(
+            loggerProvider.lifecycle(
                 "Kotlin version " + loadCompilerVersion(environment.compilerClasspath) +
                         " (JRE " + System.getProperty("java.runtime.version") + ")"
             )
             compilerArgs.version = false
         }
         val argsArray = ArgumentUtils.convertArgumentsToStringList(compilerArgs).toTypedArray()
+
+        // compilerArgs arguments may have some attributes which are overrided by freeCompilerArguments.
+        // Here we perform the work which is repeated in compiler in order to obtain correct values. This extra work could be avoided when
+        // compiler would report metrics by itself via JMX
+        KotlinBuildStatsService.applyIfInitialised {
+            when (compilerArgs) {
+                is K2JVMCompilerArguments -> {
+                    KotlinBuildStatsService.getInstance()?.apply {
+                        val args = K2JVMCompilerArguments()
+                        parseCommandLineArguments(argsArray.toList(), args)
+                        report(BooleanMetrics.JVM_COMPILER_IR_MODE, args.useIR)
+                        report(StringMetrics.JVM_DEFAULTS, args.jvmDefault)
+                        report(StringMetrics.USE_OLD_BACKEND, args.useOldBackend.toString())
+                    }
+                }
+                is K2JSCompilerArguments -> {
+                    KotlinBuildStatsService.getInstance()?.apply {
+                        val args = K2JSCompilerArguments()
+                        parseCommandLineArguments(argsArray.toList(), args)
+                        if (!args.isPreIrBackendDisabled() || args.irProduceJs) {
+                            report(BooleanMetrics.JS_SOURCE_MAP, args.sourceMap)
+                        }
+                        if (args.irProduceJs) {
+                            report(StringMetrics.JS_PROPERTY_LAZY_INITIALIZATION, args.irPropertyLazyInitialization.toString())
+                        }
+                    }
+                }
+            }
+        }
+
         val incrementalCompilationEnvironment = environment.incrementalCompilationEnvironment
-        val modulesInfo = incrementalCompilationEnvironment?.let { buildModulesInfo(project.gradle) }
+        val modulesInfo = incrementalCompilationEnvironment?.let { incrementalModuleInfoProvider.get().info }
         val workArgs = GradleKotlinCompilerWorkArguments(
-            projectFiles = ProjectFilesForCompilation(project),
-            compilerFullClasspath = environment.compilerFullClasspath,
+            projectFiles = ProjectFilesForCompilation(
+                loggerProvider,
+                projectDirProvider,
+                buildDirProvider,
+                projectNameProvider,
+                projectRootDirProvider,
+                sessionDirProvider
+            ),
+            compilerFullClasspath = environment.compilerFullClasspath(jdkToolsJar),
             compilerClassName = compilerClassName,
             compilerArgs = argsArray,
             isVerbose = compilerArgs.verbose,
             incrementalCompilationEnvironment = incrementalCompilationEnvironment,
             incrementalModuleInfo = modulesInfo,
             outputFiles = environment.outputFiles.toList(),
-            taskPath = task.path,
-            buildReportMode = environment.buildReportMode,
+            taskPath = pathProvider,
+            reportingSettings = environment.reportingSettings,
             kotlinScriptExtensions = environment.kotlinScriptExtensions,
-            allWarningsAsErrors = compilerArgs.allWarningsAsErrors
+            allWarningsAsErrors = compilerArgs.allWarningsAsErrors,
+            daemonJvmArgs = kotlinDaemonJvmArgs
         )
-        TaskLoggers.put(task.path, task.logger)
-        runCompilerAsync(workArgs)
+        TaskLoggers.put(pathProvider, loggerProvider)
+        return runCompilerAsync(workArgs)
     }
 
-    protected open fun runCompilerAsync(workArgs: GradleKotlinCompilerWorkArguments) {
+    protected open fun runCompilerAsync(workArgs: GradleKotlinCompilerWorkArguments): WorkQueue? {
         val kotlinCompilerRunnable = GradleKotlinCompilerWork(workArgs)
         kotlinCompilerRunnable.run()
+        return null
     }
 
     companion object {
@@ -156,15 +208,27 @@ internal open class GradleCompilerRunner(protected val task: Task) {
             sessionIsAliveFlagFile: File,
             compilerFullClasspath: List<File>,
             messageCollector: MessageCollector,
+            daemonJvmArgs: List<String>?,
             isDebugEnabled: Boolean
         ): CompileServiceSession? {
             val compilerId = CompilerId.makeCompilerId(compilerFullClasspath)
-            val additionalJvmParams = arrayListOf<String>()
+            val daemonJvmOptions = configureDaemonJVMOptions(
+                inheritMemoryLimits = true,
+                inheritOtherJvmOptions = false,
+                inheritAdditionalProperties = true
+            ).also { opts ->
+                if (!daemonJvmArgs.isNullOrEmpty()) {
+                    opts.jvmParams.addAll(
+                        daemonJvmArgs.filterExtractProps(opts.mappers, "", opts.restMapper)
+                    )
+                }
+            }
+
             return KotlinCompilerRunnerUtils.newDaemonConnection(
                 compilerId, clientIsAliveFlagFile, sessionIsAliveFlagFile,
                 messageCollector = messageCollector,
                 isDebugEnabled = isDebugEnabled,
-                additionalJvmParams = additionalJvmParams.toTypedArray()
+                daemonJVMOptions = daemonJvmOptions
             )
         }
 
@@ -182,55 +246,90 @@ internal open class GradleCompilerRunner(protected val task: Task) {
             val nameToModules = HashMap<String, HashSet<IncrementalModuleEntry>>()
             val jarToClassListFile = HashMap<File, File>()
             val jarToModule = HashMap<File, IncrementalModuleEntry>()
+            val jarToAbiSnapshot = HashMap<File, File>()
 
-            for (project in gradle.rootProject.allprojects) {
+            val multiplatformProjectTasks = mutableMapOf<Project, MutableSet<String>>()
 
-                if (project.kotlinExtensionOrNull == null)
-                    continue
+            gradle.taskGraph.allTasks.forEach { task ->
+                val project = task.project
+                if (project.multiplatformExtensionOrNull != null) {
+                    // Just record this, we'll process them later
+                    val tasksInProject = multiplatformProjectTasks[project] ?: mutableSetOf()
+                    tasksInProject.add(task.name)
+                    multiplatformProjectTasks[project] = tasksInProject
+                }
 
-                val isMultiplatformProject = project.multiplatformExtensionOrNull != null
-
-                KotlinCompileTaskData.getTaskDataContainer(project).forEach { taskData ->
-                    val compilation = taskData.compilation
-                    val target = taskData.compilation.target
+                if (task is AbstractKotlinCompile<*>) {
                     val module = IncrementalModuleEntry(
                         project.path,
-                        compilation.ownModuleName,
+                        task.moduleName.get(),
                         project.buildDir,
-                        taskData.buildHistoryFile
+                        task.buildHistoryFile.get().asFile,
+                        task.abiSnapshotFile.get().asFile
                     )
-                    dirToModule[taskData.destinationDir.get()] = module
-
-                    taskData.javaOutputDir?.let { dirToModule[it] = module }
+                    dirToModule[task.destinationDir] = module
+                    task.javaOutputDir.orNull?.asFile?.let { dirToModule[it] = module }
                     nameToModules.getOrPut(module.name) { HashSet() }.add(module)
 
-                    if (compilation.platformType == KotlinPlatformType.js) {
-                        jarForSourceSet(project, compilation.name)?.let {
+                    if (task is Kotlin2JsCompile) {
+                        jarForSourceSet(project, task.sourceSetName.get())?.let {
                             jarToModule[it] = module
                         }
                     }
+//                    for (target in task.targets) {
+//                        if (target is KotlinWithJavaTarget<*>) {
+//                            val jar = project.tasks.getByName(target.artifactsTaskName) as Jar
+//                            jarToClassListFile[jar.archivePathCompatible.canonicalFile] = target.defaultArtifactClassesListFile.get()
+//                            //configure abiSnapshot mapping for jars
+//                            jarToAbiSnapshot[jar.archivePathCompatible.canonicalFile] =
+//                                target.buildDir.get().file(task.abiSnapshotRelativePath).asFile
+//                        }
+//                    }
+                } else if (task is InspectClassesForMultiModuleIC) {
+                    jarToClassListFile[File(task.archivePath.get())] = task.classesListFile
+                }
+            }
 
-                    if (compilation.name == KotlinCompilation.MAIN_COMPILATION_NAME) {
-                        if (isMultiplatformProject) {
-                            (project.tasks.findByName(target.artifactsTaskName) as? AbstractArchiveTask)?.let { jarTask ->
-                                jarToModule[jarTask.archivePathCompatible.canonicalFile] = module
-                            }
-                        } else {
-                            if (target is KotlinWithJavaTarget<*>) {
-                                val jar = project.tasks.getByName(target.artifactsTaskName) as Jar
-                                jarToClassListFile[jar.archivePathCompatible.canonicalFile] = target.defaultArtifactClassesListFile
-                            }
+            for ((project, tasksInProject) in multiplatformProjectTasks) {
+                project.extensions.findByType(KotlinMultiplatformExtension::class.java)?.let { kotlinExt ->
+                    for (target in kotlinExt.targets) {
+                        val mainCompilation = target.compilations.findByName(KotlinCompilation.MAIN_COMPILATION_NAME) ?: continue
+
+                        if (mainCompilation.compileKotlinTaskName !in tasksInProject || target.artifactsTaskName !in tasksInProject) {
+                            // tasks are not part of the task graph, skip
+                            continue
                         }
+
+                        val kotlinTask = mainCompilation.compileKotlinTask as? AbstractKotlinCompile<*> ?: continue
+                        val module = IncrementalModuleEntry(
+                            project.path,
+                            kotlinTask.moduleName.get(),
+                            project.buildDir,
+                            kotlinTask.buildHistoryFile.get().asFile,
+                            kotlinTask.abiSnapshotFile.get().asFile
+                        )
+                        val jarTask = project.tasks.findByName(target.artifactsTaskName) as? AbstractArchiveTask ?: continue
+                        jarToModule[jarTask.archivePathCompatible.canonicalFile] = module
+                        if (target is KotlinWithJavaTarget<*>) {
+                            val jar = project.tasks.getByName(target.artifactsTaskName) as Jar
+                            jarToClassListFile[jar.archivePathCompatible.canonicalFile] = target.defaultArtifactClassesListFile.get()
+                            //configure abiSnapshot mapping for jars
+                            jarToAbiSnapshot[jar.archivePathCompatible.canonicalFile] =
+                                target.buildDir.get().file(kotlinTask.abiSnapshotRelativePath).get().asFile
+                        }
+
                     }
                 }
             }
 
             return IncrementalModuleInfo(
                 projectRoot = gradle.rootProject.projectDir,
+                rootProjectBuildDir = gradle.rootProject.buildDir,
                 dirToModule = dirToModule,
                 nameToModules = nameToModules,
                 jarToClassListFile = jarToClassListFile,
-                jarToModule = jarToModule
+                jarToModule = jarToModule,
+                jarToAbiSnapshot = jarToAbiSnapshot
             ).also {
                 cachedGradle = WeakReference(gradle)
                 cachedModulesInfo = it
@@ -242,7 +341,7 @@ internal open class GradleCompilerRunner(protected val task: Task) {
                 ?: return null
             val sourceSet = javaConvention.sourceSets.findByName(sourceSetName) ?: return null
             val jarTask = project.tasks.findByName(sourceSet.jarTaskName) as? Jar
-            return jarTask?.archivePath
+            return jarTask?.archiveFile?.get()?.asFile
         }
 
         @Synchronized
@@ -258,11 +357,9 @@ internal open class GradleCompilerRunner(protected val task: Task) {
         private var clientIsAliveFlagFile: File? = null
 
         @Synchronized
-        internal fun getOrCreateClientFlagFile(project: Project): File {
-            val log = project.logger
+        internal fun getOrCreateClientFlagFile(log: Logger, projectName: String): File {
             if (clientIsAliveFlagFile == null || !clientIsAliveFlagFile!!.exists()) {
-                val projectName = project.rootProject.name.normalizeForFlagFile()
-                clientIsAliveFlagFile = newTmpFile(prefix = "kotlin-compiler-in-$projectName-", suffix = ".alive")
+                clientIsAliveFlagFile = newTmpFile(prefix = "kotlin-compiler-in-${projectName}-", suffix = ".alive")
                 log.kotlinDebug { CREATED_CLIENT_FILE_PREFIX + clientIsAliveFlagFile!!.canonicalPath }
             } else {
                 log.kotlinDebug { EXISTING_CLIENT_FILE_PREFIX + clientIsAliveFlagFile!!.canonicalPath }
@@ -271,7 +368,7 @@ internal open class GradleCompilerRunner(protected val task: Task) {
             return clientIsAliveFlagFile!!
         }
 
-        private fun String.normalizeForFlagFile(): String {
+        internal fun String.normalizeForFlagFile(): String {
             val validChars = ('a'..'z') + ('0'..'9') + "-_"
             return filter { it in validChars }
         }
@@ -282,21 +379,20 @@ internal open class GradleCompilerRunner(protected val task: Task) {
 
         // session files are deleted at org.jetbrains.kotlin.gradle.plugin.KotlinGradleBuildServices.buildFinished
         @Synchronized
-        internal fun getOrCreateSessionFlagFile(project: Project): File {
-            val log = project.logger
+        internal fun getOrCreateSessionFlagFile(log: Logger, sessionsDir: File, projectRootDir: File): File {
             if (sessionFlagFile == null || !sessionFlagFile!!.exists()) {
-                val sessionFilesDir = sessionsDir(project).apply { mkdirs() }
+                val sessionFilesDir = sessionsDir.apply { mkdirs() }
                 sessionFlagFile = newTmpFile(prefix = "kotlin-compiler-", suffix = ".salive", directory = sessionFilesDir)
-                log.kotlinDebug { CREATED_SESSION_FILE_PREFIX + sessionFlagFile!!.relativeToRoot(project) }
+                log.kotlinDebug { CREATED_SESSION_FILE_PREFIX + sessionFlagFile!!.relativeOrCanonical(projectRootDir) }
             } else {
-                log.kotlinDebug { EXISTING_SESSION_FILE_PREFIX + sessionFlagFile!!.relativeToRoot(project) }
+                log.kotlinDebug { EXISTING_SESSION_FILE_PREFIX + sessionFlagFile!!.relativeOrCanonical(projectRootDir) }
             }
 
             return sessionFlagFile!!
         }
 
-        internal fun sessionsDir(project: Project): File =
-            File(File(project.rootProject.buildDir, "kotlin"), "sessions")
+        internal fun sessionsDir(rootProjectBuildDir: File): File =
+            File(File(rootProjectBuildDir, "kotlin"), "sessions")
     }
 }
 

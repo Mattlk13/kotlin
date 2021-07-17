@@ -17,7 +17,7 @@
 package org.jetbrains.kotlin.backend.common.lower
 
 import org.jetbrains.kotlin.backend.common.ir.ir2string
-import org.jetbrains.kotlin.descriptors.Visibilities
+import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
@@ -26,7 +26,6 @@ import org.jetbrains.kotlin.ir.symbols.IrValueSymbol
 import org.jetbrains.kotlin.ir.types.IrSimpleType
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.IrTypeProjection
-import org.jetbrains.kotlin.ir.util.constructedClass
 import org.jetbrains.kotlin.ir.util.isLocal
 import org.jetbrains.kotlin.ir.visitors.IrElementVisitor
 
@@ -160,6 +159,7 @@ class ClosureAnnotator(irElement: IrElement, declaration: IrDeclaration) {
             this.valueParameters.forEach { closureBuilder.declareVariable(it) }
             closureBuilder.declareVariable(this.dispatchReceiverParameter)
             closureBuilder.declareVariable(this.extensionReceiverParameter)
+            closureBuilder.seeType(this.returnType)
 
             if (this is IrConstructor) {
                 val constructedClass = (this.parent as IrClass)
@@ -174,20 +174,18 @@ class ClosureAnnotator(irElement: IrElement, declaration: IrDeclaration) {
         }
 
     private fun collectPotentiallyCapturedTypeParameters(closureBuilder: ClosureBuilder) {
+        var current = closureBuilder.owner.parentClosureBuilder
+        while (current != null) {
+            val container = current.owner
 
-        fun ClosureBuilder.doCollect() {
-            if (owner !is IrClass) {
-                (owner as? IrTypeParametersContainer)?.let { container ->
-                    for (tp in container.typeParameters) {
-                        closureBuilder.addPotentiallyCapturedTypeParameter(tp)
-                    }
+            if (container is IrTypeParametersContainer) {
+                for (typeParameter in container.typeParameters) {
+                    closureBuilder.addPotentiallyCapturedTypeParameter(typeParameter)
                 }
-
-                owner.parentClosureBuilder?.doCollect()
             }
-        }
 
-        closureBuilder.owner.parentClosureBuilder?.doCollect()
+            current = container.parentClosureBuilder
+        }
     }
 
     private val IrDeclaration.parentClosureBuilder: ClosureBuilder?
@@ -205,7 +203,7 @@ class ClosureAnnotator(irElement: IrElement, declaration: IrDeclaration) {
             else -> null
         }
 
-    private inner class ClosureCollectorVisitor() : IrElementVisitor<Unit, ClosureBuilder?> {
+    private inner class ClosureCollectorVisitor : IrElementVisitor<Unit, ClosureBuilder?> {
 
         override fun visitElement(element: IrElement, data: ClosureBuilder?) {
             element.acceptChildren(this, data)
@@ -221,6 +219,12 @@ class ClosureAnnotator(irElement: IrElement, declaration: IrDeclaration) {
             declaration.acceptChildren(this, closureBuilder)
 
             includeInParent(closureBuilder)
+        }
+
+        override fun visitTypeParameter(declaration: IrTypeParameter, data: ClosureBuilder?) {
+            for (superType in declaration.superTypes) {
+                data?.seeType(superType)
+            }
         }
 
         override fun visitValueAccess(expression: IrValueAccessExpression, data: ClosureBuilder?) {
@@ -243,6 +247,11 @@ class ClosureAnnotator(irElement: IrElement, declaration: IrDeclaration) {
             processMemberAccess(expression.symbol.owner, data)
         }
 
+        override fun visitFunctionExpression(expression: IrFunctionExpression, data: ClosureBuilder?) {
+            super.visitFunctionExpression(expression, data)
+            processMemberAccess(expression.function, data)
+        }
+
         override fun visitPropertyReference(expression: IrPropertyReference, data: ClosureBuilder?) {
             super.visitPropertyReference(expression, data)
             expression.getter?.let { processMemberAccess(it.owner, data) }
@@ -259,7 +268,7 @@ class ClosureAnnotator(irElement: IrElement, declaration: IrDeclaration) {
 
         private fun processMemberAccess(declaration: IrDeclaration, parentClosure: ClosureBuilder?) {
             if (declaration.isLocal) {
-                if (declaration is IrSimpleFunction && declaration.visibility != Visibilities.LOCAL) {
+                if (declaration is IrSimpleFunction && declaration.visibility != DescriptorVisibilities.LOCAL) {
                     return
                 }
 

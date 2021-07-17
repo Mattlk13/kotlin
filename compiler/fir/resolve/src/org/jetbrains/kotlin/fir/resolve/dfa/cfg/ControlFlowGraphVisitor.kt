@@ -18,6 +18,20 @@ abstract class ControlFlowGraphVisitor<out R, in D> {
         return visitNode(node, data)
     }
 
+    open fun visitLocalFunctionDeclarationNode(node: LocalFunctionDeclarationNode, data: D): R {
+        return visitNode(node, data)
+    }
+
+    // ----------------------------------- Default arguments -----------------------------------
+
+    open fun visitExitDefaultArgumentsNode(node: ExitDefaultArgumentsNode, data: D): R {
+        return visitNode(node, data)
+    }
+
+    open fun visitEnterDefaultArgumentsNode(node: EnterDefaultArgumentsNode, data: D): R {
+        return visitNode(node, data)
+    }
+
     // ----------------------------------- Anonymous function -----------------------------------
 
     open fun visitPostponedLambdaEnterNode(node: PostponedLambdaEnterNode, data: D): R {
@@ -32,9 +46,17 @@ abstract class ControlFlowGraphVisitor<out R, in D> {
         return visitNode(node, data)
     }
 
+    open fun visitAnonymousFunctionExpressionExitNode(node: AnonymousFunctionExpressionExitNode, data: D): R {
+        return visitNode(node, data)
+    }
+
     // ----------------------------------- Classes -----------------------------------
 
     open fun visitAnonymousObjectExitNode(node: AnonymousObjectExitNode, data: D): R {
+        return visitNode(node, data)
+    }
+
+    open fun visitAnonymousObjectExpressionExitNode(node: AnonymousObjectExpressionExitNode, data: D): R {
         return visitNode(node, data)
     }
 
@@ -50,6 +72,12 @@ abstract class ControlFlowGraphVisitor<out R, in D> {
         return visitNode(node, data)
     }
 
+    // ----------------------------------- Initialization -----------------------------------
+
+    open fun visitPartOfClassInitializationNode(node: PartOfClassInitializationNode, data: D): R {
+        return visitNode(node, data)
+    }
+
     // ----------------------------------- Property -----------------------------------
 
     open fun visitPropertyInitializerEnterNode(node: PropertyInitializerEnterNode, data: D): R {
@@ -57,6 +85,16 @@ abstract class ControlFlowGraphVisitor<out R, in D> {
     }
 
     open fun visitPropertyInitializerExitNode(node: PropertyInitializerExitNode, data: D): R {
+        return visitNode(node, data)
+    }
+
+    // ----------------------------------- Field -----------------------------------
+
+    open fun visitFieldInitializerEnterNode(node: FieldInitializerEnterNode, data: D): R {
+        return visitNode(node, data)
+    }
+
+    open fun visitFieldInitializerExitNode(node: FieldInitializerExitNode, data: D): R {
         return visitNode(node, data)
     }
 
@@ -219,11 +257,11 @@ abstract class ControlFlowGraphVisitor<out R, in D> {
         return visitNode(node, data)
     }
 
-    open fun visitOperatorCallNode(node: OperatorCallNode, data: D): R {
+    open fun visitComparisonExpressionNode(node: ComparisonExpressionNode, data: D): R {
         return visitNode(node, data)
     }
 
-    open fun visitComparisonExpressionNode(node: ComparisonExpressionNode, data: D): R {
+    open fun visitEqualityOperatorCallNode(node: EqualityOperatorCallNode, data: D): R {
         return visitNode(node, data)
     }
 
@@ -257,7 +295,15 @@ abstract class ControlFlowGraphVisitor<out R, in D> {
         return visitNode(node, data)
     }
 
+    open fun visitCallableReferenceNode(node: CallableReferenceNode, data: D): R {
+        return visitNode(node, data)
+    }
+
     open fun visitDelegatedConstructorCallNode(node: DelegatedConstructorCallNode, data: D): R {
+        return visitNode(node, data)
+    }
+
+    open fun visitStringConcatenationCallNode(node: StringConcatenationCallNode, data: D): R {
         return visitNode(node, data)
     }
 
@@ -294,6 +340,24 @@ abstract class ControlFlowGraphVisitor<out R, in D> {
     }
 
     open fun visitExitSafeCallNode(node: ExitSafeCallNode, data: D): R {
+        return visitNode(node, data)
+    }
+
+    // ----------------------------------- Elvis -----------------------------------
+
+    open fun visitElvisLhsExitNode(node: ElvisLhsExitNode, data: D): R {
+        return visitNode(node, data)
+    }
+
+    open fun visitElvisLhsIsNotNullNode(node: ElvisLhsIsNotNullNode, data: D): R {
+        return visitNode(node, data)
+    }
+
+    open fun visitElvisRhsEnterNode(node: ElvisRhsEnterNode, data: D): R {
+        return visitNode(node, data)
+    }
+
+    open fun visitElvisExitNode(node: ElvisExitNode, data: D): R {
         return visitNode(node, data)
     }
 

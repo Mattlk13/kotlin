@@ -1,4 +1,5 @@
-// IGNORE_BACKEND_FIR: JVM_IR
+// DONT_TARGET_EXACT_BACKEND: WASM
+// WASM_MUTE_REASON: STDLIB_COLLECTIONS
 // WITH_RUNTIME
 // KJS_WITH_FULL_RUNTIME
 
@@ -8,7 +9,7 @@ enum class RequestFields {
     ENUM_ONE
 }
 
-data class RequestInputParameters(
+class RequestInputParameters(
     private val backingMap: Map<RequestFields, FieldValue>
 ) : Map<RequestFields, FieldValue> by backingMap
 

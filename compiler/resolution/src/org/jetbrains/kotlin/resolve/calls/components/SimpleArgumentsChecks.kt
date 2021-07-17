@@ -21,9 +21,9 @@ import org.jetbrains.kotlin.descriptors.TypeParameterDescriptor
 import org.jetbrains.kotlin.resolve.calls.inference.ConstraintSystemBuilder
 import org.jetbrains.kotlin.resolve.calls.inference.addSubtypeConstraintIfCompatible
 import org.jetbrains.kotlin.resolve.calls.inference.components.NewTypeSubstitutor
-import org.jetbrains.kotlin.resolve.calls.inference.model.ArgumentConstraintPosition
+import org.jetbrains.kotlin.resolve.calls.inference.model.ArgumentConstraintPositionImpl
 import org.jetbrains.kotlin.resolve.calls.inference.model.ConstraintPosition
-import org.jetbrains.kotlin.resolve.calls.inference.model.ReceiverConstraintPosition
+import org.jetbrains.kotlin.resolve.calls.inference.model.ReceiverConstraintPositionImpl
 import org.jetbrains.kotlin.resolve.calls.model.*
 import org.jetbrains.kotlin.types.*
 import org.jetbrains.kotlin.types.checker.captureFromExpression
@@ -51,10 +51,11 @@ fun checkSimpleArgument(
     expectedType: UnwrappedType?,
     diagnosticsHolder: KotlinDiagnosticsHolder,
     receiverInfo: ReceiverInfo,
-    convertedType: UnwrappedType?
+    convertedType: UnwrappedType?,
+    inferenceSession: InferenceSession?
 ): ResolvedAtom = when (argument) {
     is ExpressionKotlinCallArgument -> checkExpressionArgument(csBuilder, argument, expectedType, diagnosticsHolder, receiverInfo.isReceiver, convertedType)
-    is SubKotlinCallArgument -> checkSubCallArgument(csBuilder, argument, expectedType, diagnosticsHolder, receiverInfo)
+    is SubKotlinCallArgument -> checkSubCallArgument(csBuilder, argument, expectedType, diagnosticsHolder, receiverInfo, inferenceSession)
     else -> unexpectedArgument(argument)
 }
 
@@ -84,7 +85,7 @@ private fun checkExpressionArgument(
         if (argumentType.isMarkedNullable) {
             if (csBuilder.addSubtypeConstraintIfCompatible(argumentType, actualExpectedType, position)) return null
             if (csBuilder.addSubtypeConstraintIfCompatible(argumentType.makeNotNullable(), actualExpectedType, position)) {
-                return ArgumentTypeMismatchDiagnostic(actualExpectedType, argumentType, expressionArgument)
+                return ArgumentNullabilityMismatchDiagnostic(actualExpectedType, argumentType, expressionArgument)
             }
         }
 
@@ -92,11 +93,11 @@ private fun checkExpressionArgument(
         return null
     }
 
-    val position = if (isReceiver) ReceiverConstraintPosition(expressionArgument) else ArgumentConstraintPosition(expressionArgument)
+    val position = if (isReceiver) ReceiverConstraintPositionImpl(expressionArgument) else ArgumentConstraintPositionImpl(expressionArgument)
 
     // Used only for arguments with @NotNull annotation
     if (expectedType is NotNullTypeVariable && argumentType.isMarkedNullable) {
-        diagnosticsHolder.addDiagnostic(ArgumentTypeMismatchDiagnostic(expectedType, argumentType, expressionArgument))
+        diagnosticsHolder.addDiagnostic(ArgumentNullabilityMismatchDiagnostic(expectedType, argumentType, expressionArgument))
     }
 
     if (expressionArgument.isSafeCall) {
@@ -178,13 +179,16 @@ private fun checkSubCallArgument(
     expectedType: UnwrappedType?,
     diagnosticsHolder: KotlinDiagnosticsHolder,
     receiverInfo: ReceiverInfo,
+    inferenceSession: InferenceSession?
 ): ResolvedAtom {
-    val subCallResult = ResolvedSubCallArgument(subCallArgument)
+    val subCallResult = ResolvedSubCallArgument(
+        subCallArgument, receiverInfo.isReceiver && inferenceSession?.resolveReceiverIndependently() == true
+    )
 
     if (expectedType == null) return subCallResult
 
     val expectedNullableType = expectedType.makeNullableAsSpecified(true)
-    val position = if (receiverInfo.isReceiver) ReceiverConstraintPosition(subCallArgument) else ArgumentConstraintPosition(subCallArgument)
+    val position = if (receiverInfo.isReceiver) ReceiverConstraintPositionImpl(subCallArgument) else ArgumentConstraintPositionImpl(subCallArgument)
 
     // subArgument cannot has stable smartcast
     // return type can contains fixed type variables

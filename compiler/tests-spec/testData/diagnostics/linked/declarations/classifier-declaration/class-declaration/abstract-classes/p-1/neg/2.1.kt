@@ -1,3 +1,4 @@
+// FIR_IDENTICAL
 // !LANGUAGE: +NewInference
 // !DIAGNOSTICS: -UNUSED_VARIABLE -ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE -UNUSED_VALUE -UNUSED_PARAMETER -UNUSED_EXPRESSION
 // SKIP_TXT
@@ -6,8 +7,8 @@
  * KOTLIN DIAGNOSTICS SPEC TEST (NEGATIVE)
  *
  * SPEC VERSION: 0.1-213
- * PLACE: declarations, classifier-declaration, class-declaration, abstract-classes -> paragraph 1 -> sentence 2
- * RELEVANT PLACES: declarations, classifier-declaration, class-declaration, abstract-classes -> paragraph 1 -> sentence 1
+ * MAIN LINK: declarations, classifier-declaration, class-declaration, abstract-classes -> paragraph 1 -> sentence 2
+ * PRIMARY LINKS: declarations, classifier-declaration, class-declaration, abstract-classes -> paragraph 1 -> sentence 1
  * NUMBER: 1
  * DESCRIPTION: check abstract classes cannot be instantiated directly
  */

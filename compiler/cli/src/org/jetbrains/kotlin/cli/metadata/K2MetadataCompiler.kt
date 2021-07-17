@@ -27,7 +27,6 @@ import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.cli.jvm.config.K2MetadataConfigurationKeys
 import org.jetbrains.kotlin.cli.jvm.config.addJvmClasspathRoots
-import org.jetbrains.kotlin.cli.jvm.plugins.PluginCliParser
 import org.jetbrains.kotlin.codegen.CompilationException
 import org.jetbrains.kotlin.config.CommonConfigurationKeys
 import org.jetbrains.kotlin.config.CompilerConfiguration
@@ -63,8 +62,9 @@ class K2MetadataCompiler : CLICompiler<K2MetadataCompilerArguments>() {
         val pluginLoadResult = loadPlugins(paths, arguments, configuration)
         if (pluginLoadResult != ExitCode.OK) return pluginLoadResult
 
+        val commonSources = arguments.commonSources?.toSet() ?: emptySet()
         for (arg in arguments.freeArgs) {
-            configuration.addKotlinSourceRoot(arg, isCommon = true)
+            configuration.addKotlinSourceRoot(arg, isCommon = arg in commonSources)
         }
         if (arguments.classpath != null) {
             configuration.addJvmClasspathRoots(arguments.classpath!!.split(File.pathSeparatorChar).map(::File))

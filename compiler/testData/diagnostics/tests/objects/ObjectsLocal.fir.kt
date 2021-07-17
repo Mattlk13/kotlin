@@ -16,10 +16,10 @@ fun test() {
     }
     b.foo()
 
-    object B {
+    <!LOCAL_OBJECT_NOT_ALLOWED!>object B<!> {
         fun foo() {}
     }
     B.foo()
 }
 
-val bb = <!UNRESOLVED_REFERENCE!>B<!>.<!UNRESOLVED_REFERENCE!>foo<!>()
+val bb = <!UNRESOLVED_REFERENCE!>B<!>.foo()

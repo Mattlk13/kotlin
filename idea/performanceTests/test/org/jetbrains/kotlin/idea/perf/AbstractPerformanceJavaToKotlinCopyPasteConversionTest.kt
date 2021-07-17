@@ -9,13 +9,15 @@ import com.intellij.ide.highlighter.JavaFileType
 import com.intellij.openapi.actionSystem.IdeActions
 import com.intellij.openapi.application.runWriteAction
 import com.intellij.psi.PsiDocumentManager
-import com.intellij.util.ui.UIUtil
+import com.intellij.testFramework.RunAll
+import com.intellij.util.ThrowableRunnable
 import org.jetbrains.kotlin.idea.KotlinFileType
 import org.jetbrains.kotlin.idea.configuration.ExperimentalFeatures
 import org.jetbrains.kotlin.idea.conversion.copy.AbstractJavaToKotlinCopyPasteConversionTest
 import org.jetbrains.kotlin.idea.conversion.copy.ConvertJavaCopyPasteProcessor
 import org.jetbrains.kotlin.idea.perf.Stats.Companion.WARM_UP
 import org.jetbrains.kotlin.idea.testFramework.commitAllDocuments
+import org.jetbrains.kotlin.idea.testFramework.dispatchAllInvocationEvents
 import org.jetbrains.kotlin.test.InTextDirectivesUtils
 import org.jetbrains.kotlin.test.KotlinTestUtils
 import java.io.File
@@ -28,11 +30,6 @@ abstract class AbstractPerformanceJavaToKotlinCopyPasteConversionTest(private va
         val warmedUp: Array<Boolean> = arrayOf(false, false)
 
         val stats: Array<Stats> = arrayOf(Stats("old j2k"), Stats("new j2k"))
-
-        init {
-            // there is no @AfterClass for junit3.8
-            Runtime.getRuntime().addShutdownHook(Thread(Runnable { stats.forEach { it.close() } }))
-        }
     }
 
     override fun setUp() {
@@ -45,6 +42,13 @@ abstract class AbstractPerformanceJavaToKotlinCopyPasteConversionTest(private va
             doWarmUpPerfTest()
             warmedUp[index] = true
         }
+    }
+
+    override fun tearDown() {
+        RunAll(
+            ThrowableRunnable { super.tearDown() }
+        ).run()
+
     }
 
     private fun doWarmUpPerfTest() {
@@ -61,6 +65,7 @@ abstract class AbstractPerformanceJavaToKotlinCopyPasteConversionTest(private va
             }
             test {
                 myFixture.performEditorAction(IdeActions.ACTION_PASTE)
+                dispatchAllInvocationEvents()
             }
             tearDown {
                 val document = myFixture.getDocument(myFixture.file)
@@ -119,7 +124,7 @@ abstract class AbstractPerformanceJavaToKotlinCopyPasteConversionTest(private va
 
     private fun perfTestCore() {
         myFixture.performEditorAction(IdeActions.ACTION_PASTE)
-        UIUtil.dispatchAllInvocationEvents()
+        dispatchAllInvocationEvents()
     }
 
     private fun stats() = stats[j2kIndex()]

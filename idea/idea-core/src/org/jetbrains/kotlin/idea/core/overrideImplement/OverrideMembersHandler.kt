@@ -13,13 +13,13 @@ import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.descriptorUtil.builtIns
 import java.util.*
 
-class OverrideMembersHandler(private val preferConstructorParameters: Boolean = false) : OverrideImplementMembersHandler() {
+class OverrideMembersHandler(private val preferConstructorParameters: Boolean = false) : GenerateMembersHandler() {
     override fun collectMembersToGenerate(descriptor: ClassDescriptor, project: Project): Collection<OverrideMemberChooserObject> {
         val result = ArrayList<OverrideMemberChooserObject>()
         for (member in descriptor.unsubstitutedMemberScope.getContributedDescriptors()) {
             if (member is CallableMemberDescriptor && (member.kind != CallableMemberDescriptor.Kind.DECLARATION)) {
                 val overridden = member.overriddenDescriptors
-                if (overridden.any { it.modality == Modality.FINAL || Visibilities.isPrivate(it.visibility.normalize()) }) continue
+                if (overridden.any { it.modality == Modality.FINAL || DescriptorVisibilities.isPrivate(it.visibility.normalize()) }) continue
 
                 if (DescriptorUtils.isInterface(descriptor) && overridden.any { descriptor.builtIns.isMemberOfAny(it) }) continue
 
@@ -56,13 +56,13 @@ class OverrideMembersHandler(private val preferConstructorParameters: Boolean = 
 
                     val bodyType = when {
                         descriptor.kind == ClassKind.INTERFACE && realSuper.builtIns.isMemberOfAny(realSuper) ->
-                            OverrideMemberChooserObject.BodyType.NO_BODY
+                            BodyType.NO_BODY
                         immediateSuperToUse.modality == Modality.ABSTRACT ->
-                            OverrideMemberChooserObject.BodyType.FROM_TEMPLATE
+                            BodyType.FROM_TEMPLATE
                         realSupersToUse.size == 1 ->
-                            OverrideMemberChooserObject.BodyType.SUPER
+                            BodyType.SUPER
                         else ->
-                            OverrideMemberChooserObject.BodyType.QUALIFIED_SUPER
+                            BodyType.QUALIFIED_SUPER
                     }
 
                     result.add(

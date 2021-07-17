@@ -39,7 +39,7 @@ private val commonCases: CaseBuilder.(String, String) -> Unit = { testByName, te
 
 private val commonCasesWithTestNotRenamed: CaseBuilder.() -> Unit = { commonCases(testNotRenamedByName, testNotRenamedByRef) }
 
-fun main(args: Array<String>) {
+fun main() {
     generateTestDataForReservedWords()
 }
 
@@ -311,7 +311,10 @@ private class TestDataBuilder {
                             .replace(KEYWORD_MARKER, keywordWithEscapeIfNeed)
 
 
-                    val fileName = "${suite.name.decapitalize()}${case.name.capitalize()}${keyword.capitalize()}.kt"
+                    val decapitalizedSuiteName = suite.name.replaceFirstChar(Char::lowercaseChar)
+                    val capitalizedCaseName = case.name.replaceFirstChar(Char::uppercaseChar)
+                    val capitalizedKeyword = keyword.replaceFirstChar(Char::uppercaseChar)
+                    val fileName = "$decapitalizedSuiteName$capitalizedCaseName$capitalizedKeyword.kt"
 
                     val testDataFile = File(testDataDirPath + "/" + fileName)
 

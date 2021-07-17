@@ -557,6 +557,7 @@ object Filtering : TemplateGroupBase() {
         }
 
         specialFor(Strings, CharSequences) {
+            sample("samples.text.Strings.filter")
             returns("SELF")
             doc { "Returns a ${f.collection} containing only those characters from the original ${f.collection} that match the given [predicate]." }
             body { """return filterTo(StringBuilder(), predicate)${toResult(f)}""" }
@@ -577,6 +578,7 @@ object Filtering : TemplateGroupBase() {
         specialFor(ArraysOfUnsigned) { inlineOnly() }
 
         doc { "Appends all ${f.element.pluralize()} matching the given [predicate] to the given [destination]." }
+        sample("samples.collections.Collections.Filtering.filterTo")
         typeParam("C : TCollection")
         returns("C")
 
@@ -612,6 +614,7 @@ object Filtering : TemplateGroupBase() {
             and returns the result of predicate evaluation on the ${f.element}.
             """
         }
+        sample("samples.collections.Collections.Filtering.filterIndexed")
         returns("List<T>")
         body {
             """
@@ -656,6 +659,7 @@ object Filtering : TemplateGroupBase() {
             @param [predicate] function that takes the index of ${f.element.prefixWithArticle()} and the ${f.element} itself
             and returns the result of predicate evaluation on the ${f.element}.
             """ }
+        sample("samples.collections.Collections.Filtering.filterIndexedTo")
         typeParam("C : TCollection")
         returns("C")
 
@@ -686,6 +690,7 @@ object Filtering : TemplateGroupBase() {
         }
 
         specialFor(Strings, CharSequences) {
+            sample("samples.text.Strings.filterNot")
             returns("SELF")
             doc { "Returns a ${f.collection} containing only those characters from the original ${f.collection} that do not match the given [predicate]." }
             body { """return filterNotTo(StringBuilder(), predicate)${toResult(f)}""" }
@@ -707,6 +712,7 @@ object Filtering : TemplateGroupBase() {
         specialFor(ArraysOfUnsigned) { inlineOnly() }
 
         doc { "Appends all elements not matching the given [predicate] to the given [destination]." }
+        sample("samples.collections.Collections.Filtering.filterTo")
         typeParam("C : TCollection")
         returns("C")
 
@@ -758,6 +764,7 @@ object Filtering : TemplateGroupBase() {
         include(Iterables, Sequences, ArraysOfObjects)
     } builder {
         doc { "Appends all elements that are not `null` to the given [destination]." }
+        sample("samples.collections.Collections.Filtering.filterNotNullTo")
         returns("C")
         typeParam("C : TCollection")
         typeParam("T : Any")
@@ -774,6 +781,7 @@ object Filtering : TemplateGroupBase() {
         include(Iterables, Sequences, ArraysOfObjects)
     } builder {
         doc { "Appends all elements that are instances of specified type parameter R to the given [destination]." }
+        sample("samples.collections.Collections.Filtering.filterIsInstanceTo")
         typeParam("reified R")
         typeParam("C : MutableCollection<in R>")
         inline()
@@ -791,6 +799,7 @@ object Filtering : TemplateGroupBase() {
         include(Iterables, Sequences, ArraysOfObjects)
     } builder {
         doc { "Returns a list containing all elements that are instances of specified type parameter R." }
+        sample("samples.collections.Collections.Filtering.filterIsInstance")
         typeParam("reified R")
         returns("List<@kotlin.internal.NoInfer R>")
         inline()
@@ -818,6 +827,7 @@ object Filtering : TemplateGroupBase() {
         include(Iterables, ArraysOfObjects, Sequences)
     } builder {
         doc { "Appends all elements that are instances of specified class to the given [destination]." }
+        sample("samples.collections.Collections.Filtering.filterIsInstanceToJVM")
         genericStarProjection = true
         typeParam("C : MutableCollection<in R>")
         typeParam("R")
@@ -836,6 +846,7 @@ object Filtering : TemplateGroupBase() {
         include(Iterables, ArraysOfObjects, Sequences)
     } builder {
         doc { "Returns a list containing all elements that are instances of specified class." }
+        sample("samples.collections.Collections.Filtering.filterIsInstanceJVM")
         genericStarProjection = true
         typeParam("R")
         returns("List<R>")

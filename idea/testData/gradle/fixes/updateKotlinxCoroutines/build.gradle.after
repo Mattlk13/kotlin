@@ -4,10 +4,11 @@ version '1.0-SNAPSHOT'
 buildscript {
     repositories {
         mavenCentral()
+        mavenLocal()
     }
 
     dependencies {
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:1.2.50")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:{{kotlin_plugin_version}}")
     }
 }
 
@@ -15,11 +16,10 @@ apply plugin: 'kotlin'
 
 repositories {
     mavenCentral()
-    maven { url "https://kotlin.bintray.com/kotlinx" }
 }
 
 dependencies {
-    compile 'org.jetbrains.kotlinx:kotlinx-coroutines-core:0.27.0-eap13'
+    compile 'org.jetbrains.kotlinx:kotlinx-coroutines-core:0.27.0'
 }
 
 compileKotlin {

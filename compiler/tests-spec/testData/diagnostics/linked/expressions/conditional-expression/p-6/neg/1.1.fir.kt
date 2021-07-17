@@ -3,16 +3,6 @@
 // SKIP_TXT
 // FULL_JDK
 
-/*
- * KOTLIN DIAGNOSTICS SPEC TEST (NEGATIVE)
- *
- * SPEC VERSION: 0.1-313
- * PLACE: expressions, conditional-expression -> paragraph 6 -> sentence 1
- * NUMBER: 1
- * DESCRIPTION: The type of the condition expression must be a subtype of kotlin.Boolean
- * HELPERS: checkType
- */
-
 // MODULE: libModule
 // FILE: libModule/JavaContainer.java
 package libModule;
@@ -36,8 +26,8 @@ import checkSubtype
  */
 fun case1() {
     val a: Any = true
-    if (a) { "true" } else "false"
-    <!INAPPLICABLE_CANDIDATE!>checkSubtype<!><Boolean>(a)
+    if (<!CONDITION_TYPE_MISMATCH!>a<!>) { "true" } else "false"
+    <!NONE_APPLICABLE!>checkSubtype<!><Boolean>(a)
 }
 
 /*
@@ -47,8 +37,8 @@ fun case1() {
  */
 fun case2() {
     val a = JavaContainer.aO
-    if (a) { "true" } else "false"
-    <!INAPPLICABLE_CANDIDATE!>checkSubtype<!><Boolean>(a)
+    if (<!CONDITION_TYPE_MISMATCH!>a<!>) { "true" } else "false"
+    <!NONE_APPLICABLE!>checkSubtype<!><Boolean>(a)
 }
 
 // TESTCASE NUMBER: 3
@@ -63,7 +53,7 @@ public class JavaClassCase3{
 // TESTCASE NUMBER: 3
 fun case3() {
     val x = JavaClassCase3.id(null) // Nothing!
-    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Nothing?..kotlin.Nothing??")!>x<!>
+    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Nothing..kotlin.Nothing?!")!>x<!>
     val a = if (x) {
         "NOK"
     } else "NOK"

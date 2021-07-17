@@ -1,3 +1,4 @@
+// FIR_COMPARISON
 // PSI_ELEMENT: org.jetbrains.kotlin.psi.KtClass
 // OPTIONS: derivedClasses
 fun foo() {
@@ -14,3 +15,4 @@ fun foo() {
     }
 }
 
+// DISABLE-ERRORS

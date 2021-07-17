@@ -3,15 +3,6 @@
 // SKIP_TXT
 
 /*
- * KOTLIN DIAGNOSTICS NOT LINKED SPEC TEST (POSITIVE)
- *
- * SECTIONS: dfa
- * NUMBER: 58
- * DESCRIPTION: Raw data flow analysis test
- * HELPERS: classes, objects, typealiases, functions, enumClasses, interfaces, sealedClasses
- */
-
-/*
  * TESTCASE NUMBER: 1
  * UNEXPECTED BEHAVIOUR
  * ISSUES: KT-18532
@@ -83,7 +74,7 @@ fun case_6() {
     var y: Inv<out Number> = Inv<Int>()
     if (true)
         y = x
-    y.put(0)
+    y.put(<!ARGUMENT_TYPE_MISMATCH!>0<!>)
     val z: Inv<out Number> = x
     z.put(0)
 }

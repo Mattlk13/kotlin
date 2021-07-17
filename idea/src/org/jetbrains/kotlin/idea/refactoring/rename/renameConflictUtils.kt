@@ -11,6 +11,7 @@ import com.intellij.refactoring.util.MoveRenameUsageInfo
 import com.intellij.usageView.UsageInfo
 import com.intellij.usageView.UsageViewUtil
 import org.jetbrains.kotlin.descriptors.*
+import org.jetbrains.kotlin.idea.FrontendInternals
 import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.idea.analysis.analyzeInContext
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
@@ -85,7 +86,7 @@ internal fun checkRedeclarations(
     descriptor: DeclarationDescriptor = declaration.unsafeResolveToDescriptor(resolutionFacade)
 ) {
     fun DeclarationDescriptor.isTopLevelPrivate(): Boolean =
-        this is DeclarationDescriptorWithVisibility && visibility == Visibilities.PRIVATE && containingDeclaration is PackageFragmentDescriptor
+        this is DeclarationDescriptorWithVisibility && visibility == DescriptorVisibilities.PRIVATE && containingDeclaration is PackageFragmentDescriptor
 
     fun isInSameFile(d1: DeclarationDescriptor, d2: DeclarationDescriptor): Boolean =
         (d1 as? DeclarationDescriptorWithSource)?.source?.getPsi()?.containingFile == (d2 as? DeclarationDescriptorWithSource)?.source
@@ -153,6 +154,8 @@ internal fun checkRedeclarations(
         is PropertyDescriptor,
         is FunctionDescriptor,
         is ClassifierDescriptor -> {
+
+            @OptIn(FrontendInternals::class)
             val typeSpecificityComparator = resolutionFacade.getFrontendService(descriptor.module, TypeSpecificityComparator::class.java)
             OverloadChecker(typeSpecificityComparator)
         }
@@ -163,7 +166,7 @@ internal fun checkRedeclarations(
         if (overloadChecker != null && overloadChecker.isOverloadable(descriptor, candidateDescriptor)) continue
         val what = candidate.renderDescription()
         val where = candidate.representativeContainer()?.renderDescription() ?: continue
-        val message = KotlinBundle.message("text.0.already.declared.in.1", what, where).capitalize()
+        val message = KotlinBundle.message("text.0.already.declared.in.1", what, where).replaceFirstChar(Char::uppercaseChar)
         result += BasicUnresolvableCollisionUsageInfo(candidate, candidate, message)
     }
 }
@@ -194,7 +197,7 @@ fun reportShadowing(
         "text.0.will.be.shadowed.by.1",
         declaration.renderDescription(),
         candidate.renderDescription()
-    ).capitalize()
+    ).replaceFirstChar(Char::uppercaseChar)
     result += BasicUnresolvableCollisionUsageInfo(refElement, elementToBindUsageInfoTo, message)
 }
 

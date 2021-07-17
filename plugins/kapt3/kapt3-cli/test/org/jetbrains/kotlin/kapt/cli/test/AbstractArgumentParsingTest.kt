@@ -5,8 +5,8 @@
 package org.jetbrains.kotlin.kapt.cli.test
 
 import junit.framework.TestCase
-import org.jetbrains.kotlin.cli.common.messages.CompilerMessageLocation
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
+import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSourceLocation
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.kapt.cli.transformArgs
 import org.jetbrains.kotlin.test.JUnit3RunnerWithInners
@@ -25,7 +25,7 @@ abstract class AbstractArgumentParsingTest : TestCase() {
         val before = sections.single { it.name == "before" }
 
         val messageCollector = TestMessageCollector()
-        val transformedArgs = transformArgs(before.content.split(LINE_SEPARATOR), messageCollector, isTest = true)
+        val transformedArgs = transformArgs(before.content.lines(), messageCollector, isTest = true)
         val actualAfter = if (messageCollector.hasErrors()) messageCollector.toString() else transformedArgs.joinToString(LINE_SEPARATOR)
         val actual = sections.replacingSection("after", actualAfter).render()
 
@@ -34,7 +34,7 @@ abstract class AbstractArgumentParsingTest : TestCase() {
 }
 
 class TestMessageCollector : MessageCollector {
-    data class Message(val severity: CompilerMessageSeverity, val message: String, val location: CompilerMessageLocation?)
+    data class Message(val severity: CompilerMessageSeverity, val message: String, val location: CompilerMessageSourceLocation?)
 
     val messages = arrayListOf<Message>()
 
@@ -42,7 +42,7 @@ class TestMessageCollector : MessageCollector {
         messages.clear()
     }
 
-    override fun report(severity: CompilerMessageSeverity, message: String, location: CompilerMessageLocation?) {
+    override fun report(severity: CompilerMessageSeverity, message: String, location: CompilerMessageSourceLocation?) {
         messages.add(Message(severity, message, location))
     }
 

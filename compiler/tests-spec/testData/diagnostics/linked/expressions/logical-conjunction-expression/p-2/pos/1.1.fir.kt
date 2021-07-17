@@ -1,17 +1,7 @@
+// FIR_IDE_IGNORE
 // !LANGUAGE: +NewInference
 // !DIAGNOSTICS: -UNUSED_VARIABLE -ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE -UNUSED_VALUE -UNUSED_PARAMETER -UNUSED_EXPRESSION
 // SKIP_TXT
-
-/*
- * KOTLIN DIAGNOSTICS SPEC TEST (POSITIVE)
- *
- * SPEC VERSION: 0.1-313
- * PLACE: expressions, logical-conjunction-expression -> paragraph 2 -> sentence 1
- * RELEVANT PLACES: expressions, logical-conjunction-expression -> paragraph 2 -> sentence 2
- * NUMBER: 1
- * DESCRIPTION: Both operands of a logical conjunction expression must have a type which is a subtype of kotlin.Boolean
- * HELPERS: checkType
- */
 
 // MODULE: libModule
 // FILE: libModule/JavaClass.java
@@ -53,5 +43,5 @@ fun case1() {
     val x3 = a1 && a2 && a3 && a4 && a5 as Boolean
     <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Boolean")!>x3<!>
 
-    x3 <!AMBIGUITY!>checkType<!> { <!INAPPLICABLE_CANDIDATE!>check<!><Boolean>()}
+    x3 <!OVERLOAD_RESOLUTION_AMBIGUITY!>checkType<!> { <!NONE_APPLICABLE!>check<!><Boolean>()}
 }

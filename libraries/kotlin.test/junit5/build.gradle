@@ -2,10 +2,13 @@ description = 'Kotlin Test JUnit 5'
 
 apply plugin: 'kotlin-platform-jvm'
 
-configureJvm6Project(project)
-configurePublishing(project)
-ext.javaHome = JDK_18
-ext.jvmTarget = "1.8"
+def includeJava9 = BuildPropertiesExtKt.getIncludeJava9(project.kotlinBuildProperties)
+
+sourceSets {
+    if (includeJava9) {
+        java9
+    }
+}
 
 project.ext["jpsLibraryPath"] = rootProject.distLibDir
 
@@ -18,30 +21,36 @@ dependencies {
 }
 
 jar {
-    manifestAttributes(manifest, project, 'Test')
+    manifestAttributes(manifest, project, 'Test', true)
+    if (includeJava9) {
+        from sourceSets.java9.output
+    }
 }
 
-artifacts {
-    archives sourcesJar
-    sources sourcesJar
-}
-
-javadocJar()
-
-tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile) {
-    kotlinOptions.jdkHome = JDK_18
-    kotlinOptions.jvmTarget = 1.8
-}
+configureSourcesJar()
+configureJavadocJar()
 
 compileKotlin {
-    kotlinOptions.freeCompilerArgs = ["-Xallow-kotlin-package", "-module-name", project.name]
+    kotlinOptions.freeCompilerArgs = [
+        "-Xallow-kotlin-package",
+        "-Xsuppress-deprecated-jvm-target-warning",
+    ]
+    kotlinOptions.moduleName = project.name
 }
 
 compileTestKotlin {
-    kotlinOptions.freeCompilerArgs = ["-Xallow-kotlin-package"]
+    kotlinOptions.freeCompilerArgs = [
+        "-Xallow-kotlin-package",
+        "-Xsuppress-deprecated-jvm-target-warning",
+    ]
+}
+
+configureJvmIrBackend(project)
+
+if (includeJava9) {
+    LibrariesCommon.configureJava9Compilation(project, 'kotlin.test.junit5')
 }
 
 test {
     useJUnitPlatform()
-    executable = "$JDK_18/bin/java"
 }

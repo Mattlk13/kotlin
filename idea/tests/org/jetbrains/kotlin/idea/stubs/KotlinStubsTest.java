@@ -13,12 +13,15 @@ import org.jetbrains.kotlin.idea.test.KotlinLightProjectDescriptor;
 import org.jetbrains.kotlin.psi.KtClass;
 import org.jetbrains.kotlin.psi.KtDeclaration;
 import org.jetbrains.kotlin.psi.KtFile;
+import org.jetbrains.kotlin.psi.KtScript;
 import org.jetbrains.kotlin.psi.stubs.KotlinClassStub;
 import org.jetbrains.kotlin.psi.stubs.elements.KtStubElementTypes;
 import org.jetbrains.kotlin.test.JUnit3WithIdeaConfigurationRunner;
 import org.junit.runner.RunWith;
 
 import java.util.List;
+
+import static org.jetbrains.kotlin.idea.test.AstAccessControl.dropPsiAndTestWithControlledAccessToAst;
 
 @RunWith(JUnit3WithIdeaConfigurationRunner.class)
 public class KotlinStubsTest extends LightCodeInsightFixtureTestCase {
@@ -43,5 +46,23 @@ public class KotlinStubsTest extends LightCodeInsightFixtureTestCase {
         KtClass ktClass = (KtClass) declarations.get(0);
         KotlinClassStub stub = KtStubElementTypes.CLASS.createStub(ktClass, null);
         assertEquals(true, stub.isInterface());
+    }
+
+    public void testScriptDeclaration() {
+        PsiFile psiFile = myFixture.configureByText("foo.kts", "fun foo() {}");
+        KtFile ktFile = (KtFile) psiFile;
+
+        assertNull("file is parsed from AST", ktFile.getStub());
+        List<KtDeclaration> astDeclarations = ktFile.getDeclarations();
+        assertEquals(1, astDeclarations.size());
+        assertTrue(astDeclarations.get(0) instanceof KtScript);
+
+        dropPsiAndTestWithControlledAccessToAst(true, ktFile, getTestRootDisposable(), () -> {
+            List<KtDeclaration> stubDeclarations = ktFile.getDeclarations();
+            assertEquals(1, stubDeclarations.size());
+            assertTrue(stubDeclarations.get(0) instanceof KtScript);
+
+            return null;
+        });
     }
 }

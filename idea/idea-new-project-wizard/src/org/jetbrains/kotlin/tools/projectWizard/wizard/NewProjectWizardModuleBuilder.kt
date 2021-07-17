@@ -3,7 +3,6 @@ package org.jetbrains.kotlin.tools.projectWizard.wizard
 import com.intellij.ide.RecentProjectsManager
 import com.intellij.ide.actions.NewProjectAction
 import com.intellij.ide.impl.NewProjectUtil
-import com.intellij.ide.projectWizard.NewProjectWizard
 import com.intellij.ide.util.projectWizard.*
 import com.intellij.ide.wizard.AbstractWizard
 import com.intellij.openapi.Disposable
@@ -14,11 +13,9 @@ import com.intellij.openapi.module.ModuleType
 import com.intellij.openapi.options.ConfigurationException
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.roots.ui.configuration.ModulesProvider
 import com.intellij.openapi.ui.Messages
 import com.intellij.util.SystemProperties
-import org.jetbrains.kotlin.idea.configuration.ExperimentalFeatures
 import org.jetbrains.kotlin.idea.framework.KotlinTemplatesFactory
 import org.jetbrains.kotlin.idea.projectWizard.ProjectCreationStats
 import org.jetbrains.kotlin.idea.projectWizard.UiEditorUsageStats
@@ -43,6 +40,7 @@ import org.jetbrains.kotlin.tools.projectWizard.wizard.ui.firstStep.FirstWizardS
 import org.jetbrains.kotlin.tools.projectWizard.wizard.ui.runWithProgressBar
 import org.jetbrains.kotlin.tools.projectWizard.wizard.ui.secondStep.SecondStepWizardComponent
 import java.io.File
+import java.util.*
 import javax.swing.JButton
 import javax.swing.JComponent
 import com.intellij.openapi.module.Module as IdeaModule
@@ -68,8 +66,7 @@ class NewProjectWizardModuleBuilder : EmptyModuleBuilder() {
         private const val INVALID_PROJECT_NAME_MESSAGE = "Invalid project name"
     }
 
-    override fun isAvailable(): Boolean =
-        ExperimentalFeatures.NewWizard.isEnabled && isCreatingNewProject()
+    override fun isAvailable(): Boolean = isCreatingNewProject()
 
     private var wizardContext: WizardContext? = null
     private var finishButtonClicked: Boolean = false
@@ -163,6 +160,8 @@ class NewProjectWizardModuleBuilder : EmptyModuleBuilder() {
 }
 
 abstract class WizardStep(protected val wizard: IdeWizard, private val phase: GenerationPhase) : ModuleWizardStep() {
+    override fun getHelpId(): String = HELP_ID
+
     override fun updateDataModel() = Unit // model is updated on every UI action
     override fun validate(): Boolean =
         when (val result = wizard.context.read { with(wizard) { validate(setOf(phase)) } }) {
@@ -175,6 +174,10 @@ abstract class WizardStep(protected val wizard: IdeWizard, private val phase: Ge
 
     protected open fun handleErrors(error: ValidationResult.ValidationError) {
         throw ConfigurationException(error.asHtml(), "Validation Error")
+    }
+
+    companion object {
+        private const val HELP_ID = "new_project_wizard_kotlin"
     }
 }
 
@@ -202,12 +205,12 @@ class ModuleNewWizardFirstStep(wizard: IdeWizard) : WizardStep(wizard, Generatio
         val suggestedProjectParentLocation = suggestProjectLocation()
         val suggestedProjectName = ProjectWizardUtil.findNonExistingFileName(suggestedProjectParentLocation, "untitled", "")
         wizard.context.writeSettings {
-            StructurePlugin::name.reference.setValue(suggestedProjectName)
-            StructurePlugin::projectPath.reference.setValue(suggestedProjectParentLocation / suggestedProjectName)
-            StructurePlugin::artifactId.reference.setValue(suggestedProjectName)
+            StructurePlugin.name.reference.setValue(suggestedProjectName)
+            StructurePlugin.projectPath.reference.setValue(suggestedProjectParentLocation / suggestedProjectName)
+            StructurePlugin.artifactId.reference.setValue(suggestedProjectName)
 
-            if (StructurePlugin::groupId.reference.notRequiredSettingValue == null) {
-                StructurePlugin::groupId.reference.setValue(suggestGroupId())
+            if (StructurePlugin.groupId.notRequiredSettingValue == null) {
+                StructurePlugin.groupId.reference.setValue(suggestGroupId())
             }
         }
     }
@@ -215,7 +218,7 @@ class ModuleNewWizardFirstStep(wizard: IdeWizard) : WizardStep(wizard, Generatio
     private fun suggestGroupId(): String {
         val username = SystemProperties.getUserName() ?: return DEFAULT_GROUP_ID
         if (!username.matches("[\\w\\s]+".toRegex())) return DEFAULT_GROUP_ID
-        val usernameAsGroupId = username.trim().toLowerCase().split("\\s+".toRegex()).joinToString(separator = ".")
+        val usernameAsGroupId = username.trim().lowercase().split("\\s+".toRegex()).joinToString(separator = ".")
         return "me.$usernameAsGroupId"
     }
 

@@ -2,8 +2,8 @@
 open class B0(x: Int)
 
 class A0 : B0 {
-    <!INAPPLICABLE_CANDIDATE!>constructor()<!>
-    constructor(x: Int) : <!INAPPLICABLE_CANDIDATE!>super<!>()
+    constructor()
+    constructor(x: Int) : <!NO_VALUE_FOR_PARAMETER!>super<!>()
 }
 
 // --------------------------
@@ -26,8 +26,8 @@ open class B2 {
 }
 
 class A2 : B2 {
-    <!INAPPLICABLE_CANDIDATE!>constructor()<!>
-    constructor(x: Int) : <!INAPPLICABLE_CANDIDATE!>super<!>()
+    <!EXPLICIT_DELEGATION_CALL_REQUIRED!>constructor()<!>
+    constructor(x: Int) : <!NONE_APPLICABLE!>super<!>()
 }
 
 // --------------------------
@@ -37,6 +37,6 @@ open class B3 {
 }
 
 class A3 : B3 {
-    <!INAPPLICABLE_CANDIDATE!>constructor()<!>
-    constructor(x: Int) : <!INAPPLICABLE_CANDIDATE!>super<!>()
+    constructor()
+    constructor(x: Int) : <!INVISIBLE_REFERENCE!>super<!>()
 }

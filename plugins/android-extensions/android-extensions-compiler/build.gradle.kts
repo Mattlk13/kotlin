@@ -19,6 +19,7 @@ dependencies {
     compileOnly(project(":compiler:backend"))
     compileOnly(project(":compiler:ir.backend.common"))
     compileOnly(project(":compiler:backend.jvm"))
+    compileOnly(project(":compiler:ir.tree.impl"))
     compileOnly(project(":kotlin-android-extensions-runtime"))
     compileOnly(intellijCoreDep()) { includeJars("intellij-core") }
     compileOnly(intellijDep()) { includeJars("asm-all", rootProject = rootProject) }
@@ -34,6 +35,7 @@ dependencies {
     testCompile(commonDep("junit:junit"))
 
     testRuntime(intellijPluginDep("junit"))
+    testRuntime(intellijDep())
 
     robolectricClasspath(commonDep("org.robolectric", "robolectric"))
     robolectricClasspath("org.robolectric:android-all:4.4_r1-robolectric-1")
@@ -62,12 +64,18 @@ projectTest {
     dependsOn(":dist")
     workingDir = rootDir
     useAndroidJar()
+
+    val androidPluginPath = File(intellijRootDir(), "plugins/android/lib").canonicalPath
+    systemProperty("ideaSdk.androidPlugin.path", androidPluginPath)
+
+    val androidExtensionsRuntimeProvider = project.provider {
+        androidExtensionsRuntimeForTests.asPath
+    }
+    val robolectricClasspathProvider = project.provider {
+        robolectricClasspath.asPath
+    }
     doFirst {
-        systemProperty("androidExtensionsRuntime.classpath", androidExtensionsRuntimeForTests.asPath)
-        val androidPluginPath = File(intellijRootDir(), "plugins/android/lib").canonicalPath
-        systemProperty("ideaSdk.androidPlugin.path", androidPluginPath)
-        systemProperty("robolectric.classpath", robolectricClasspath.asPath)
+        systemProperty("androidExtensionsRuntime.classpath", androidExtensionsRuntimeProvider.get())
+        systemProperty("robolectric.classpath", robolectricClasspathProvider.get())
     }
 }
-
-apply(from = "$rootDir/gradle/kotlinPluginPublication.gradle.kts")

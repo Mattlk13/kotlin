@@ -10,93 +10,103 @@ import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.Nested
 import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.TaskAction
-import org.jetbrains.kotlin.gradle.targets.js.nodejs.NodeJsRootExtension
+import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinJsCompilation
+import org.jetbrains.kotlin.gradle.targets.js.ir.KotlinJsIrCompilation
+import org.jetbrains.kotlin.gradle.targets.js.npm.NpmProject.Companion.PACKAGE_JSON
+import org.jetbrains.kotlin.gradle.utils.property
 import java.io.File
 import javax.inject.Inject
 
 open class PublicPackageJsonTask
 @Inject
 constructor(
-    private val nodeJs: NodeJsRootExtension,
-    private val npmProject: NpmProject
+    @Transient
+    private val compilation: KotlinJsCompilation
 ) : DefaultTask() {
+    private val npmProject = compilation.npmProject
+
+    @Transient
+    private val nodeJs = npmProject.nodeJs
+    private val resolutionManager = nodeJs.npmResolutionManager
+
+    private val compilationName = compilation.disambiguatedName
+    private val projectPath = project.path
 
     private val compilationResolution
-        get() = nodeJs.npmResolutionManager.requireInstalled()[project][npmProject.compilation]
+        get() = resolutionManager.requireInstalled(
+            services,
+            logger
+        )[projectPath][compilationName]
+
+    private val packageJsonHandlers = compilation.packageJsonHandlers
+
+    @get:Input
+    val packageJsonCustomFields: Map<String, Any?>
+        get() = PackageJson(fakePackageJsonValue, fakePackageJsonValue)
+            .apply {
+                packageJsonHandlers.forEach { it() }
+            }.customFields
 
     @get:Nested
-    internal val externalDependencies: Collection<NestedNpmDependency>
+    internal val externalDependencies: Collection<NpmDependencyDeclaration>
         get() = compilationResolution.externalNpmDependencies
             .map {
-                NestedNpmDependency(
+                NpmDependencyDeclaration(
                     scope = it.scope,
                     name = it.name,
-                    version = it.version
+                    version = it.version,
+                    generateExternals = it.generateExternals
                 )
             }
 
-    private val realExternalDependencies: Collection<NpmDependency>
-        get() = compilationResolution.externalNpmDependencies
+    private val publicPackageJsonTaskName by lazy {
+        npmProject.publicPackageJsonTaskName
+    }
 
-    @Input
-    var skipOnEmptyNpmDependencies: Boolean = false
+    private val defaultPackageJsonFile by lazy {
+        project.buildDir
+            .resolve("tmp")
+            .resolve(publicPackageJsonTaskName)
+            .resolve(PACKAGE_JSON)
+    }
 
     @get:OutputFile
-    val packageJson: File
-        get() = npmProject.publicPackageJson
+    var packageJsonFile: File by property { defaultPackageJsonFile }
+
+    private val isJrIrCompilation = compilation is KotlinJsIrCompilation
+    private val projectVersion = project.version.toString()
 
     @TaskAction
     fun resolve() {
-        packageJson(npmProject, realExternalDependencies).let { packageJson ->
-            if (skipOnEmptyNpmDependencies && packageJson.skipRequired()) {
-                return
+        packageJson(npmProject.name, projectVersion, npmProject.main, externalDependencies, packageJsonHandlers).let { packageJson ->
+            packageJson.main = "${npmProject.name}.js"
+
+            if (isJrIrCompilation) {
+                packageJson.types = "${npmProject.name}.d.ts"
             }
 
             packageJson.apply {
                 listOf(
                     dependencies,
+                    devDependencies,
                     peerDependencies,
                     optionalDependencies
                 ).forEach { it.processDependencies() }
             }
 
-            packageJson.devDependencies.clear()
-
-            packageJson.saveTo(npmProject.publicPackageJson)
+            packageJson.saveTo(this@PublicPackageJsonTask.packageJsonFile)
         }
     }
 
     private fun MutableMap<String, String>.processDependencies() {
-        val newDependencies = mutableMapOf<String, String>()
-        filterNot { (_, version) -> version.isFileVersion() }
-            .forEach { (key, version) ->
-                newDependencies[key] = version
-            }
-
-        clear()
-
-        newDependencies.forEach { (key, version) ->
-            this[key] = version
+        filter { (_, version) ->
+            version.isFileVersion()
+        }.forEach { (key, _) ->
+            remove(key)
         }
     }
-
-    private fun PackageJson.skipRequired() =
-        dependencies.isEmpty() &&
-                peerDependencies.isEmpty() &&
-                optionalDependencies.isEmpty() &&
-                optionalDependencies.isEmpty() &&
-                bundledDependencies.isEmpty()
 
     companion object {
         const val NAME = "publicPackageJson"
     }
 }
-
-internal data class NestedNpmDependency(
-    @Input
-    val scope: NpmDependency.Scope,
-    @Input
-    val name: String,
-    @Input
-    val version: String
-)

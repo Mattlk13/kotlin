@@ -5,41 +5,38 @@
 
 package org.jetbrains.kotlin.fir.backend
 
-import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
-import org.jetbrains.kotlin.descriptors.FunctionDescriptor
-import org.jetbrains.kotlin.descriptors.PropertyDescriptor
 import org.jetbrains.kotlin.fir.FirSession
 import org.jetbrains.kotlin.fir.declarations.*
+import org.jetbrains.kotlin.fir.declarations.utils.isConst
 import org.jetbrains.kotlin.ir.declarations.MetadataSource
-import org.jetbrains.kotlin.ir.descriptors.WrappedClassDescriptor
+import org.jetbrains.kotlin.name.Name
 
-interface FirMetadataSource : MetadataSource {
+sealed class FirMetadataSource : MetadataSource {
+    abstract val fir: FirDeclaration
 
-    val session: FirSession
+    val declarationSiteSession: FirSession
+        get() = fir.moduleData.session
 
-    class File(
-        val file: FirFile, override val session: FirSession, descriptors: List<DeclarationDescriptor>
-    ) : MetadataSource.File(descriptors), FirMetadataSource
+    override val name: Name?
+        get() = when (val fir = fir) {
+            is FirConstructor -> Name.special("<init>")
+            is FirSimpleFunction -> fir.name
+            is FirRegularClass -> fir.name
+            is FirProperty -> fir.name
+            else -> null
+        }
 
-    class Class(
-        val klass: FirClass<*>, descriptor: WrappedClassDescriptor
-    ) : MetadataSource.Class(descriptor), FirMetadataSource {
-        override val session: FirSession
-            get() = klass.session
+    class File(override val fir: FirFile) : FirMetadataSource(), MetadataSource.File {
+        override var serializedIr: ByteArray? = null
     }
 
-    class Function(
-        val function: FirFunction<*>, descriptor: FunctionDescriptor
-    ) : MetadataSource.Function(descriptor), FirMetadataSource {
-        override val session: FirSession
-            get() = function.session
+    class Class(override val fir: FirClass) : FirMetadataSource(), MetadataSource.Class {
+        override var serializedIr: ByteArray? = null
     }
 
-    class Variable(
-        val variable: FirVariable<*>,
-        descriptor: PropertyDescriptor
-    ) : MetadataSource.Property(descriptor), FirMetadataSource {
-        override val session: FirSession
-            get() = variable.session
+    class Function(override val fir: FirFunction) : FirMetadataSource(), MetadataSource.Function
+
+    class Property(override val fir: FirProperty) : FirMetadataSource(), MetadataSource.Property {
+        override val isConst: Boolean get() = fir.isConst
     }
 }

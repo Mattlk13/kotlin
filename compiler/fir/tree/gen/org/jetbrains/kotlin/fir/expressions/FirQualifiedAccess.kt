@@ -1,45 +1,55 @@
 /*
- * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2021 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.fir.expressions
 
+import org.jetbrains.kotlin.fir.FirElement
 import org.jetbrains.kotlin.fir.FirSourceElement
 import org.jetbrains.kotlin.fir.references.FirReference
 import org.jetbrains.kotlin.fir.types.FirTypeProjection
 import org.jetbrains.kotlin.fir.visitors.*
+import org.jetbrains.kotlin.fir.FirImplementationDetail
 
 /*
  * This file was generated automatically
  * DO NOT MODIFY IT MANUALLY
  */
 
-interface FirQualifiedAccess : FirQualifiedAccessWithoutCallee, FirResolvable {
-    override val source: FirSourceElement?
-    override val annotations: List<FirAnnotationCall>
-    override val safe: Boolean
-    override val typeArguments: List<FirTypeProjection>
-    override val explicitReceiver: FirExpression?
-    override val dispatchReceiver: FirExpression
-    override val extensionReceiver: FirExpression
+interface FirQualifiedAccess : FirResolvable, FirStatement {
     override val calleeReference: FirReference
+    override val annotations: List<FirAnnotationCall>
+    val typeArguments: List<FirTypeProjection>
+    val explicitReceiver: FirExpression?
+    val dispatchReceiver: FirExpression
+    val extensionReceiver: FirExpression
+    override val source: FirSourceElement?
 
     override fun <R, D> accept(visitor: FirVisitor<R, D>, data: D): R = visitor.visitQualifiedAccess(this, data)
 
-    override fun replaceTypeArguments(newTypeArguments: List<FirTypeProjection>)
+    @Suppress("UNCHECKED_CAST")
+    override fun <E: FirElement, D> transform(transformer: FirTransformer<D>, data: D): E = 
+        transformer.transformQualifiedAccess(this, data) as E
 
     override fun replaceCalleeReference(newCalleeReference: FirReference)
 
-    override fun <D> transformAnnotations(transformer: FirTransformer<D>, data: D): FirQualifiedAccess
+    fun replaceTypeArguments(newTypeArguments: List<FirTypeProjection>)
 
-    override fun <D> transformTypeArguments(transformer: FirTransformer<D>, data: D): FirQualifiedAccess
+    fun replaceExplicitReceiver(newExplicitReceiver: FirExpression?)
 
-    override fun <D> transformExplicitReceiver(transformer: FirTransformer<D>, data: D): FirQualifiedAccess
-
-    override fun <D> transformDispatchReceiver(transformer: FirTransformer<D>, data: D): FirQualifiedAccess
-
-    override fun <D> transformExtensionReceiver(transformer: FirTransformer<D>, data: D): FirQualifiedAccess
+    @FirImplementationDetail
+    fun replaceSource(newSource: FirSourceElement?)
 
     override fun <D> transformCalleeReference(transformer: FirTransformer<D>, data: D): FirQualifiedAccess
+
+    override fun <D> transformAnnotations(transformer: FirTransformer<D>, data: D): FirQualifiedAccess
+
+    fun <D> transformTypeArguments(transformer: FirTransformer<D>, data: D): FirQualifiedAccess
+
+    fun <D> transformExplicitReceiver(transformer: FirTransformer<D>, data: D): FirQualifiedAccess
+
+    fun <D> transformDispatchReceiver(transformer: FirTransformer<D>, data: D): FirQualifiedAccess
+
+    fun <D> transformExtensionReceiver(transformer: FirTransformer<D>, data: D): FirQualifiedAccess
 }

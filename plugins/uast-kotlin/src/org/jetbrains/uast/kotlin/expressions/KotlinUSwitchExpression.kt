@@ -23,7 +23,6 @@ import org.jetbrains.kotlin.psi.KtWhenEntry
 import org.jetbrains.kotlin.psi.KtWhenExpression
 import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 import org.jetbrains.uast.*
-import org.jetbrains.uast.kotlin.declarations.KotlinUIdentifier
 import org.jetbrains.uast.kotlin.kinds.KotlinSpecialExpressionKinds
 
 class KotlinUSwitchExpression(
@@ -42,9 +41,9 @@ class KotlinUSwitchExpression(
 
     override fun asRenderString() = buildString {
         val expr = expression?.let { "(" + it.asRenderString() + ") " } ?: ""
-        appendln("switch $expr {")
-        appendln(body.asRenderString())
-        appendln("}")
+        appendLine("switch $expr {")
+        appendLine(body.asRenderString())
+        appendLine("}")
     }
 
     override val switchIdentifier: UIdentifier
@@ -62,9 +61,9 @@ class KotlinUSwitchEntry(
     override val body: UExpressionList by lz {
         object : KotlinUExpressionList(sourcePsi, KotlinSpecialExpressionKinds.WHEN_ENTRY, this@KotlinUSwitchEntry) {
             override fun asRenderString() = buildString {
-                appendln("{")
-                expressions.forEach { appendln(it.asRenderString().withMargin) }
-                appendln("}")
+                appendLine("{")
+                expressions.forEach { appendLine(it.asRenderString().withMargin) }
+                appendLine("}")
             }
         }.apply KotlinUExpressionList@{
             val exprPsi = this@KotlinUSwitchEntry.sourcePsi.expression
@@ -74,7 +73,7 @@ class KotlinUSwitchEntry(
             }
             expressions =
                 if (userExpressions.isNotEmpty())
-                    userExpressions.subList(0, userExpressions.lastIndex) + object : UYieldExpression, JvmDeclarationUElementPlaceholder {
+                    userExpressions.subList(0, userExpressions.lastIndex) + object : UYieldExpression {
                         override val javaPsi: PsiElement? = null
                         override val sourcePsi: PsiElement? = null
                         override val psi: PsiElement?

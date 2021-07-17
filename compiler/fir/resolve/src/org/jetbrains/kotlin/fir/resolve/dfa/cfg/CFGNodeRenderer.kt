@@ -19,6 +19,7 @@ fun CFGNode<*>.render(): String =
             when (this@render) {
                 is FunctionEnterNode -> "Enter function \"${fir.name()}\""
                 is FunctionExitNode -> "Exit function \"${fir.name()}\""
+                is LocalFunctionDeclarationNode -> "Local function declaration ${owner.name}"
 
                 is BlockEnterNode -> "Enter block"
                 is BlockExitNode -> "Exit block"
@@ -40,9 +41,9 @@ fun CFGNode<*>.render(): String =
 
                 is QualifiedAccessNode -> "Access variable ${fir.calleeReference.render(CfgRenderMode)}"
                 is ResolvedQualifierNode -> "Access qualifier ${fir.classId}"
-                is OperatorCallNode -> "Operator ${fir.operation.operator}"
                 is ComparisonExpressionNode -> "Comparison ${fir.operation.operator}"
                 is TypeOperatorCallNode -> "Type operator: \"${fir.render(CfgRenderMode)}\""
+                is EqualityOperatorCallNode -> "Equality operator ${fir.operation.operator}"
                 is JumpNode -> "Jump: ${fir.render()}"
                 is StubNode -> "Stub"
                 is CheckNotNullCallNode -> "Check not null: ${fir.render(CfgRenderMode)}"
@@ -59,6 +60,7 @@ fun CFGNode<*>.render(): String =
                 is VariableAssignmentNode -> "Assignment: ${fir.lValue.render(CfgRenderMode)}"
                 is FunctionCallNode -> "Function call: ${fir.render(CfgRenderMode)}"
                 is DelegatedConstructorCallNode -> "Delegated constructor call: ${fir.render(CfgRenderMode)}"
+                is StringConcatenationCallNode -> "String concatenation call: ${fir.render(CfgRenderMode)}"
                 is ThrowExceptionNode -> "Throw: ${fir.render(CfgRenderMode)}"
 
                 is TryExpressionEnterNode -> "Try expression enter"
@@ -81,8 +83,11 @@ fun CFGNode<*>.render(): String =
                 is BinaryOrEnterRightOperandNode -> "Enter right part of ||"
                 is BinaryOrExitNode -> "Exit ||"
 
+                is PartOfClassInitializationNode -> "Part of class initialization"
                 is PropertyInitializerEnterNode -> "Enter property"
                 is PropertyInitializerExitNode -> "Exit property"
+                is FieldInitializerEnterNode -> "Enter field"
+                is FieldInitializerExitNode -> "Exit field"
                 is InitBlockEnterNode -> "Enter init block"
                 is InitBlockExitNode -> "Exit init block"
                 is AnnotationEnterNode -> "Enter annotation"
@@ -97,23 +102,42 @@ fun CFGNode<*>.render(): String =
                 is PostponedLambdaEnterNode -> "Postponed enter to lambda"
                 is PostponedLambdaExitNode -> "Postponed exit from lambda"
 
+                is AnonymousFunctionExpressionExitNode -> "Exit anonymous function expression"
+
                 is UnionFunctionCallArgumentsNode -> "Call arguments union"
 
                 is ClassEnterNode -> "Enter class ${owner.name}"
                 is ClassExitNode -> "Exit class ${owner.name}"
                 is LocalClassExitNode -> "Exit local class ${owner.name}"
                 is AnonymousObjectExitNode -> "Exit anonymous object"
+                is AnonymousObjectExpressionExitNode -> "Exit anonymous object expression"
 
                 is ContractDescriptionEnterNode -> "Enter contract description"
+
+                is EnterDefaultArgumentsNode -> "Enter default value of ${fir.name}"
+                is ExitDefaultArgumentsNode -> "Exit default value of ${fir.name}"
+
+                is ElvisLhsExitNode -> "Exit lhs of ?:"
+                is ElvisLhsIsNotNullNode -> "Lhs of ?: is not null"
+                is ElvisRhsEnterNode -> "Enter rhs of ?:"
+                is ElvisExitNode -> "Exit ?:"
+
+                is CallableReferenceNode -> "Callable reference: ${fir.render(CfgRenderMode)}"
 
                 is AbstractBinaryExitNode -> throw IllegalStateException()
             },
         )
     }
 
-private object CfgRenderMode : FirRenderer.RenderMode(renderLambdaBodies = false, renderCallArguments = false)
+private val CfgRenderMode = FirRenderer.RenderMode(
+    renderLambdaBodies = false,
+    renderCallArguments = false,
+    renderCallableFqNames = false,
+    renderDeclarationResolvePhase = false,
+    renderAnnotation = false,
+)
 
-private fun FirFunction<*>.name(): String = when (this) {
+private fun FirFunction.name(): String = when (this) {
     is FirSimpleFunction -> name.asString()
     is FirAnonymousFunction -> "anonymousFunction"
     is FirConstructor -> "<init>"

@@ -22,6 +22,7 @@ import org.jetbrains.kotlin.idea.test.PluginTestCaseBase
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.test.InTextDirectivesUtils
 import org.jetbrains.kotlin.test.MockLibraryUtil
+import org.jetbrains.kotlin.test.MockLibraryUtilExt
 import java.io.File
 import java.lang.reflect.InvocationTargetException
 import java.net.URL
@@ -46,10 +47,11 @@ abstract class AbstractKotlinExceptionFilterTest : KotlinCodeInsightTestCase() {
         }
         PsiTestUtil.setCompilerOutputPath(module, outDir.url, false)
 
+        val extraOptions = InTextDirectivesUtils.findListWithPrefixes(fileText, "// !LANGUAGE: ").map { "-XXLanguage:$it" }
         val classLoader: URLClassLoader
         if (InTextDirectivesUtils.getPrefixedBoolean(fileText, "// WITH_MOCK_LIBRARY: ") ?: false) {
             if (MOCK_LIBRARY_JAR == null) {
-                MOCK_LIBRARY_JAR = MockLibraryUtil.compileJvmLibraryToJar(MOCK_LIBRARY_SOURCES, "mockLibrary", addSources = true)
+                MOCK_LIBRARY_JAR = MockLibraryUtilExt.compileJvmLibraryToJar(MOCK_LIBRARY_SOURCES, "mockLibrary", addSources = true)
             }
 
             val mockLibraryJar = MOCK_LIBRARY_JAR ?: throw AssertionError("Mock library JAR is null")
@@ -65,13 +67,13 @@ abstract class AbstractKotlinExceptionFilterTest : KotlinCodeInsightTestCase() {
                 }
                 moduleModel.commit()
             }
-            MockLibraryUtil.compileKotlin(path, File(outDir.path), extraClasspath = *arrayOf(mockLibraryPath))
+            MockLibraryUtil.compileKotlin(path, File(outDir.path), extraOptions, mockLibraryPath)
             classLoader = URLClassLoader(
                 arrayOf(URL(outDir.url + "/"), mockLibraryJar.toURI().toURL()),
                 ForTestCompileRuntime.runtimeJarClassLoader()
             )
         } else {
-            MockLibraryUtil.compileKotlin(path, File(outDir.path))
+            MockLibraryUtil.compileKotlin(path, File(outDir.path), extraOptions)
             classLoader = URLClassLoader(
                 arrayOf(URL(outDir.url + "/")),
                 ForTestCompileRuntime.runtimeJarClassLoader()

@@ -5,6 +5,6 @@ class My {
 }
 
 fun My.foo(i: Int) {
-    <!INAPPLICABLE_CANDIDATE!>i<!>("")
-    <!INAPPLICABLE_CANDIDATE!>1("")<!>
+    <!INVISIBLE_REFERENCE!>i<!>("")
+    <!INVISIBLE_REFERENCE!>1<!>("")
 }

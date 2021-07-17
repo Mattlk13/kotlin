@@ -3,17 +3,6 @@
 // SKIP_TXT
 // FULL_JDK
 
-/*
- * KOTLIN DIAGNOSTICS SPEC TEST (NEGATIVE)
- *
- * SPEC VERSION: 0.1-213
- * PLACE: declarations, classifier-declaration, class-declaration, abstract-classes -> paragraph 2 -> sentence 1
- * NUMBER: 6
- * DESCRIPTION: Abstract classes may contain one or more abstract members, which should be implemented in a subtype of this abstract class
- * ISSUES: KT-27825
- */
-
-
 // FILE: base/BaseJava.java
 package base;
 
@@ -38,7 +27,7 @@ import base.*
 // TESTCASE NUMBER: 1
 
 class Case1 : BaseJava() {
-    override fun foo(b: Boolean?) {}
+    <!CANNOT_OVERRIDE_INVISIBLE_MEMBER!>override<!> fun foo(b: Boolean?) {}
 }
 
 fun case1() {
@@ -52,7 +41,7 @@ fun case1() {
 abstract class AbstractClassCase2 : BaseJava() {}
 
 class Case2: AbstractClassCase2() {
-    override fun foo(b: Boolean?) {}
+    <!CANNOT_OVERRIDE_INVISIBLE_MEMBER!>override<!> fun foo(b: Boolean?) {}
 }
 
 fun case2() {
@@ -62,7 +51,7 @@ fun case2() {
 
 // TESTCASE NUMBER: 3
 
-class Case3 : BaseJava() {}
+<!INVISIBLE_ABSTRACT_MEMBER_FROM_SUPER!>class Case3<!> : BaseJava() {}
 
 fun case3() {
     val v = Case3()
@@ -74,7 +63,7 @@ fun case3() {
 */
 abstract class AbstractClassCase4 : BaseJava() {}
 
-class Case4 : AbstractClassCase4() {}
+<!INVISIBLE_ABSTRACT_MEMBER_FROM_SUPER!>class Case4<!> : AbstractClassCase4() {}
 
 fun case4() {
     val v = Case4()

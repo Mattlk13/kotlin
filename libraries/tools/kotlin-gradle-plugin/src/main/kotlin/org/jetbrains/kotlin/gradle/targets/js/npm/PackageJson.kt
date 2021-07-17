@@ -5,16 +5,19 @@
 
 package org.jetbrains.kotlin.gradle.targets.js.npm
 
-import com.google.gson.Gson
-import com.google.gson.GsonBuilder
+import com.google.gson.*
+import org.gradle.api.GradleException
 import org.jetbrains.kotlin.gradle.internal.ensureParentDirsCreated
 import java.io.File
+import java.io.Serializable
 
 // Gson set nulls reflectively no matter on default values and non-null types
 class PackageJson(
     var name: String,
     var version: String
-) {
+) : Serializable {
+    internal val customFields = mutableMapOf<String, Any?>()
+
     val empty: Boolean
         get() = main == null &&
                 private == null &&
@@ -30,6 +33,10 @@ class PackageJson(
     var main: String? = null
 
     var workspaces: Collection<String>? = null
+
+    var resolutions: Map<String, String>? = null
+
+    var types: String? = null
 
     @Suppress("USELESS_ELVIS")
     val devDependencies = mutableMapOf<String, String>()
@@ -51,6 +58,22 @@ class PackageJson(
     val bundledDependencies = mutableListOf<String>()
         get() = field ?: mutableListOf()
 
+    fun customField(pair: Pair<String, Any>) {
+        customFields[pair.first] = pair.second
+    }
+
+    fun customField(key: String, value: Any) {
+        customFields[key] = value
+    }
+
+    fun customField(key: String, value: Number) {
+        customFields[key] = value
+    }
+
+    fun customField(key: String, value: Boolean) {
+        customFields[key] = value
+    }
+
     companion object {
         fun scopedName(name: String): ScopedName = if (name.contains("/")) ScopedName(
             scope = name.substringBeforeLast("/").removePrefix("@"),
@@ -68,11 +91,35 @@ class PackageJson(
     fun saveTo(packageJsonFile: File) {
         val gson = GsonBuilder()
             .setPrettyPrinting()
+            .disableHtmlEscaping()
+            .addSerializationExclusionStrategy(
+                object : ExclusionStrategy {
+                    override fun shouldSkipField(f: FieldAttributes?): Boolean =
+                        f?.name == this@PackageJson::customFields.name
+
+                    override fun shouldSkipClass(clazz: Class<*>?): Boolean =
+                        false
+                }
+            )
             .create()
 
         packageJsonFile.ensureParentDirsCreated()
-        packageJsonFile.writer().use {
-            gson.toJson(this, it)
+        val jsonTree = gson.toJsonTree(this)
+        val previous = if (packageJsonFile.exists()) {
+            packageJsonFile.reader().use {
+                JsonParser.parseReader(it)
+            }
+        } else null
+
+        customFields
+            .forEach { (key, value) ->
+                val valueElement = gson.toJsonTree(value)
+                jsonTree.asJsonObject.add(key, valueElement)
+            }
+        if (jsonTree != previous) {
+            packageJsonFile.writer().use {
+                gson.toJson(jsonTree, it)
+            }
         }
     }
 }
@@ -82,49 +129,60 @@ fun fromSrcPackageJson(packageJson: File?): PackageJson? =
         Gson().fromJson(it, PackageJson::class.java)
     }
 
-fun packageJson(
-    npmProject: NpmProject,
-    npmDependencies: Collection<NpmDependency>
+internal fun packageJson(
+    name: String,
+    version: String,
+    main: String,
+    npmDependencies: Collection<NpmDependencyDeclaration>,
+    packageJsonHandlers: List<PackageJson.() -> Unit>
 ): PackageJson {
-    val compilation = npmProject.compilation
 
     val packageJson = PackageJson(
-        npmProject.name,
-        fixSemver(compilation.target.project.version.toString())
+        name,
+        fixSemver(version)
     )
 
-    packageJson.main = npmProject.main
+    packageJson.main = main
 
     val dependencies = mutableMapOf<String, String>()
 
     npmDependencies.forEach {
-        val module = it.key
-        dependencies[it.key] = chooseVersion(dependencies[module], it.version)
+        val module = it.name
+        dependencies[module] = chooseVersion(module, dependencies[module], it.version)
     }
 
     npmDependencies.forEach {
-        val dependency = dependencies.getValue(it.key)
+        val dependency = dependencies.getValue(it.name)
         when (it.scope) {
-            NpmDependency.Scope.NORMAL -> packageJson.dependencies[it.key] = dependency
-            NpmDependency.Scope.DEV -> packageJson.devDependencies[it.key] = dependency
-            NpmDependency.Scope.OPTIONAL -> packageJson.optionalDependencies[it.key] = dependency
-            NpmDependency.Scope.PEER -> packageJson.peerDependencies[it.key] = dependency
+            NpmDependency.Scope.NORMAL -> packageJson.dependencies[it.name] = dependency
+            NpmDependency.Scope.DEV -> packageJson.devDependencies[it.name] = dependency
+            NpmDependency.Scope.OPTIONAL -> packageJson.optionalDependencies[it.name] = dependency
+            NpmDependency.Scope.PEER -> packageJson.peerDependencies[it.name] = dependency
         }
     }
 
-    compilation.packageJsonHandlers.forEach {
+    packageJsonHandlers.forEach {
         it(packageJson)
     }
 
     return packageJson
 }
 
-// TODO: real versions conflict resolution
-private fun chooseVersion(oldVersion: String?, newVersion: String): String {
-    // https://yarnpkg.com/lang/en/docs/dependency-versions/#toc-x-ranges
-    if (oldVersion == "*") {
+private fun chooseVersion(
+    module: String,
+    oldVersion: String?,
+    newVersion: String
+): String {
+    if (oldVersion == null) {
         return newVersion
     }
 
-    return oldVersion ?: newVersion
+    return (includedRange(oldVersion) intersect includedRange(newVersion))?.toString()
+        ?: throw GradleException(
+            """
+                There is already declared version of '$module' with version '$oldVersion' which does not intersects with another declared version '${newVersion}'
+            """.trimIndent()
+        )
 }
+
+internal const val fakePackageJsonValue = "FAKE"

@@ -1,16 +1,6 @@
 // !DIAGNOSTICS: -UNUSED_VARIABLE
 // SKIP_TXT
 
-/*
- * KOTLIN DIAGNOSTICS NOT LINKED SPEC TEST (NEGATIVE)
- *
- * SECTIONS: local-variables, type-parameters
- * NUMBER: 1
- * DESCRIPTION: Local variables with forbidden type parameters.
- * UNEXPECTED BEHAVIOUR
- * ISSUES: KT-8341
- */
-
 // TESTCASE NUMBER: 1
 fun case_1() {
     val <T> x1 = 1
@@ -82,7 +72,7 @@ fun case_10(x: Boolean?) = when (val <T> x where T: suspend () -> Unit, T: Boole
 // TESTCASE NUMBER: 11
 fun case_11() {
     val <T> x by lazy { 1 }
-    var <T> x by lazy { 1 }
+    var <T> x by <!DELEGATE_SPECIAL_FUNCTION_MISSING!>lazy { 1 }<!>
 }
 
 // TESTCASE NUMBER: 12

@@ -5,49 +5,24 @@
 
 package org.jetbrains.kotlin.psi2ir.generators
 
+import org.jetbrains.kotlin.backend.common.SamTypeApproximator
 import org.jetbrains.kotlin.builtins.ReflectionTypes
 import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.descriptors.CallableDescriptor
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
 import org.jetbrains.kotlin.descriptors.NotFoundClasses
+import org.jetbrains.kotlin.ir.IrBuiltIns
 import org.jetbrains.kotlin.ir.builders.IrGeneratorContext
-import org.jetbrains.kotlin.ir.descriptors.IrBuiltIns
+import org.jetbrains.kotlin.ir.descriptors.IrBuiltInsOverDescriptors
 import org.jetbrains.kotlin.ir.expressions.IrDeclarationReference
-import org.jetbrains.kotlin.ir.util.ConstantValueGenerator
-import org.jetbrains.kotlin.ir.util.IdSignatureComposer
 import org.jetbrains.kotlin.ir.util.SymbolTable
 import org.jetbrains.kotlin.ir.util.TypeTranslator
+import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi2ir.Psi2IrConfiguration
-import org.jetbrains.kotlin.psi2ir.PsiSourceManager
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.storage.LockBasedStorageManager
 
-fun createGeneratorContext(
-    configuration: Psi2IrConfiguration,
-    moduleDescriptor: ModuleDescriptor,
-    bindingContext: BindingContext,
-    languageVersionSettings: LanguageVersionSettings,
-    symbolTable: SymbolTable,
-    extensions: GeneratorExtensions
-): GeneratorContext {
-    val typeTranslator = TypeTranslator(symbolTable, languageVersionSettings, builtIns = moduleDescriptor.builtIns)
-    val constantValueGenerator = ConstantValueGenerator(moduleDescriptor, symbolTable)
-    typeTranslator.constantValueGenerator = constantValueGenerator
-    constantValueGenerator.typeTranslator = typeTranslator
-    return GeneratorContext(
-        configuration,
-        moduleDescriptor,
-        bindingContext,
-        languageVersionSettings,
-        symbolTable,
-        extensions,
-        typeTranslator,
-        constantValueGenerator,
-        IrBuiltIns(moduleDescriptor.builtIns, typeTranslator, symbolTable)
-    )
-}
-
-class GeneratorContext(
+class GeneratorContext private constructor(
     val configuration: Psi2IrConfiguration,
     val moduleDescriptor: ModuleDescriptor,
     val bindingContext: BindingContext,
@@ -55,18 +30,54 @@ class GeneratorContext(
     val symbolTable: SymbolTable,
     val extensions: GeneratorExtensions,
     val typeTranslator: TypeTranslator,
-    val constantValueGenerator: ConstantValueGenerator,
-    override val irBuiltIns: IrBuiltIns
-) : IrGeneratorContext() {
+    override val irBuiltIns: IrBuiltIns,
+    internal val callToSubstitutedDescriptorMap: MutableMap<IrDeclarationReference, CallableDescriptor>
+) : IrGeneratorContext {
 
-    val callToSubstitutedDescriptorMap = mutableMapOf<IrDeclarationReference, CallableDescriptor>()
+    constructor(
+        configuration: Psi2IrConfiguration,
+        moduleDescriptor: ModuleDescriptor,
+        bindingContext: BindingContext,
+        languageVersionSettings: LanguageVersionSettings,
+        symbolTable: SymbolTable,
+        extensions: GeneratorExtensions,
+        typeTranslator: TypeTranslator,
+        irBuiltIns: IrBuiltIns,
+    ) : this(
+        configuration,
+        moduleDescriptor,
+        bindingContext,
+        languageVersionSettings,
+        symbolTable,
+        extensions,
+        typeTranslator,
+        irBuiltIns,
+        mutableMapOf()
+    )
 
-    val sourceManager = PsiSourceManager()
-
-    // TODO: inject a correct StorageManager instance, or store NotFoundClasses inside ModuleDescriptor
-    val reflectionTypes = ReflectionTypes(moduleDescriptor, NotFoundClasses(LockBasedStorageManager.NO_LOCKS, moduleDescriptor))
+    val constantValueGenerator = typeTranslator.constantValueGenerator
 
     fun IrDeclarationReference.commitSubstituted(descriptor: CallableDescriptor) {
         callToSubstitutedDescriptorMap[this] = descriptor
     }
+
+    // TODO: inject a correct StorageManager instance, or store NotFoundClasses inside ModuleDescriptor
+    val reflectionTypes = ReflectionTypes(moduleDescriptor, NotFoundClasses(LockBasedStorageManager.NO_LOCKS, moduleDescriptor))
+
+    val samTypeApproximator = SamTypeApproximator(moduleDescriptor.builtIns, languageVersionSettings)
+
+    fun createFileScopeContext(ktFile: KtFile): GeneratorContext {
+        return GeneratorContext(
+            configuration,
+            moduleDescriptor,
+            bindingContext,
+            languageVersionSettings,
+            symbolTable,
+            extensions,
+            TypeTranslatorImpl(symbolTable, languageVersionSettings, moduleDescriptor, extensions = extensions, ktFile = ktFile),
+            irBuiltIns,
+            callToSubstitutedDescriptorMap
+        )
+    }
+
 }

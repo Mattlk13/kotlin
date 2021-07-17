@@ -1,17 +1,7 @@
+// FIR_IDE_IGNORE
 // !LANGUAGE: +NewInference
 // !DIAGNOSTICS: -UNREACHABLE_CODE -UNUSED_VARIABLE -ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE -UNUSED_VALUE -UNUSED_PARAMETER -UNUSED_EXPRESSION
 // SKIP_TXT
-
-/*
- * KOTLIN DIAGNOSTICS SPEC TEST (POSITIVE)
- *
- * SPEC VERSION: 0.1-296
- * PLACE: expressions, not-null-assertion-expression -> paragraph 3 -> sentence 1
- * NUMBER: 1
- * DESCRIPTION: The type of non-null assertion e!! expression is the non-nullable variant of the type of e.
- * HELPERS: checkType
- */
-
 
 // MODULE: libModule
 // FILE: libModule/JavaClass.java
@@ -33,7 +23,7 @@ import checkSubtype
 // TESTCASE NUMBER: 1
 fun case1() {
     val a = JavaClass.STR
-    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String & kotlin.String..kotlin.String?!")!>a<!>
+    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String..kotlin.String?!")!>a<!>
     val res = a!!
     <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String")!>res<!>
 }
@@ -41,7 +31,7 @@ fun case1() {
 // TESTCASE NUMBER: 2
 fun case2() {
     val a = JavaClass.obj
-    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any & kotlin.Any..kotlin.Any?!")!>a<!>
+    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any..kotlin.Any?!")!>a<!>
     val x = a!!
     <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Any")!>x<!>
 }

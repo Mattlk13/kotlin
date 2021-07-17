@@ -5,9 +5,16 @@
 
 package org.jetbrains.kotlin.fir.types
 
+import org.jetbrains.kotlin.fir.FirSourceElement
 import org.jetbrains.kotlin.name.Name
 
-interface FirQualifierPart {
-    val name: Name
+interface FirTypeArgumentList {
+    val source: FirSourceElement
     val typeArguments: List<FirTypeProjection>
+}
+
+interface FirQualifierPart {
+    val source: FirSourceElement
+    val name: Name
+    val typeArgumentList: FirTypeArgumentList
 }

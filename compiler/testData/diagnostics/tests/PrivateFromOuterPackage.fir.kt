@@ -10,8 +10,8 @@ package outer.p1
 import outer.a
 
 fun use() {
-    <!INAPPLICABLE_CANDIDATE!>a<!>()
-    outer.<!INAPPLICABLE_CANDIDATE!>B<!>()
+    <!INVISIBLE_REFERENCE!>a<!>()
+    outer.<!INVISIBLE_REFERENCE!>B<!>()
 }
 
 // FILE: c.kt
@@ -20,6 +20,6 @@ package outer.p1.p2
 import outer.a
 
 fun use() {
-    <!INAPPLICABLE_CANDIDATE!>a<!>()
-    outer.<!INAPPLICABLE_CANDIDATE!>B<!>()
+    <!INVISIBLE_REFERENCE!>a<!>()
+    outer.<!INVISIBLE_REFERENCE!>B<!>()
 }

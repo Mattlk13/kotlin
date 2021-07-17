@@ -7,36 +7,41 @@ package org.jetbrains.kotlin.ir.backend.js
 
 import org.jetbrains.kotlin.backend.common.ir.isMemberOfOpenClass
 import org.jetbrains.kotlin.ir.IrElement
+import org.jetbrains.kotlin.ir.UNDEFINED_OFFSET
 import org.jetbrains.kotlin.ir.backend.js.export.isExported
-import org.jetbrains.kotlin.ir.backend.js.utils.associatedObject
-import org.jetbrains.kotlin.ir.backend.js.utils.getJsName
-import org.jetbrains.kotlin.ir.backend.js.utils.getJsNameOrKotlinName
-import org.jetbrains.kotlin.ir.backend.js.utils.isAssociatedObjectAnnotatedAnnotation
+import org.jetbrains.kotlin.ir.backend.js.ir.JsIrBuilder
+import org.jetbrains.kotlin.ir.backend.js.utils.*
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
 import org.jetbrains.kotlin.ir.types.classOrNull
 import org.jetbrains.kotlin.ir.types.classifierOrFail
 import org.jetbrains.kotlin.ir.types.classifierOrNull
+import org.jetbrains.kotlin.ir.types.getClass
 import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.ir.visitors.IrElementVisitorVoid
 import org.jetbrains.kotlin.ir.visitors.acceptChildrenVoid
 import org.jetbrains.kotlin.ir.visitors.acceptVoid
+import org.jetbrains.kotlin.js.config.RuntimeDiagnostic
 import org.jetbrains.kotlin.js.config.JSConfigurationKeys
+import org.jetbrains.kotlin.utils.addIfNotNull
 import java.util.*
 
 fun eliminateDeadDeclarations(
-    module: IrModuleFragment,
-    context: JsIrBackendContext,
-    mainFunction: IrSimpleFunction?
+    modules: Iterable<IrModuleFragment>,
+    context: JsIrBackendContext
 ) {
 
-    val allRoots = stageController.withInitialIr { buildRoots(module, context, mainFunction) }
+    val allRoots = context.irFactory.stageController.withInitialIr { buildRoots(modules, context) }
 
     val usefulDeclarations = usefulDeclarations(allRoots, context)
 
-    stageController.unrestrictDeclarationListsAccess {
-        removeUselessDeclarations(module, usefulDeclarations)
+    context.irFactory.stageController.unrestrictDeclarationListsAccess {
+        processUselessDeclarations(
+            modules,
+            usefulDeclarations,
+            context
+        )
     }
 }
 
@@ -44,22 +49,55 @@ private fun IrField.isConstant(): Boolean {
     return correspondingPropertySymbol?.owner?.isConst ?: false
 }
 
-private fun buildRoots(module: IrModuleFragment, context: JsIrBackendContext, mainFunction: IrSimpleFunction?): Iterable<IrDeclaration> {
-    val rootDeclarations =
-        (module.files + context.packageLevelJsModules + context.externalPackageFragment.values).flatMapTo(mutableListOf()) { file ->
-            file.declarations.flatMap { if (it is IrProperty) listOfNotNull(it.backingField, it.getter, it.setter) else listOf(it) }
-                .filter {
-                    it is IrField && it.initializer != null && it.fqNameWhenAvailable?.asString()?.startsWith("kotlin") != true
-                            || it.isExported(context)
-                            || it.isEffectivelyExternal()
-                            || it is IrField && it.correspondingPropertySymbol?.owner?.isExported(context) == true
-                            || it is IrSimpleFunction && it.correspondingPropertySymbol?.owner?.isExported(context) == true
-                }.filter { !(it is IrField && it.isConstant() && !it.isExported(context)) }
+private fun IrDeclaration.addRootsTo(to: MutableCollection<IrDeclaration>, context: JsIrBackendContext) {
+    when {
+        this is IrProperty -> {
+            backingField?.addRootsTo(to, context)
+            getter?.addRootsTo(to, context)
+            setter?.addRootsTo(to, context)
         }
+        isEffectivelyExternal() -> {
+            to += this
+        }
+        isExported(context) -> {
+            to += this
+        }
+        this is IrField -> {
+            // TODO: simplify
+            if ((initializer != null && !isKotlinPackage() || correspondingPropertySymbol?.owner?.isExported(context) == true) && !isConstant()) {
+                to += this
+            }
+        }
+        this is IrSimpleFunction -> {
+            if (correspondingPropertySymbol?.owner?.isExported(context) == true) {
+                to += this
+            }
+        }
+    }
+}
 
-    if (context.hasTests) rootDeclarations += context.testContainer
+private fun buildRoots(modules: Iterable<IrModuleFragment>, context: JsIrBackendContext): Iterable<IrDeclaration> {
+    val rootDeclarations = mutableListOf<IrDeclaration>()
+    val allFiles = (modules.flatMap { it.files } + context.packageLevelJsModules + context.externalPackageFragment.values)
+    allFiles.forEach {
+        it.declarations.forEach {
+            it.addRootsTo(rootDeclarations, context)
+        }
+    }
 
-    if (mainFunction != null) {
+    rootDeclarations += context.testRoots.values
+
+    val dceRuntimeDiagnostic = context.dceRuntimeDiagnostic
+    if (dceRuntimeDiagnostic != null) {
+        rootDeclarations += dceRuntimeDiagnostic.unreachableDeclarationMethod(context).owner
+    }
+
+    if (context.legacyPropertyAccess) {
+        rootDeclarations += context.intrinsics.safePropertyGet.owner
+        rootDeclarations += context.intrinsics.safePropertySet.owner
+    }
+
+    JsMainFunctionDetector.getMainFunctionOrNull(modules.last())?.let { mainFunction ->
         rootDeclarations += mainFunction
         if (mainFunction.isSuspend) {
             rootDeclarations += context.coroutineEmptyContinuation.owner
@@ -69,47 +107,111 @@ private fun buildRoots(module: IrModuleFragment, context: JsIrBackendContext, ma
     return rootDeclarations
 }
 
-private fun removeUselessDeclarations(module: IrModuleFragment, usefulDeclarations: Set<IrDeclaration>) {
-    module.files.forEach {
-        it.acceptVoid(object : IrElementVisitorVoid {
-            override fun visitElement(element: IrElement) {
-                element.acceptChildrenVoid(this)
-            }
 
-            override fun visitFile(declaration: IrFile) {
-                process(declaration)
-            }
-
-            private fun IrConstructorCall.shouldKeepAnnotation(): Boolean {
-                associatedObject()?.let { obj ->
-                    if (obj !in usefulDeclarations) return false
+private fun processUselessDeclarations(
+    modules: Iterable<IrModuleFragment>,
+    usefulDeclarations: Set<IrDeclaration>,
+    context: JsIrBackendContext
+) {
+    modules.forEach { module ->
+        module.files.forEach {
+            it.acceptVoid(object : IrElementVisitorVoid {
+                override fun visitElement(element: IrElement) {
+                    element.acceptChildrenVoid(this)
                 }
-                return true
-            }
 
-            override fun visitClass(declaration: IrClass) {
-                process(declaration)
-                // Remove annotations for `findAssociatedObject` feature, which reference objects eliminated by the DCE.
-                // Otherwise `JsClassGenerator.generateAssociatedKeyProperties` will try to reference the object factory (which is removed).
-                // That will result in an error from the Namer. It cannot generate a name for an absent declaration.
-                declaration.annotations = declaration.annotations.filter { it.shouldKeepAnnotation() }
-            }
+                override fun visitFile(declaration: IrFile) {
+                    process(declaration)
+                }
 
-            // TODO bring back the primary constructor fix
+                private fun IrConstructorCall.shouldKeepAnnotation(): Boolean {
+                    associatedObject()?.let { obj ->
+                        if (obj !in usefulDeclarations) return false
+                    }
+                    return true
+                }
 
-            private fun process(container: IrDeclarationContainer) {
-                container.declarations.transformFlat { member ->
-                    if (member !in usefulDeclarations) {
-                        emptyList()
-                    } else {
-                        member.acceptVoid(this)
-                        null
+                override fun visitClass(declaration: IrClass) {
+                    process(declaration)
+                    // Remove annotations for `findAssociatedObject` feature, which reference objects eliminated by the DCE.
+                    // Otherwise `JsClassGenerator.generateAssociatedKeyProperties` will try to reference the object factory (which is removed).
+                    // That will result in an error from the Namer. It cannot generate a name for an absent declaration.
+                    declaration.annotations = declaration.annotations.filter { it.shouldKeepAnnotation() }
+                }
+
+                // TODO bring back the primary constructor fix
+
+                private fun process(container: IrDeclarationContainer) {
+                    container.declarations.transformFlat { member ->
+                        if (member !in usefulDeclarations) {
+                            member.processUselessDeclaration(context)
+                        } else {
+                            member.acceptVoid(this)
+                            null
+                        }
                     }
                 }
-            }
-        })
+            })
+        }
     }
 }
+
+private fun IrDeclaration.processUselessDeclaration(context: JsIrBackendContext): List<IrDeclaration>? {
+    return when {
+        context.dceRuntimeDiagnostic != null -> {
+            processWithDiagnostic(context)
+            return null
+        }
+        else -> emptyList()
+    }
+}
+
+private fun RuntimeDiagnostic.unreachableDeclarationMethod(context: JsIrBackendContext) =
+    when (this) {
+        RuntimeDiagnostic.LOG -> context.intrinsics.jsUnreachableDeclarationLog
+        RuntimeDiagnostic.EXCEPTION -> context.intrinsics.jsUnreachableDeclarationException
+    }
+
+private fun RuntimeDiagnostic.removingBody(): Boolean {
+    return this != RuntimeDiagnostic.LOG
+}
+
+private fun IrDeclaration.processWithDiagnostic(context: JsIrBackendContext) {
+    when (this) {
+        is IrFunction -> processFunctionWithDiagnostic(context)
+        is IrField -> processFieldWithDiagnostic()
+        is IrDeclarationContainer -> declarations.forEach { it.processWithDiagnostic(context) }
+    }
+}
+
+private fun IrFunction.processFunctionWithDiagnostic(context: JsIrBackendContext) {
+    val dceRuntimeDiagnostic = context.dceRuntimeDiagnostic!!
+
+    val isRemovingBody = dceRuntimeDiagnostic.removingBody()
+    val targetMethod = dceRuntimeDiagnostic.unreachableDeclarationMethod(context)
+    val call = JsIrBuilder.buildCall(
+        target = targetMethod,
+        type = targetMethod.owner.returnType
+    )
+
+    if (isRemovingBody) {
+        body = context.irFactory.createBlockBody(
+            UNDEFINED_OFFSET,
+            UNDEFINED_OFFSET
+        )
+    }
+
+    body?.prependFunctionCall(call)
+}
+
+private fun IrField.processFieldWithDiagnostic() {
+    if (initializer != null && isKotlinPackage()) {
+        initializer = null
+    }
+}
+
+private fun IrField.isKotlinPackage() =
+    fqNameWhenAvailable?.asString()?.startsWith("kotlin") == true
 
 // TODO refactor it, the function became too big. Please contact me (Zalim) before doing it.
 fun usefulDeclarations(roots: Iterable<IrDeclaration>, context: JsIrBackendContext): Set<IrDeclaration> {
@@ -169,7 +271,7 @@ fun usefulDeclarations(roots: Iterable<IrDeclaration>, context: JsIrBackendConte
     }
 
     // use withInitialIr to avoid ConcurrentModificationException in dce-driven lowering when adding roots' nested declarations (members)
-    stageController.withInitialIr {
+    context.irFactory.stageController.withInitialIr {
         // Add roots
         roots.forEach {
             it.enqueue(null, null, altFromFqn = "<ROOT>")
@@ -187,7 +289,7 @@ fun usefulDeclarations(roots: Iterable<IrDeclaration>, context: JsIrBackendConte
                         // Skip
                     }
 
-                    override fun visitDeclaration(declaration: IrDeclaration) {
+                    override fun visitDeclaration(declaration: IrDeclarationBase) {
                         if (declaration !== it) declaration.enqueue(it, "roots' nested declaration")
 
                         super.visitDeclaration(declaration)
@@ -208,9 +310,6 @@ fun usefulDeclarations(roots: Iterable<IrDeclaration>, context: JsIrBackendConte
         while (queue.isNotEmpty()) {
             val declaration = queue.pollFirst()
 
-            // TODO remove?
-            stageController.lazyLower(declaration)
-
             fun IrDeclaration.enqueue(description: String, isContagious: Boolean = true) {
                 enqueue(declaration, description, isContagious)
             }
@@ -220,13 +319,9 @@ fun usefulDeclarations(roots: Iterable<IrDeclaration>, context: JsIrBackendConte
                     (it.classifierOrNull as? IrClassSymbol)?.owner?.enqueue("superTypes")
                 }
 
-                // TODO find out how `doResume` gets removed
-                if (declaration.symbol == context.ir.symbols.coroutineImpl) {
-                    declaration.declarations.toList().forEach {
-                        if (it is IrSimpleFunction && it.name.asString() == "doResume") {
-                            it.enqueue("hack for CoroutineImpl::doResume")
-                        }
-                    }
+                if (declaration.isObject && declaration.isExported(context)) {
+                    context.mapping.objectToGetInstanceFunction[declaration]!!
+                        .enqueue(declaration, "Exported object getInstance function")
                 }
 
                 declaration.annotations.forEach {
@@ -257,9 +352,6 @@ fun usefulDeclarations(roots: Iterable<IrDeclaration>, context: JsIrBackendConte
                 else -> null
             }
 
-            // TODO remove?
-            (body as? IrBody)?.let { stageController.lazyLower(it) }
-
             body?.acceptVoid(object : IrElementVisitorVoid {
                 override fun visitElement(element: IrElement) {
                     element.acceptChildrenVoid(this)
@@ -269,6 +361,12 @@ fun usefulDeclarations(roots: Iterable<IrDeclaration>, context: JsIrBackendConte
                     super.visitFunctionAccess(expression)
 
                     expression.symbol.owner.enqueue("function access")
+                }
+
+                override fun visitRawFunctionReference(expression: IrRawFunctionReference) {
+                    super.visitRawFunctionReference(expression)
+
+                    expression.symbol.owner.enqueue("raw function access")
                 }
 
                 override fun visitVariableAccess(expression: IrValueAccessExpression) {
@@ -288,7 +386,7 @@ fun usefulDeclarations(roots: Iterable<IrDeclaration>, context: JsIrBackendConte
 
                     when (expression.symbol) {
                         context.intrinsics.jsBoxIntrinsic -> {
-                            val inlineClass = expression.getTypeArgument(0)!!.getInlinedClass()!!
+                            val inlineClass = context.inlineClassesUtils.getInlinedClass(expression.getTypeArgument(0)!!)!!
                             val constructor = inlineClass.declarations.filterIsInstance<IrConstructor>().single { it.isPrimary }
                             constructor.enqueue("intrinsic: jsBoxIntrinsic")
                         }
@@ -296,12 +394,27 @@ fun usefulDeclarations(roots: Iterable<IrDeclaration>, context: JsIrBackendConte
                             val ref = expression.getTypeArgument(0)!!.classifierOrFail.owner as IrDeclaration
                             ref.enqueue("intrinsic: jsClass")
                             referencedJsClasses += ref
+                            // When class reference provided as parameter to external function
+                            // It can be instantiated by external JS script
+                            // Need to leave constructor for this
+                            // https://youtrack.jetbrains.com/issue/KT-46672
+                            // TODO: Possibly solution with origin is not so good
+                            //  There is option with applying this hack to jsGetKClass
+                            if (expression.origin == JsLoweredDeclarationOrigin.CLASS_REFERENCE) {
+                                // Maybe we need to filter primary constructor
+                                // Although at this time, we should have only primary constructor
+                                (ref as IrClass)
+                                    .constructors
+                                    .forEach {
+                                        it.enqueue("intrinsic: jsClass (constructor)")
+                                    }
+                            }
                         }
                         context.intrinsics.jsGetKClassFromExpression -> {
                             val ref = expression.getTypeArgument(0)?.classOrNull ?: context.irBuiltIns.anyClass
                             referencedJsClassesFromExpressions += ref.owner
                         }
-                        context.intrinsics.jsObjectCreate.symbol -> {
+                        context.intrinsics.jsObjectCreate -> {
                             val classToCreate = expression.getTypeArgument(0)!!.classifierOrFail.owner as IrClass
                             classToCreate.enqueue("intrinsic: jsObjectCreate")
                             constructedClasses += classToCreate
@@ -319,6 +432,22 @@ fun usefulDeclarations(roots: Iterable<IrDeclaration>, context: JsIrBackendConte
                             if (expression.getValueArgument(0)?.type?.classOrNull == context.irBuiltIns.stringClass) {
                                 toStringMethod.enqueue("intrinsic: jsPlus")
                             }
+                        }
+                        context.intrinsics.jsConstruct -> {
+                            val callType = expression.getTypeArgument(0)!!
+                            val constructor = callType.getClass()!!.primaryConstructor
+                            constructor!!.enqueue("ctor call from jsConstruct-intrinsic")
+                        }
+                        context.intrinsics.es6DefaultType -> {
+                            //same as jsClass
+                            val ref = expression.getTypeArgument(0)!!.classifierOrFail.owner as IrDeclaration
+                            ref.enqueue("intrinsic: jsClass")
+                            referencedJsClasses += ref
+
+                            //Generate klass in `val currResultType = resultType || klass`
+                            val arg = expression.getTypeArgument(0)!!
+                            val klass = arg.getClass()
+                            constructedClasses.addIfNotNull(klass)
                         }
                     }
                 }
@@ -382,11 +511,9 @@ fun usefulDeclarations(roots: Iterable<IrDeclaration>, context: JsIrBackendConte
                 ) {
                     declaration.enqueue(klass, "annotated by @JsName")
                 }
-            }
 
-            // TODO is this needed?
-            for (declaration in ArrayList(klass.declarations)) {
-                // TODO this is a hack.
+                // A hack to enforce property lowering.
+                // Until a getter is accessed it doesn't get moved to the declaration list.
                 if (declaration is IrProperty) {
                     fun IrSimpleFunction.enqueue(description: String) {
                         findOverriddenContagiousDeclaration()?.let { enqueue(it, description) }
@@ -396,17 +523,10 @@ fun usefulDeclarations(roots: Iterable<IrDeclaration>, context: JsIrBackendConte
                     declaration.setter?.enqueue("(setter) overrides useful declaration")
                 }
             }
-
-            // TODO find out how `doResume` gets removed
-            if (klass.symbol == context.ir.symbols.coroutineImpl) {
-                ArrayList(klass.declarations).forEach {
-                    // TODO: fix the heck
-//                    if (it is IrSimpleFunction && it.name.asString() == "doResume") {
-                        it.enqueue(klass, "hack for CoroutineImpl::doResume")
-//                    }
-                }
-            }
         }
+
+        context.additionalExportedDeclarations
+            .forEach { it.enqueue(null, "from additionalExportedDeclarations", altFromFqn = "<ROOT>") }
     }
 
     if (printReachabilityInfo) {

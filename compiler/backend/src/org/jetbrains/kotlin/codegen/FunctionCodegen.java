@@ -33,11 +33,8 @@ import org.jetbrains.kotlin.load.java.JvmAbi;
 import org.jetbrains.kotlin.load.java.SpecialBuiltinMembers;
 import org.jetbrains.kotlin.load.java.descriptors.JavaClassDescriptor;
 import org.jetbrains.kotlin.psi.*;
-import org.jetbrains.kotlin.resolve.BindingContext;
-import org.jetbrains.kotlin.resolve.DescriptorToSourceUtils;
-import org.jetbrains.kotlin.resolve.DescriptorUtils;
-import org.jetbrains.kotlin.resolve.InlineClassesUtilsKt;
-import org.jetbrains.kotlin.resolve.annotations.AnnotationUtilKt;
+import org.jetbrains.kotlin.resolve.*;
+import org.jetbrains.kotlin.resolve.annotations.ThrowUtilKt;
 import org.jetbrains.kotlin.resolve.calls.util.UnderscoreUtilKt;
 import org.jetbrains.kotlin.resolve.constants.ArrayValue;
 import org.jetbrains.kotlin.resolve.constants.ConstantValue;
@@ -56,6 +53,7 @@ import org.jetbrains.kotlin.resolve.jvm.jvmSignature.JvmMethodParameterKind;
 import org.jetbrains.kotlin.resolve.jvm.jvmSignature.JvmMethodParameterSignature;
 import org.jetbrains.kotlin.resolve.jvm.jvmSignature.JvmMethodSignature;
 import org.jetbrains.kotlin.types.KotlinType;
+import org.jetbrains.kotlin.types.SimpleType;
 import org.jetbrains.kotlin.types.TypeUtils;
 import org.jetbrains.org.objectweb.asm.Label;
 import org.jetbrains.org.objectweb.asm.MethodVisitor;
@@ -70,14 +68,15 @@ import java.io.StringWriter;
 import java.util.*;
 import java.util.stream.Collectors;
 
-import static org.jetbrains.kotlin.builtins.KotlinBuiltIns.isNullableAny;
-import static org.jetbrains.kotlin.codegen.AsmUtil.*;
+import static org.jetbrains.kotlin.codegen.AsmUtil.CAPTURED_THIS_FIELD;
+import static org.jetbrains.kotlin.codegen.AsmUtil.boxType;
 import static org.jetbrains.kotlin.codegen.CodegenUtilKt.generateBridgeForMainFunctionIfNecessary;
+import static org.jetbrains.kotlin.codegen.DescriptorAsmUtil.*;
 import static org.jetbrains.kotlin.codegen.serialization.JvmSerializationBindings.METHOD_FOR_FUNCTION;
 import static org.jetbrains.kotlin.codegen.state.KotlinTypeMapper.isAccessor;
 import static org.jetbrains.kotlin.descriptors.CallableMemberDescriptor.Kind.DECLARATION;
 import static org.jetbrains.kotlin.descriptors.CallableMemberDescriptor.Kind.DELEGATION;
-import static org.jetbrains.kotlin.descriptors.ModalityKt.isOverridable;
+import static org.jetbrains.kotlin.descriptors.ModalityUtilsKt.isOverridable;
 import static org.jetbrains.kotlin.resolve.DescriptorToSourceUtils.getSourceFromDescriptor;
 import static org.jetbrains.kotlin.resolve.DescriptorUtils.*;
 import static org.jetbrains.kotlin.resolve.inline.InlineOnlyKt.isInlineOnlyPrivateInBytecode;
@@ -87,6 +86,7 @@ import static org.jetbrains.kotlin.types.expressions.ExpressionTypingUtils.*;
 import static org.jetbrains.org.objectweb.asm.Opcodes.*;
 
 public class FunctionCodegen {
+
     public final GenerationState state;
     private final KotlinTypeMapper typeMapper;
     private final BindingContext bindingContext;
@@ -194,6 +194,10 @@ public class FunctionCodegen {
         if (origin.getOriginKind() == JvmDeclarationOriginKind.SAM_DELEGATION) {
             flags |= ACC_SYNTHETIC;
         }
+        boolean isCompatibilityStubInDefaultImpls = isCompatibilityStubInDefaultImpls(functionDescriptor, methodContext, state.getJvmDefaultMode());
+        if (isCompatibilityStubInDefaultImpls) {
+            flags |= ACC_DEPRECATED;
+        }
 
         if (functionDescriptor.isExternal() && owner instanceof MultifileClassFacadeContext) {
             // Native methods are only defined in facades and do not need package part implementations
@@ -202,12 +206,13 @@ public class FunctionCodegen {
 
         MethodVisitor mv =
                 strategy.wrapMethodVisitor(
-                        newMethod(origin,
-                                  flags,
-                                  asmMethod.getName(),
-                                  asmMethod.getDescriptor(),
-                                  strategy.skipGenericSignature() ? null : jvmSignature.getGenericsSignature(),
-                                  getThrownExceptions(functionDescriptor, typeMapper)
+                        newMethod(
+                                origin,
+                                flags,
+                                asmMethod.getName(),
+                                asmMethod.getDescriptor(),
+                                strategy.skipGenericSignature() ? null : jvmSignature.getGenericsSignature(),
+                                getThrownExceptions(functionDescriptor, typeMapper)
                         ),
                         flags, asmMethod.getName(),
                         asmMethod.getDescriptor()
@@ -215,8 +220,14 @@ public class FunctionCodegen {
 
         recordMethodForFunctionIfAppropriate(functionDescriptor, asmMethod);
 
-        generateMethodAnnotationsIfRequired(functionDescriptor, asmMethod, jvmSignature, mv);
-
+        boolean skipNullabilityAnnotations =
+                (flags & ACC_PRIVATE) != 0 || (flags & ACC_SYNTHETIC) != 0 ||
+                InlineClassDescriptorResolver.isSpecializedEqualsMethod(functionDescriptor);
+        generateMethodAnnotationsIfRequired(
+                functionDescriptor, asmMethod, jvmSignature, mv,
+                isCompatibilityStubInDefaultImpls ? Collections.singletonList(CodegenUtilKt.JAVA_LANG_DEPRECATED) : Collections.emptyList(),
+                skipNullabilityAnnotations
+        );
         GenerateJava8ParameterNamesKt.generateParameterNames(functionDescriptor, mv, jvmSignature, state, (flags & ACC_SYNTHETIC) != 0);
 
         if (contextKind != OwnerKind.ERASED_INLINE_CLASS) {
@@ -277,7 +288,9 @@ public class FunctionCodegen {
             @NotNull FunctionDescriptor functionDescriptor,
             @NotNull Method asmMethod,
             @NotNull JvmMethodGenericSignature jvmSignature,
-            @NotNull MethodVisitor mv
+            @NotNull MethodVisitor mv,
+            @NotNull List<String> additionalVisibleAnnotations,
+            boolean skipNullabilityAnnotations
     ) {
         FunctionDescriptor annotationsOwner;
         if (shouldHideConstructorDueToInlineClassTypeValueParameters(functionDescriptor)) {
@@ -292,10 +305,14 @@ public class FunctionCodegen {
             annotationsOwner = functionDescriptor;
         }
 
-        AnnotationCodegen.forMethod(mv, memberCodegen, state)
-                .genAnnotations(annotationsOwner, asmMethod.getReturnType(), functionDescriptor.getReturnType());
+        AnnotationCodegen.forMethod(mv, memberCodegen, state, skipNullabilityAnnotations)
+                .genAnnotations(annotationsOwner, asmMethod.getReturnType(), functionDescriptor.getReturnType(), null, additionalVisibleAnnotations);
 
-        generateParameterAnnotations(annotationsOwner, mv, jvmSignature, memberCodegen, state);
+        generateParameterAnnotations(
+                annotationsOwner, mv, jvmSignature,
+                annotationsOwner.getValueParameters(),
+                memberCodegen, state, skipNullabilityAnnotations
+        );
     }
 
     @NotNull
@@ -353,23 +370,22 @@ public class FunctionCodegen {
     public static void generateMethodInsideInlineClassWrapper(
             @NotNull JvmDeclarationOrigin origin,
             @NotNull FunctionDescriptor functionDescriptor,
-            @NotNull ClassDescriptor containingDeclaration,
+            @NotNull ClassDescriptor inlineClass,
             @NotNull MethodVisitor mv,
             @NotNull KotlinTypeMapper typeMapper
     ) {
         mv.visitCode();
 
-        Type fieldOwnerType = typeMapper.mapClass(containingDeclaration);
+        Type fieldOwnerType = typeMapper.mapClass(inlineClass);
         Method erasedMethodImpl = typeMapper.mapAsmMethod(functionDescriptor.getOriginal(), OwnerKind.ERASED_INLINE_CLASS);
 
-        ValueParameterDescriptor valueRepresentation = InlineClassesUtilsKt.underlyingRepresentation(containingDeclaration);
-        if (valueRepresentation == null) return;
-
-        Type fieldType = typeMapper.mapType(valueRepresentation);
+        InlineClassRepresentation<SimpleType> representation = inlineClass.getInlineClassRepresentation();
+        assert representation != null : "Not an inline class: " + inlineClass;
 
         generateDelegateToStaticErasedVersion(
-                mv, erasedMethodImpl,
-                fieldOwnerType, valueRepresentation.getName().asString(), fieldType
+                mv, erasedMethodImpl, fieldOwnerType,
+                representation.getUnderlyingPropertyName().asString(),
+                typeMapper.mapType(representation.getUnderlyingType())
         );
 
         endVisit(mv, null, origin.getElement());
@@ -493,21 +509,10 @@ public class FunctionCodegen {
             @NotNull FunctionDescriptor functionDescriptor,
             @NotNull MethodVisitor mv,
             @NotNull JvmMethodSignature jvmSignature,
-            @NotNull InnerClassConsumer innerClassConsumer,
-            @NotNull GenerationState state
-    ) {
-        generateParameterAnnotations(
-                functionDescriptor, mv, jvmSignature, functionDescriptor.getValueParameters(), innerClassConsumer, state
-        );
-    }
-
-    public static void generateParameterAnnotations(
-            @NotNull FunctionDescriptor functionDescriptor,
-            @NotNull MethodVisitor mv,
-            @NotNull JvmMethodSignature jvmSignature,
             @NotNull List<ValueParameterDescriptor> valueParameters,
-            @NotNull InnerClassConsumer innerClassConsumer,
-            @NotNull GenerationState state
+            @NotNull MemberCodegen<?> memberCodegen,
+            @NotNull GenerationState state,
+            boolean skipNullabilityAnnotations
     ) {
         if (isAccessor(functionDescriptor)) return;
 
@@ -517,6 +522,7 @@ public class FunctionCodegen {
 
         Asm7UtilKt.visitAnnotableParameterCount(mv, kotlinParameterTypes.size() - syntheticParameterCount);
 
+        boolean isDefaultImpl = OwnerKind.DEFAULT_IMPLS == memberCodegen.context.getContextKind();
         for (int i = 0; i < kotlinParameterTypes.size(); i++) {
             JvmMethodParameterSignature parameterSignature = kotlinParameterTypes.get(i);
             JvmMethodParameterKind kind = parameterSignature.getKind();
@@ -529,13 +535,18 @@ public class FunctionCodegen {
                     ? iterator.next()
                     : kind == JvmMethodParameterKind.RECEIVER
                       ? JvmCodegenUtil.getDirectMember(functionDescriptor).getExtensionReceiverParameter()
-                      : null;
+                      : kind == JvmMethodParameterKind.THIS && isDefaultImpl
+                        ? JvmCodegenUtil.getDirectMember(functionDescriptor).getDispatchReceiverParameter()
+                        : null;
 
             if (annotated != null) {
-                //noinspection ConstantConditions
                 int parameterIndex = i - syntheticParameterCount;
-                AnnotationCodegen.forParameter(parameterIndex, mv, innerClassConsumer, state)
-                        .genAnnotations(annotated, parameterSignature.getAsmType(), annotated.getReturnType());
+                AnnotationCodegen
+                        .forParameter(parameterIndex, mv, memberCodegen, state, skipNullabilityAnnotations)
+                        .genAnnotations(
+                                annotated, parameterSignature.getAsmType(), annotated.getReturnType(), functionDescriptor,
+                                Collections.emptyList()
+                        );
             }
         }
     }
@@ -599,7 +610,7 @@ public class FunctionCodegen {
         else if (isCompatibilityStubInDefaultImpls(functionDescriptor, context, jvmDefaultMode)) {
             FunctionDescriptor compatibility = ((DefaultImplsClassContext) context.getParentContext()).getInterfaceContext()
                     .getAccessorForJvmDefaultCompatibility(functionDescriptor);
-            int flags = AsmUtil.getMethodAsmFlags(functionDescriptor, OwnerKind.DEFAULT_IMPLS, context.getState());
+            int flags = DescriptorAsmUtil.getMethodAsmFlags(functionDescriptor, OwnerKind.DEFAULT_IMPLS, context.getState());
             assert (flags & Opcodes.ACC_ABSTRACT) == 0 : "Interface method with body should be non-abstract" + functionDescriptor;
             CallableMethod method = typeMapper.mapToCallableMethod(compatibility, false);
 
@@ -607,7 +618,7 @@ public class FunctionCodegen {
                     true, mv,
                     method.getAsmMethod(),
                     method.getOwner().getInternalName(),
-                    true);
+                    true, signature.getReturnType());
             methodEnd = new Label();
         }
         else {
@@ -711,10 +722,8 @@ public class FunctionCodegen {
             @NotNull JvmDefaultMode jvmDefaultMode
     ) {
         return OwnerKind.DEFAULT_IMPLS == context.getContextKind() &&
-               JvmAnnotationUtilKt
-                       .isCompiledToJvmDefault(DescriptorUtils.unwrapFakeOverrideToAnyDeclaration(functionDescriptor),
-                                               jvmDefaultMode) &&
-               jvmDefaultMode.isCompatibility();
+            jvmDefaultMode.isCompatibility() &&
+            JvmAnnotationUtilKt.checkIsImplementationCompiledToJvmDefault(functionDescriptor, jvmDefaultMode);
     }
 
     private static void generateLocalVariableTable(
@@ -753,7 +762,7 @@ public class FunctionCodegen {
         generateLocalVariablesForParameters(mv,
                                             jvmMethodSignature, functionDescriptor,
                                             thisType, methodBegin, methodEnd, functionDescriptor.getValueParameters(),
-                                            AsmUtil.isStaticMethod(ownerKind, functionDescriptor), state
+                                            DescriptorAsmUtil.isStaticMethod(ownerKind, functionDescriptor), state
         );
     }
 
@@ -801,7 +810,7 @@ public class FunctionCodegen {
                             : nameForDestructuredParameter;
                     break;
                 case RECEIVER:
-                    parameterName = AsmUtil.getNameForReceiverParameter(
+                    parameterName = DescriptorAsmUtil.getNameForReceiverParameter(
                             functionDescriptor, typeMapper.getBindingContext(), state.getLanguageVersionSettings());
                     break;
                 case OUTER:
@@ -850,7 +859,8 @@ public class FunctionCodegen {
             @NotNull Method asmMethod,
             @NotNull String classToDelegateTo,
             int opcode,
-            boolean isInterface
+            boolean isInterface,
+            @NotNull Type returnType
     ) {
         InstructionAdapter iv = new InstructionAdapter(mv);
         Type[] argTypes = asmMethod.getArgumentTypes();
@@ -872,7 +882,8 @@ public class FunctionCodegen {
             paramIndex += argType.getSize();
         }
         iv.visitMethodInsn(opcode, classToDelegateTo, asmMethod.getName(), asmMethod.getDescriptor(), isInterface);
-        iv.areturn(asmMethod.getReturnType());
+        StackValue.onStack(asmMethod.getReturnType()).coerceTo(returnType, null, iv);
+        iv.areturn(returnType);
     }
 
     private static void generateDelegateToStaticErasedVersion(
@@ -911,7 +922,19 @@ public class FunctionCodegen {
             @NotNull String classToDelegateTo,
             boolean isInterfaceMethodCall
     ) {
-        generateDelegateToMethodBody(isStatic ? 0 : 1, mv, asmMethod, classToDelegateTo, Opcodes.INVOKESTATIC, isInterfaceMethodCall);
+        generateDelegateToStaticMethodBody(isStatic, mv, asmMethod, classToDelegateTo, isInterfaceMethodCall, asmMethod.getReturnType());
+    }
+
+
+    private static void generateDelegateToStaticMethodBody(
+            boolean isStatic,
+            @NotNull MethodVisitor mv,
+            @NotNull Method asmMethod,
+            @NotNull String classToDelegateTo,
+            boolean isInterfaceMethodCall,
+            @NotNull Type returnType
+    ) {
+        generateDelegateToMethodBody(isStatic ? 0 : 1, mv, asmMethod, classToDelegateTo, Opcodes.INVOKESTATIC, isInterfaceMethodCall, returnType);
     }
 
     private static boolean needIndexForVar(JvmMethodParameterKind kind) {
@@ -1038,10 +1061,7 @@ public class FunctionCodegen {
         // or all return types are supertypes of inline class (and can't be inline classes).
 
         for (DescriptorBasedFunctionHandleForJvm handle : bridge.getOriginalFunctions()) {
-            KotlinType returnType = handle.getDescriptor().getReturnType();
-            if (returnType != null) {
-                return returnType;
-            }
+            return handle.getDescriptor().getReturnType();
         }
 
         if (state.getClassBuilderMode().mightBeIncorrectCode) {
@@ -1067,18 +1087,6 @@ public class FunctionCodegen {
         );
     }
 
-    public static boolean isMethodOfAny(@NotNull FunctionDescriptor descriptor) {
-        String name = descriptor.getName().asString();
-        List<ValueParameterDescriptor> parameters = descriptor.getValueParameters();
-        if (parameters.isEmpty()) {
-            return name.equals("hashCode") || name.equals("toString");
-        }
-        else if (parameters.size() == 1 && name.equals("equals")) {
-            return isNullableAny(parameters.get(0).getType());
-        }
-        return false;
-    }
-
     @NotNull
     public static String[] getThrownExceptions(@NotNull FunctionDescriptor function, @NotNull KotlinTypeMapper typeMapper) {
         return ArrayUtil.toStringArray(CollectionsKt.map(
@@ -1097,7 +1105,7 @@ public class FunctionCodegen {
             return Collections.emptyList();
         }
 
-        AnnotationDescriptor annotation = function.getAnnotations().findAnnotation(AnnotationUtilKt.JVM_THROWS_ANNOTATION_FQ_NAME);
+        AnnotationDescriptor annotation = function.getAnnotations().findAnnotation(ThrowUtilKt.JVM_THROWS_ANNOTATION_FQ_NAME);
         if (annotation == null) return Collections.emptyList();
 
         Collection<ConstantValue<?>> values = annotation.getAllValueArguments().values();
@@ -1144,8 +1152,10 @@ public class FunctionCodegen {
 
         // $default methods are never private to be accessible from other class files (e.g. inner) without the need of synthetic accessors
         // $default methods are never protected to be accessible from subclass nested classes
+        // TODO: maybe best to generate private default in interface as private
         int visibilityFlag =
-                Visibilities.isPrivate(functionDescriptor.getVisibility()) || isInlineOnlyPrivateInBytecode(functionDescriptor)
+                (!isInterface(functionDescriptor.getContainingDeclaration()) || kind == OwnerKind.DEFAULT_IMPLS) &&
+                (DescriptorVisibilities.isPrivate(functionDescriptor.getVisibility()) || isInlineOnlyPrivateInBytecode(functionDescriptor))
                 ? AsmUtil.NO_FLAG_PACKAGE_PRIVATE : Opcodes.ACC_PUBLIC;
         int flags = visibilityFlag | getDeprecatedAccessFlag(functionDescriptor) | ACC_SYNTHETIC;
         if (!(functionDescriptor instanceof ConstructorDescriptor &&
@@ -1213,7 +1223,12 @@ public class FunctionCodegen {
 
         // 'null' because the "could not find expected declaration" error has been already reported in isDefaultNeeded earlier
         List<ValueParameterDescriptor> valueParameters =
-                CodegenUtil.getFunctionParametersForDefaultValueGeneration(functionDescriptor, null);
+                functionDescriptor.isSuspend()
+                ? CollectionsKt.plus(
+                    CodegenUtil.getFunctionParametersForDefaultValueGeneration(
+                            CoroutineCodegenUtilKt.unwrapInitialDescriptorForSuspendFunction(functionDescriptor), null),
+                    CollectionsKt.last(functionDescriptor.getValueParameters()))
+                : CodegenUtil.getFunctionParametersForDefaultValueGeneration(functionDescriptor, null);
 
         boolean isStatic = isStaticMethod(methodContext.getContextKind(), functionDescriptor);
         FrameMap frameMap = createFrameMap(state, signature, functionDescriptor.getExtensionReceiverParameter(), valueParameters, isStatic);
@@ -1404,7 +1419,7 @@ public class FunctionCodegen {
         if (isVarargInvoke) {
             assert argTypes.length == 1 && argTypes[0].equals(AsmUtil.getArrayType(OBJECT_TYPE)) :
                     "Vararg invoke must have one parameter of type [Ljava/lang/Object;: " + bridge;
-            AsmUtil.generateVarargInvokeArityAssert(iv, originalArgTypes.length);
+            DescriptorAsmUtil.generateVarargInvokeArityAssert(iv, originalArgTypes.length);
         }
         else {
             assert argTypes.length == originalArgTypes.length :
@@ -1450,8 +1465,8 @@ public class FunctionCodegen {
             }
         }
 
-        KotlinType returnType = descriptor.getReturnType();
-        StackValue.coerce(delegateTo.getReturnType(), returnType, bridge.getReturnType(), bridgeReturnType, iv);
+        KotlinType returnValueType = descriptor.getReturnType();
+        StackValue.coerce(delegateTo.getReturnType(), returnValueType, bridge.getReturnType(), bridgeReturnType, iv);
         iv.areturn(bridge.getReturnType());
 
         endVisit(mv, "bridge method", origin);
@@ -1581,7 +1596,7 @@ public class FunctionCodegen {
 
                         // When delegating to inline class, we invoke static implementation method
                         // that takes inline class underlying value as 1st argument.
-                        int toArgsShift = toClass.isInline() ? 1 : 0;
+                        int toArgsShift = InlineClassesUtilsKt.isInlineClass(toClass) ? 1 : 0;
 
                         int reg = 1;
                         for (int i = 0; i < argTypes.length; ++i) {
@@ -1601,7 +1616,7 @@ public class FunctionCodegen {
                         if (toClass.getKind() == ClassKind.INTERFACE) {
                             iv.invokeinterface(internalName, delegateToMethod.getName(), delegateToMethod.getDescriptor());
                         }
-                        else if (toClass.isInline()) {
+                        else if (InlineClassesUtilsKt.isInlineClass(toClass)) {
                             iv.invokestatic(internalName, delegateToMethod.getName(), delegateToMethod.getDescriptor(), false);
                         }
                         else {
@@ -1609,7 +1624,7 @@ public class FunctionCodegen {
                         }
 
                         //noinspection ConstantConditions
-                        StackValue stackValue = AsmUtil.genNotNullAssertions(
+                        StackValue stackValue = DescriptorAsmUtil.genNotNullAssertions(
                                 state,
                                 StackValue.onStack(delegateToMethod.getReturnType(), delegatedTo.getReturnType()),
                                 RuntimeAssertionInfo.create(
@@ -1619,7 +1634,7 @@ public class FunctionCodegen {
                                 )
                         );
 
-                        stackValue.put(delegateMethod.getReturnType(), delegatedTo.getReturnType(), iv);
+                        stackValue.put(delegateMethod.getReturnType(), delegateFunction.getReturnType(), iv);
 
                         iv.areturn(delegateMethod.getReturnType());
                     }
@@ -1670,13 +1685,17 @@ public class FunctionCodegen {
         assert isInterface(containingDeclaration) : "'processInterfaceMethod' method should be called only for interfaces, but: " +
                                                     containingDeclaration;
 
-        if (JvmAnnotationUtilKt.isCompiledToJvmDefault(memberDescriptor, mode)) {
-            return (kind != OwnerKind.DEFAULT_IMPLS && !isSynthetic) ||
-                   (kind == OwnerKind.DEFAULT_IMPLS && (isSynthetic || mode.isCompatibility()));
+        // Fake overrides in interfaces should be expanded to implementation to make proper default check
+        if (JvmAnnotationUtilKt.checkIsImplementationCompiledToJvmDefault(memberDescriptor, mode)) {
+            boolean isSyntheticInCompatibilityOrJvmDefault = isSynthetic && (mode.isCompatibility() || mode == JvmDefaultMode.ENABLE);
+            return (kind != OwnerKind.DEFAULT_IMPLS && !isSyntheticInCompatibilityOrJvmDefault) ||
+                   (kind == OwnerKind.DEFAULT_IMPLS &&
+                    (isSyntheticInCompatibilityOrJvmDefault ||
+                     (mode.isCompatibility() && !JvmAnnotationUtilKt.hasJvmDefaultNoCompatibilityAnnotation(containingDeclaration))) && !DescriptorVisibilities.isPrivate(memberDescriptor.getVisibility()));
         } else {
             switch (kind) {
                 case DEFAULT_IMPLS: return true;
-                case IMPLEMENTATION: return !Visibilities.isPrivate(memberDescriptor.getVisibility()) && !isDefault && !isSynthetic;
+                case IMPLEMENTATION: return !DescriptorVisibilities.isPrivate(memberDescriptor.getVisibility()) && !isDefault && !isSynthetic;
                 default: return false;
             }
         }

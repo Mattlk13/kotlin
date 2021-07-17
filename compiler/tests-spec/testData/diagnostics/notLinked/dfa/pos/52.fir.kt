@@ -3,15 +3,6 @@
 // SKIP_TXT
 
 /*
- * KOTLIN DIAGNOSTICS NOT LINKED SPEC TEST (POSITIVE)
- *
- * SECTIONS: dfa
- * NUMBER: 52
- * DESCRIPTION: Raw data flow analysis test
- * HELPERS: classes, objects, typealiases, functions, enumClasses, interfaces, sealedClasses
- */
-
-/*
  * TESTCASE NUMBER: 1
  * UNEXPECTED BEHAVIOUR
  * ISSUES: KT-22175
@@ -38,7 +29,7 @@ fun case_3(x: String?) = x
 fun case_3() {
     var x: Int? = 10
     x = null
-    <!INAPPLICABLE_CANDIDATE!>case_3<!>(<!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Int?")!>x<!>)
+    case_3(<!ARGUMENT_TYPE_MISMATCH, DEBUG_INFO_EXPRESSION_TYPE("kotlin.Int?")!>x<!>)
 }
 
 /*
@@ -106,8 +97,8 @@ fun case_9() {
  * UNEXPECTED BEHAVIOUR
  * ISSUES: KT-22175
  */
-fun <T : String> T?.case_10() = this
-fun <T : Int> T?.case_10() = this
+fun <T : <!FINAL_UPPER_BOUND!>String<!>> T?.case_10() = this
+fun <T : <!FINAL_UPPER_BOUND!>Int<!>> T?.case_10() = this
 fun case_10() {
     var x: Int? = 10
     x = null
@@ -115,7 +106,7 @@ fun case_10() {
 }
 
 // TESTCASE NUMBER: 11
-fun <T : String> T?.case_11() = this
+fun <T : <!FINAL_UPPER_BOUND!>String<!>> T?.case_11() = this
 fun case_11() {
     var x: Int? = 10
     x = null

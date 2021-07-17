@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.ideaExt.idea
+
 /*
  * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
@@ -9,30 +11,43 @@ plugins {
 }
 
 dependencies {
-    compile(project(":compiler:fir:raw-fir:fir-common"))
+    api(project(":compiler:fir:raw-fir:raw-fir.common"))
+    implementation(project(":compiler:psi"))
+    implementation(kotlinxCollectionsImmutable())
 
     compileOnly(intellijCoreDep()) { includeJars("intellij-core", "guava", rootProject = rootProject) }
 
-    testCompile(intellijDep())
+    testImplementation(intellijDep())
 
-    testCompile(commonDep("junit:junit"))
+    testImplementation(commonDep("junit:junit"))
+    testImplementation(projectTests(":compiler:tests-common"))
+
     testCompileOnly(project(":kotlin-test:kotlin-test-jvm"))
     testCompileOnly(project(":kotlin-test:kotlin-test-junit"))
-    testCompile(projectTests(":compiler:tests-common"))
-    
     testCompileOnly(project(":kotlin-reflect-api"))
-    testRuntime(project(":kotlin-reflect"))
-    testRuntime(project(":core:descriptors.runtime"))
 
-    Platform[192].orHigher {
-        testCompileOnly(intellijCoreDep()) { includeJars("intellij-core") }
-        testRuntimeOnly(intellijCoreDep()) { includeJars("intellij-core") }
-    }
+    testRuntimeOnly(project(":kotlin-reflect"))
+    testRuntimeOnly(project(":core:descriptors.runtime"))
+
+    testCompileOnly(intellijCoreDep()) { includeJars("intellij-core") }
+    testRuntimeOnly(intellijCoreDep()) { includeJars("intellij-core") }
 }
+
+val generationRoot = projectDir.resolve("tests-gen")
 
 sourceSets {
     "main" { projectDefault() }
-    "test" { projectDefault() }
+    "test" {
+        projectDefault()
+        this.java.srcDir(generationRoot.name)
+    }
+}
+
+if (kotlinBuildProperties.isInJpsBuildIdeaSync) {
+    apply(plugin = "idea")
+    idea {
+        this.module.generatedSourceDirs.add(generationRoot)
+    }
 }
 
 projectTest(parallel = true) {

@@ -24,7 +24,8 @@ import java.lang.ref.SoftReference;
 
 public class ReflectProperties {
     public static abstract class Val<T> {
-        private static final Object NULL_VALUE = new Object() {};
+        private static final Object NULL_VALUE = new Object() {
+        };
 
         @SuppressWarnings({"UnusedParameters", "unused"})
         public final T getValue(Object instance, Object metadata) {
@@ -68,7 +69,7 @@ public class ReflectProperties {
 
     // A delegate for a lazy property on a soft reference, whose initializer may be invoked multiple times
     // including simultaneously from different threads
-    public static class LazySoftVal<T> extends Val<T> {
+    public static class LazySoftVal<T> extends Val<T> implements Function0<T> {
         private final Function0<T> initializer;
         private volatile SoftReference<Object> value = null;
 

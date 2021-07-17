@@ -1,3 +1,4 @@
+// FIR_IDE_IGNORE
 // FIR_IDENTICAL
 // !LANGUAGE: +NewInference
 // !DIAGNOSTICS: -UNREACHABLE_CODE -UNUSED_VARIABLE -ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE -UNUSED_VALUE -UNUSED_PARAMETER -UNUSED_EXPRESSION
@@ -8,7 +9,7 @@
  * KOTLIN DIAGNOSTICS SPEC TEST (POSITIVE)
  *
  * SPEC VERSION: 0.1-313
- * PLACE: expressions, conditional-expression -> paragraph 6 -> sentence 1
+ * MAIN LINK: expressions, conditional-expression -> paragraph 6 -> sentence 1
  * NUMBER: 1
  * DESCRIPTION: The type of the condition expression must be a subtype of kotlin.Boolean
  * HELPERS: checkType

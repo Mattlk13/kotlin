@@ -6,21 +6,21 @@
  * KOTLIN DIAGNOSTICS SPEC TEST (NEGATIVE)
  *
  * SPEC VERSION: 0.1-313
- * PLACE: overload-resolution, building-the-overload-candidate-set-ocs, infix-function-call -> paragraph 2 -> sentence 1
- * RELEVANT PLACES: overload-resolution, building-the-overload-candidate-set-ocs, infix-function-call -> paragraph 2 -> sentence 2
+ * MAIN LINK: overload-resolution, building-the-overload-candidate-set-ocs, infix-function-call -> paragraph 2 -> sentence 1
+ * PRIMARY LINKS: overload-resolution, building-the-overload-candidate-set-ocs, infix-function-call -> paragraph 2 -> sentence 2
  * overload-resolution, building-the-overload-candidate-set-ocs, call-with-an-explicit-receiver -> paragraph 6 -> sentence 1
  * NUMBER: 1
  * DESCRIPTION: Implicitly imported extension callable without infix modifier
  */
 
-// FILE: Extensions.kt
+// FILE: Extensions1.kt
 package libPackage
 
 class A() {
      fun foo(x: Int) = "member fun foo"
 }
 
-// FILE: Extensions.kt
+// FILE: Extensions2.kt
 // TESTCASE NUMBER: 1, 2, 3, 4
 
 package sentence3

@@ -1,6 +1,4 @@
-// IGNORE_BACKEND: JVM_IR
-// TODO KT-36774 Generate optimized loops over 'xs.withIndex()' in JVM_IR
-// TODO: Handle Sequences by extending DefaultIterableHandler.
+// IGNORE_BACKEND_FIR: JVM_IR
 // FULL_JDK
 
 val xsl = arrayListOf("a", "b", "c", "d")

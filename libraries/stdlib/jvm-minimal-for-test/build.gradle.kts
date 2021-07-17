@@ -7,10 +7,15 @@ plugins {
     `maven-publish`
 }
 
-jvmTarget = "1.6"
-javaHome = rootProject.extra["JDK_16"] as String
+project.configureJvmToolchain(JdkMajorVersion.JDK_1_6)
 
-val builtins by configurations.creating
+val builtins by configurations.creating {
+    isCanBeResolved = true
+    isCanBeConsumed = false
+    attributes {
+        attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements.JAR))
+    }
+}
 
 val runtime by configurations
 val runtimeJar by configurations.creating {
@@ -43,31 +48,26 @@ val copySources by task<Sync> {
         .include("kotlin/util/Standard.kt",
                  "kotlin/internal/Annotations.kt",
                  "kotlin/contracts/ContractBuilder.kt",
-                 "kotlin/contracts/Effect.kt")
+                 "kotlin/contracts/Effect.kt",
+                 "kotlin/annotations/Experimental.kt")
     into(File(buildDir, "src"))
-}
-
-tasks.withType<JavaCompile> {
-    sourceCompatibility = "1.6"
-    targetCompatibility = "1.6"
 }
 
 tasks.withType<KotlinCompile> {
     dependsOn(copySources)
     kotlinOptions {
         freeCompilerArgs += listOf(
-            "-module-name",
-            "kotlin-stdlib",
             "-Xallow-kotlin-package",
             "-Xmulti-platform",
+            "-Xsuppress-deprecated-jvm-target-warning",
             "-Xopt-in=kotlin.RequiresOptIn",
             "-Xopt-in=kotlin.contracts.ExperimentalContracts"
         )
+        moduleName = "kotlin-stdlib"
     }
 }
 
 val jar = runtimeJar {
-    archiveFileName.set("kotlin-stdlib-minimal-for-test.jar")
     dependsOn(builtins)
     from(provider { zipTree(builtins.singleFile) }) { include("kotlin/**") }
 }
@@ -75,7 +75,6 @@ val jar = runtimeJar {
 publishing {
     publications {
         create<MavenPublication>("internal") {
-            artifactId = "kotlin-stdlib-minimal-for-test"
             artifact(jar.get())
         }
     }
@@ -84,4 +83,3 @@ publishing {
         maven("${rootProject.buildDir}/internal/repo")
     }
 }
-

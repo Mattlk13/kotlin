@@ -1,15 +1,5 @@
 // SKIP_TXT
 
-/*
- * KOTLIN DIAGNOSTICS SPEC TEST (POSITIVE)
- *
- * SPEC VERSION: 0.1-100
- * PLACE: expressions, constant-literals, the-types-for-integer-literals -> paragraph 1 -> sentence 2
- * NUMBER: 2
- * DESCRIPTION: Type checking of decimal integer literals.
- * HELPERS: checkType
- */
-
 // TESTCASE NUMBER: 1
 fun case_1() {
     0 checkType { check<Int>() }
@@ -78,7 +68,7 @@ fun case_4() {
     checkSubtype<Int>(-2147483648)
     checkSubtype<Long>(-2147483648)
 
-    -2147483649 checkType { <!INAPPLICABLE_CANDIDATE!>check<!><Long>() }
+    -2147483649 checkType { check<Long>() }
     checkSubtype<Long>(-2147483649)
 }
 
@@ -87,6 +77,6 @@ fun case_5() {
     9223372036854775807 checkType { check<Long>() }
     checkSubtype<Long>(9223372036854775807)
 
-    -9223372036854775807 checkType { <!INAPPLICABLE_CANDIDATE!>check<!><Long>() }
+    -9223372036854775807 checkType { check<Long>() }
     checkSubtype<Long>(-9223372036854775807)
 }

@@ -18,14 +18,16 @@ dependencies {
     compile(project(":idea:idea-jps-common"))
 
     compileOnly(intellijDep())
-    Platform[192].orHigher {
-        compileOnly(intellijPluginDep("java"))
-        testCompileOnly(intellijPluginDep("java"))
-        testRuntimeOnly(intellijPluginDep("java"))
-        testRuntimeOnly(intellijPluginDep("java-ide-customization"))
-    }
-    
+    compileOnly(intellijPluginDep("java"))
+    testCompileOnly(intellijPluginDep("java"))
+    testRuntimeOnly(intellijPluginDep("java"))
+    testRuntimeOnly(intellijPluginDep("java-ide-customization"))
+
     excludeInAndroidStudio(rootProject) { compileOnly(intellijPluginDep("maven")) }
+
+    excludeInAndroidStudio(rootProject) {
+        compileOnly(intellijPluginDep("maven-model"))
+    }
 
     testCompile(projectTests(":idea"))
     testCompile(projectTests(":compiler:tests-common"))
@@ -36,9 +38,9 @@ dependencies {
         testCompileOnly(intellijPluginDep("maven"))
         testRuntime(intellijPluginDep("maven"))
 
-        if (Ide.IJ201.orHigher()) {
-            testRuntime(intellijPluginDep("repository-search"))
-        }
+        testCompileOnly(intellijPluginDep("maven-model"))
+        testRuntime(intellijPluginDep("maven-model"))
+        testRuntime(intellijPluginDep("repository-search"))
     }
 
     testCompile(project(":idea:idea-native")) { isTransitive = false }
@@ -53,8 +55,10 @@ dependencies {
     testRuntime(project(":sam-with-receiver-ide-plugin"))
     testRuntime(project(":allopen-ide-plugin"))
     testRuntime(project(":noarg-ide-plugin"))
+    testRuntime(project(":plugins:parcelize:parcelize-ide"))
     testRuntime(project(":kotlin-scripting-idea"))
     testRuntime(project(":kotlinx-serialization-ide-plugin"))
+    testRuntime(project(":plugins:lombok:lombok-ide-plugin"))
 
     testRuntime(intellijDep())
     // TODO: the order of the plugins matters here, consider avoiding order-dependency
@@ -67,8 +71,9 @@ dependencies {
     testRuntime(intellijPluginDep("android"))
     testRuntime(intellijPluginDep("smali"))
 
-    if (Ide.AS36.orHigher()) {
+    if (Ide.AS()) {
         testRuntime(intellijPluginDep("android-layoutlib"))
+        testRuntime(intellijPluginDep("platform-images"))
     }
 }
 

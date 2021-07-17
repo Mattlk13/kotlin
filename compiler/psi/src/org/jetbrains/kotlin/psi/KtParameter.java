@@ -129,7 +129,7 @@ public class KtParameter extends KtNamedDeclarationStub<KotlinParameterStub> imp
         return findChildByType(KtNodeTypes.DESTRUCTURING_DECLARATION);
     }
 
-    private static final TokenSet VAL_VAR_TOKEN_SET = TokenSet.create(KtTokens.VAL_KEYWORD, KtTokens.VAR_KEYWORD);
+    public static final TokenSet VAL_VAR_TOKEN_SET = TokenSet.create(KtTokens.VAL_KEYWORD, KtTokens.VAR_KEYWORD);
 
     @Override
     public ItemPresentation getPresentation() {
@@ -138,6 +138,41 @@ public class KtParameter extends KtNamedDeclarationStub<KotlinParameterStub> imp
 
     public boolean isLoopParameter() {
         return getParent() instanceof KtForExpression;
+    }
+
+    private <T extends PsiElement> boolean checkParentOfParentType(Class<T> klass) {
+        // `parent` is supposed to be [KtParameterList]
+        PsiElement parent = getParent();
+        if (parent == null) {
+            return false;
+        }
+        return klass.isInstance(parent.getParent());
+    }
+
+    public boolean isCatchParameter() {
+        return checkParentOfParentType(KtCatchClause.class);
+    }
+
+    /**
+     * For example,
+     *   lambdaConsumer { lambdaParameter ->
+     *     ...
+     *   }
+     *
+     * @return [true] if this [KtParameter] is a parameter of a lambda.
+     */
+    public boolean isLambdaParameter() {
+        return checkParentOfParentType(KtFunctionLiteral.class);
+    }
+
+    /**
+     * For example,
+     *   fun foo(lambdaArgument: (functionTypeParameter: T, ...) -> R) { ... }
+     *
+     * @return [true] if this [KtParameter] is a parameter of a function type.
+     */
+    public boolean isFunctionTypeParameter() {
+        return checkParentOfParentType(KtFunctionType.class);
     }
 
     @Nullable

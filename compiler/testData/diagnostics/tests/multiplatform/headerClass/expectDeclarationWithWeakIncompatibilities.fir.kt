@@ -12,7 +12,7 @@ expect val s: String
 
 expect open class Foo3
 
-// MODULE: m2-jvm(m1-common)
+// MODULE: m2-jvm()()(m1-common)
 
 // FILE: jvm.kt
 
@@ -23,6 +23,6 @@ actual var s: String = "value"
 
 fun foo2(): Int = 0
 
-actual class Foo3
+<!REDECLARATION!>actual class Foo3<!>
 
-class Foo3
+<!REDECLARATION!>class Foo3<!>

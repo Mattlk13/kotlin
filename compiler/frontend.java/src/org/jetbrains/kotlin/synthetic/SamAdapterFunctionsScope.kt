@@ -23,6 +23,7 @@ import org.jetbrains.kotlin.descriptors.impl.SimpleFunctionDescriptorImpl
 import org.jetbrains.kotlin.descriptors.impl.TypeAliasConstructorDescriptor
 import org.jetbrains.kotlin.descriptors.impl.TypeAliasConstructorDescriptorImpl
 import org.jetbrains.kotlin.descriptors.synthetic.FunctionInterfaceAdapterExtensionFunctionDescriptor
+import org.jetbrains.kotlin.incremental.KotlinLookupLocation
 import org.jetbrains.kotlin.incremental.components.LookupLocation
 import org.jetbrains.kotlin.incremental.components.LookupTracker
 import org.jetbrains.kotlin.incremental.record
@@ -33,17 +34,18 @@ import org.jetbrains.kotlin.load.java.lazy.descriptors.LazyJavaClassDescriptor
 import org.jetbrains.kotlin.load.java.sam.JavaSingleAbstractMethodUtils
 import org.jetbrains.kotlin.load.java.sam.SamAdapterDescriptor
 import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.resolve.calls.callUtil.isCallableReference
 import org.jetbrains.kotlin.resolve.calls.components.isVararg
 import org.jetbrains.kotlin.resolve.calls.inference.wrapWithCapturingSubstitution
 import org.jetbrains.kotlin.resolve.deprecation.DeprecationResolver
 import org.jetbrains.kotlin.resolve.sam.*
 import org.jetbrains.kotlin.resolve.scopes.DescriptorKindFilter
-import org.jetbrains.kotlin.resolve.scopes.ResolutionScope
 import org.jetbrains.kotlin.resolve.scopes.SyntheticScope
 import org.jetbrains.kotlin.storage.StorageManager
 import org.jetbrains.kotlin.types.*
 import org.jetbrains.kotlin.types.checker.findCorrespondingSupertype
 import org.jetbrains.kotlin.types.typeUtil.isNothing
+import org.jetbrains.kotlin.utils.addIfNotNull
 import kotlin.properties.Delegates
 
 interface SamAdapterExtensionFunctionDescriptor : FunctionDescriptor, FunctionInterfaceAdapterExtensionFunctionDescriptor {
@@ -57,10 +59,8 @@ class SamAdapterFunctionsScope(
     private val deprecationResolver: DeprecationResolver,
     private val lookupTracker: LookupTracker,
     private val samViaSyntheticScopeDisabled: Boolean,
-    private val shouldGenerateCandidateForVarargAfterSam: Boolean
+    private val allowNonSpreadArraysForVarargAfterSam: Boolean
 ) : SyntheticScope.Default() {
-    private val shouldGenerateAdditionalSamCandidate = !samViaSyntheticScopeDisabled || shouldGenerateCandidateForVarargAfterSam
-
     private val extensionForFunction =
         storageManager.createMemoizedFunctionWithNullableValues<FunctionDescriptor, FunctionDescriptor> { function ->
             extensionForFunctionNotCached(function)
@@ -68,8 +68,12 @@ class SamAdapterFunctionsScope(
 
     private val samAdapterForStaticFunction =
         storageManager.createMemoizedFunction<JavaMethodDescriptor, SamAdapterDescriptor<JavaMethodDescriptor>> { function ->
-            JavaSingleAbstractMethodUtils
-                .createSamAdapterFunction(function, samResolver, samConversionOracle)
+            JavaSingleAbstractMethodUtils.createSamAdapterFunction(
+                function,
+                samResolver,
+                samConversionOracle,
+                allowNonSpreadArraysForVarargAfterSam
+            )
         }
 
     private val samConstructorForClassifier =
@@ -79,8 +83,12 @@ class SamAdapterFunctionsScope(
 
     private val samConstructorForJavaConstructor =
         storageManager.createMemoizedFunction<JavaClassConstructorDescriptor, ClassConstructorDescriptor> { constructor ->
-            JavaSingleAbstractMethodUtils
-                .createSamAdapterConstructor(constructor, samResolver, samConversionOracle) as ClassConstructorDescriptor
+            JavaSingleAbstractMethodUtils.createSamAdapterConstructor(
+                constructor,
+                samResolver,
+                samConversionOracle,
+                allowNonSpreadArraysForVarargAfterSam
+            ) as ClassConstructorDescriptor
         }
 
     private val samConstructorForTypeAliasConstructor =
@@ -94,7 +102,12 @@ class SamAdapterFunctionsScope(
         if (!JavaSingleAbstractMethodUtils.isSamAdapterNecessary(function)) return null
         if (function.returnType == null) return null
         if (deprecationResolver.isHiddenInResolution(function)) return null
-        return SamAdapterExtensionFunctionDescriptorImpl.create(function, samResolver, samConversionOracle)
+        return SamAdapterExtensionFunctionDescriptorImpl.create(
+            function,
+            samResolver,
+            samConversionOracle,
+            allowNonSpreadArraysForVarargAfterSam
+        )
     }
 
     override fun getSyntheticMemberFunctions(
@@ -102,13 +115,11 @@ class SamAdapterFunctionsScope(
         name: Name,
         location: LookupLocation
     ): Collection<FunctionDescriptor> {
-        if (!shouldGenerateAdditionalSamCandidate) return emptyList()
-
         var result: SmartList<FunctionDescriptor>? = null
         for (type in receiverTypes) {
             for (function in type.memberScope.getContributedFunctions(name, location)) {
                 if (samViaSyntheticScopeDisabled && !function.hasNothingTypeInParameters) {
-                    if (!function.shouldGenerateCandidateForVarargAfterSamAndHasVararg) continue
+                    if (!function.shouldGenerateCandidateForVarargAfterSamAndHasVararg && !location.isCallableReference()) continue
                 }
 
                 val extension = extensionForFunction(function.original)?.substituteForReceiverType(type)
@@ -128,6 +139,12 @@ class SamAdapterFunctionsScope(
         }
     }
 
+    // TODO: replace this logic with a proper conversion in SamTypeConversions
+    private fun LookupLocation.isCallableReference(): Boolean {
+        if (this !is KotlinLookupLocation) return false
+        return element.isCallableReference()
+    }
+
     private fun recordSamLookupsForParameters(function: FunctionDescriptor, location: LookupLocation) {
         for (valueParameter in function.valueParameters) {
             recordSamLookupsToClassifier(valueParameter.type.constructor.declarationDescriptor ?: continue, location)
@@ -135,7 +152,7 @@ class SamAdapterFunctionsScope(
     }
 
     private val FunctionDescriptor.shouldGenerateCandidateForVarargAfterSamAndHasVararg
-        get() = shouldGenerateCandidateForVarargAfterSam && valueParameters.lastOrNull()?.isVararg == true
+        get() = allowNonSpreadArraysForVarargAfterSam && valueParameters.lastOrNull()?.isVararg == true
 
     private val FunctionDescriptor.hasNothingTypeInParameters
         get() = valueParameters.any { it.type.isNothing() && !it.original.type.isNothing() }
@@ -153,8 +170,6 @@ class SamAdapterFunctionsScope(
     }
 
     override fun getSyntheticMemberFunctions(receiverTypes: Collection<KotlinType>): Collection<FunctionDescriptor> {
-        if (!shouldGenerateAdditionalSamCandidate) return emptyList()
-
         return receiverTypes.flatMapTo(LinkedHashSet<FunctionDescriptor>()) { type ->
             type.memberScope.getContributedDescriptors(DescriptorKindFilter.FUNCTIONS)
                 .filterIsInstance<FunctionDescriptor>()
@@ -167,19 +182,20 @@ class SamAdapterFunctionsScope(
         }
     }
 
-    override fun getSyntheticStaticFunctions(scope: ResolutionScope, name: Name, location: LookupLocation): Collection<FunctionDescriptor> {
-        if (!shouldGenerateAdditionalSamCandidate) return emptyList()
-
-        return getSamFunctions(scope.getContributedFunctions(name, location), location)
+    override fun getSyntheticStaticFunctions(
+        contributedFunctions: Collection<FunctionDescriptor>,
+        location: LookupLocation
+    ): Collection<FunctionDescriptor> {
+        return getSamFunctions(contributedFunctions, location)
     }
 
-    override fun getSyntheticConstructors(scope: ResolutionScope, name: Name, location: LookupLocation): Collection<FunctionDescriptor> {
-        val classifier = scope.getContributedClassifier(name, location) ?: return emptyList()
-        recordSamLookupsToClassifier(classifier, location)
+    override fun getSyntheticConstructors(
+        contributedClassifier: ClassifierDescriptor,
+        location: LookupLocation
+    ): Collection<FunctionDescriptor> {
+        recordSamLookupsToClassifier(contributedClassifier, location)
 
-        if (!shouldGenerateAdditionalSamCandidate) return listOfNotNull(getSamConstructor(classifier))
-
-        return getAllSamConstructors(classifier)
+        return getAllSamConstructors(contributedClassifier)
     }
 
     private fun recordSamLookupsToClassifier(classifier: ClassifierDescriptor, location: LookupLocation) {
@@ -190,16 +206,12 @@ class SamAdapterFunctionsScope(
         lookupTracker.record(location, classifier, SAM_LOOKUP_NAME)
     }
 
-    override fun getSyntheticStaticFunctions(scope: ResolutionScope): Collection<FunctionDescriptor> {
-        if (!shouldGenerateAdditionalSamCandidate) return emptyList()
-
-        return getSamFunctions(scope.getContributedDescriptors(DescriptorKindFilter.FUNCTIONS), location = null)
+    override fun getSyntheticStaticFunctions(functionDescriptors: Collection<DeclarationDescriptor>): Collection<FunctionDescriptor> {
+        return getSamFunctions(functionDescriptors, location = null)
     }
 
-    override fun getSyntheticConstructors(scope: ResolutionScope): Collection<FunctionDescriptor> {
-        val classifiers = scope.getContributedDescriptors(DescriptorKindFilter.CLASSIFIERS).filterIsInstance<ClassifierDescriptor>()
-
-        if (!shouldGenerateAdditionalSamCandidate) return classifiers.mapNotNull { getSamConstructor(it) }
+    override fun getSyntheticConstructors(classifierDescriptors: Collection<DeclarationDescriptor>): Collection<FunctionDescriptor> {
+        val classifiers = classifierDescriptors.filterIsInstance<ClassifierDescriptor>()
 
         return classifiers.flatMap { getAllSamConstructors(it) }
     }
@@ -229,8 +241,6 @@ class SamAdapterFunctionsScope(
         functions: Collection<DeclarationDescriptor>,
         location: LookupLocation?
     ): List<SamAdapterDescriptor<JavaMethodDescriptor>> {
-        if (!shouldGenerateAdditionalSamCandidate) return emptyList()
-
         return functions.mapNotNull { function ->
             if (function !is JavaMethodDescriptor) return@mapNotNull null
             if (function.dispatchReceiverParameter != null) return@mapNotNull null // consider only statics
@@ -244,14 +254,15 @@ class SamAdapterFunctionsScope(
         }
     }
 
-    private fun getAllSamConstructors(classifier: ClassifierDescriptor): List<FunctionDescriptor> {
-        return getSamAdaptersFromConstructors(classifier) + listOfNotNull(getSamConstructor(classifier))
-    }
+    private fun getAllSamConstructors(classifier: ClassifierDescriptor): List<FunctionDescriptor> =
+        getSamAdaptersFromConstructors(classifier).also {
+            it.addIfNotNull(getSamConstructor(classifier))
+        }
 
-    private fun getSamAdaptersFromConstructors(classifier: ClassifierDescriptor): List<FunctionDescriptor> {
-        if (!shouldGenerateAdditionalSamCandidate || classifier !is JavaClassDescriptor) return emptyList()
+    private fun getSamAdaptersFromConstructors(classifier: ClassifierDescriptor): MutableList<FunctionDescriptor> {
+        if (classifier !is JavaClassDescriptor) return SmartList()
 
-        return arrayListOf<FunctionDescriptor>().apply {
+        return SmartList<FunctionDescriptor>().apply {
             for (constructor in classifier.constructors) {
                 val samConstructor = getSyntheticConstructor(constructor) ?: continue
                 add(samConstructor)
@@ -299,7 +310,8 @@ class SamAdapterFunctionsScope(
             fun create(
                 sourceFunction: FunctionDescriptor,
                 samResolver: SamConversionResolver,
-                samConversionOracle: SamConversionOracle
+                samConversionOracle: SamConversionOracle,
+                allowNonSpreadArraysForVarargAfterSam: Boolean
             ): SamAdapterExtensionFunctionDescriptorImpl {
                 val descriptor = SamAdapterExtensionFunctionDescriptorImpl(
                     sourceFunction.containingDeclaration,
@@ -320,7 +332,7 @@ class SamAdapterFunctionsScope(
 
                 val returnType = typeSubstitutor.safeSubstitute(sourceFunction.returnType!!, Variance.INVARIANT)
                 val valueParameters = JavaSingleAbstractMethodUtils.createValueParametersForSamAdapter(
-                    sourceFunction, descriptor, typeSubstitutor, samResolver, samConversionOracle
+                    sourceFunction, descriptor, typeSubstitutor, samResolver, samConversionOracle, allowNonSpreadArraysForVarargAfterSam
                 )
 
                 val visibility = syntheticVisibility(sourceFunction, isUsedForExtension = false)

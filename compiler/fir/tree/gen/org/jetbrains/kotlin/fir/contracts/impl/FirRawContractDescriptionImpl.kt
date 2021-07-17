@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2021 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -7,7 +7,7 @@ package org.jetbrains.kotlin.fir.contracts.impl
 
 import org.jetbrains.kotlin.fir.FirSourceElement
 import org.jetbrains.kotlin.fir.contracts.FirRawContractDescription
-import org.jetbrains.kotlin.fir.expressions.FirFunctionCall
+import org.jetbrains.kotlin.fir.expressions.FirExpression
 import org.jetbrains.kotlin.fir.visitors.*
 
 /*
@@ -17,14 +17,14 @@ import org.jetbrains.kotlin.fir.visitors.*
 
 internal class FirRawContractDescriptionImpl(
     override val source: FirSourceElement?,
-    override var contractCall: FirFunctionCall,
+    override val rawEffects: MutableList<FirExpression>,
 ) : FirRawContractDescription() {
     override fun <R, D> acceptChildren(visitor: FirVisitor<R, D>, data: D) {
-        contractCall.accept(visitor, data)
+        rawEffects.forEach { it.accept(visitor, data) }
     }
 
     override fun <D> transformChildren(transformer: FirTransformer<D>, data: D): FirRawContractDescriptionImpl {
-        contractCall = contractCall.transformSingle(transformer, data)
+        rawEffects.transformInplace(transformer, data)
         return this
     }
 }

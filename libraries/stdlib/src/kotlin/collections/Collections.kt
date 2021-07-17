@@ -11,7 +11,6 @@ package kotlin.collections
 
 import kotlin.contracts.*
 import kotlin.random.Random
-import kotlin.collections.builders.*
 
 internal object EmptyIterator : ListIterator<Nothing> {
     override fun hasNext(): Boolean = false
@@ -170,8 +169,14 @@ public inline fun <T> MutableList(size: Int, init: (index: Int) -> T): MutableLi
 @kotlin.internal.InlineOnly
 public inline fun <E> buildList(@BuilderInference builderAction: MutableList<E>.() -> Unit): List<E> {
     contract { callsInPlace(builderAction, InvocationKind.EXACTLY_ONCE) }
-    return ListBuilder<E>().apply(builderAction).build()
+    return buildListInternal(builderAction)
 }
+
+@PublishedApi
+@SinceKotlin("1.3")
+@ExperimentalStdlibApi
+@kotlin.internal.InlineOnly
+internal expect inline fun <E> buildListInternal(builderAction: MutableList<E>.() -> Unit): List<E>
 
 /**
  * Builds a new read-only [List] by populating a [MutableList] using the given [builderAction]
@@ -184,16 +189,21 @@ public inline fun <E> buildList(@BuilderInference builderAction: MutableList<E>.
  *
  * @throws IllegalArgumentException if the given [capacity] is negative.
  *
- * @sample samples.collections.Builders.Lists.buildListSample
+ * @sample samples.collections.Builders.Lists.buildListSampleWithCapacity
  */
 @SinceKotlin("1.3")
 @ExperimentalStdlibApi
 @kotlin.internal.InlineOnly
 public inline fun <E> buildList(capacity: Int, @BuilderInference builderAction: MutableList<E>.() -> Unit): List<E> {
     contract { callsInPlace(builderAction, InvocationKind.EXACTLY_ONCE) }
-    return ListBuilder<E>(capacity).apply(builderAction).build()
+    return buildListInternal(capacity, builderAction)
 }
 
+@PublishedApi
+@SinceKotlin("1.3")
+@ExperimentalStdlibApi
+@kotlin.internal.InlineOnly
+internal expect inline fun <E> buildListInternal(capacity: Int, builderAction: MutableList<E>.() -> Unit): List<E>
 
 /**
  * Returns an [IntRange] of the valid indices for this collection.

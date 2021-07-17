@@ -45,7 +45,7 @@ class ExecutionStrategyJvmIT : ExecutionStrategyIT() {
 abstract class ExecutionStrategyIT : BaseGradleIT() {
     @Test
     fun testDaemon() {
-        doTestExecutionStrategy("daemon")
+        doTestExecutionStrategy("daemon", addHeapDumpOptions = false)
     }
 
     @Test
@@ -58,8 +58,8 @@ abstract class ExecutionStrategyIT : BaseGradleIT() {
         doTestExecutionStrategy("out-of-process")
     }
 
-    private fun doTestExecutionStrategy(executionStrategy: String) {
-        val project = Project("kotlinBuiltins")
+    private fun doTestExecutionStrategy(executionStrategy: String, addHeapDumpOptions: Boolean = true) {
+        val project = Project("kotlinBuiltins", addHeapDumpOptions = addHeapDumpOptions)
         setupProject(project)
 
         val strategyCLIArg = "-Dkotlin.compiler.execution.strategy=$executionStrategy"
@@ -89,8 +89,6 @@ abstract class ExecutionStrategyIT : BaseGradleIT() {
     }
 
     private fun CompiledProject.checkCompileDaemon() {
-        val isGradleAtLeast50 = project.testGradleVersionAtLeast("5.0")
-
         val m = "Kotlin compile daemon JVM options: \\[(.*?)\\]".toRegex().find(output)
             ?: error("Could not find Kotlin compile daemon JVM options in Gradle's output")
         val kotlinDaemonJvmArgs = m.groupValues[1].split(",").mapTo(LinkedHashSet()) { it.trim() }
@@ -102,11 +100,8 @@ abstract class ExecutionStrategyIT : BaseGradleIT() {
             )
         }
 
-        if (isGradleAtLeast50) {
-            // 256m is the default value for Gradle 5.0+
-            assertDaemonArgsContain("-XX:MaxMetaspaceSize=256m")
-        }
-
+        // 256m is the default value for Gradle 5.0+
+        assertDaemonArgsContain("-XX:MaxMetaspaceSize=256m")
         assertDaemonArgsContain("-ea")
     }
 

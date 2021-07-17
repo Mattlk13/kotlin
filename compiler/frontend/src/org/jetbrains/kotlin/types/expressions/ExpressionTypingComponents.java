@@ -7,7 +7,7 @@ package org.jetbrains.kotlin.types.expressions;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns;
-import org.jetbrains.kotlin.builtins.PlatformToKotlinClassMap;
+import org.jetbrains.kotlin.builtins.PlatformToKotlinClassMapper;
 import org.jetbrains.kotlin.config.LanguageVersionSettings;
 import org.jetbrains.kotlin.context.GlobalContext;
 import org.jetbrains.kotlin.contracts.EffectSystem;
@@ -33,7 +33,7 @@ public class ExpressionTypingComponents {
     /*package*/ ModuleDescriptor moduleDescriptor;
     /*package*/ ExpressionTypingServices expressionTypingServices;
     /*package*/ CallResolver callResolver;
-    /*package*/ PlatformToKotlinClassMap platformToKotlinClassMap;
+    /*package*/ PlatformToKotlinClassMapper platformToKotlinClassMapper;
     /*package*/ ControlStructureTypingUtils controlStructureTypingUtils;
     /*package*/ ForLoopConventionsChecker forLoopConventionsChecker;
     /*package*/ FakeCallResolver fakeCallResolver;
@@ -67,6 +67,7 @@ public class ExpressionTypingComponents {
     /*package*/ NewKotlinTypeChecker kotlinTypeChecker;
     /*package*/ TypeResolutionInterceptor typeResolutionInterceptor;
     /*package*/ MissingSupertypesResolver missingSupertypesResolver;
+    /*package*/ AnnotationChecker annotationChecker;
 
 
     @Inject
@@ -90,8 +91,8 @@ public class ExpressionTypingComponents {
     }
 
     @Inject
-    public void setPlatformToKotlinClassMap(@NotNull PlatformToKotlinClassMap platformToKotlinClassMap) {
-        this.platformToKotlinClassMap = platformToKotlinClassMap;
+    public void setPlatformToKotlinClassMap(@NotNull PlatformToKotlinClassMapper platformToKotlinClassMapper) {
+        this.platformToKotlinClassMapper = platformToKotlinClassMapper;
     }
 
     @Inject
@@ -257,5 +258,10 @@ public class ExpressionTypingComponents {
     @Inject
     public void setMissingSupertypesResolver(@NotNull MissingSupertypesResolver missingSupertypesResolver) {
         this.missingSupertypesResolver = missingSupertypesResolver;
+    }
+
+    @Inject
+    public void setAnnotationChecker(@NotNull AnnotationChecker annotationChecker) {
+        this.annotationChecker = annotationChecker;
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -12,6 +12,7 @@ import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
 import org.jetbrains.kotlin.ir.backend.js.lower.serialization.ir.JsManglerDesc
 import org.jetbrains.kotlin.ir.backend.js.utils.NameTables
+import org.jetbrains.kotlin.ir.declarations.impl.IrFactoryImpl
 import org.jetbrains.kotlin.ir.util.SymbolTable
 import org.jetbrains.kotlin.scripting.compiler.plugin.ScriptCompilerProxy
 import org.jetbrains.kotlin.scripting.repl.js.JsCompiledScript
@@ -21,8 +22,8 @@ import org.jetbrains.kotlin.scripting.repl.js.readLibrariesFromConfiguration
 import kotlin.script.experimental.api.*
 
 class JsScriptCompilerWithDependenciesProxy(private val environment: KotlinCoreEnvironment) : ScriptCompilerProxy {
-    private val nameTables = NameTables(emptyList())
-    private val symbolTable = SymbolTable(IdSignatureDescriptor(JsManglerDesc))
+    private val nameTables = NameTables(emptyList(), mappedNames = mutableMapOf())
+    private val symbolTable = SymbolTable(IdSignatureDescriptor(JsManglerDesc), IrFactoryImpl)
     private val dependencies: List<ModuleDescriptor> = readLibrariesFromConfiguration(environment.configuration)
     private val compiler = JsCoreScriptingCompiler(environment, nameTables, symbolTable, dependencies)
     private var scriptDependencyCompiler: JsScriptDependencyCompiler? =

@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -18,7 +18,6 @@ import com.intellij.openapi.roots.DependencyScope
 import com.intellij.openapi.roots.ExportableOrderEntry
 import com.intellij.openapi.roots.ModifiableRootModel
 import org.jetbrains.kotlin.cli.common.arguments.K2JSCompilerArguments
-import org.jetbrains.kotlin.config.CoroutineSupport
 import org.jetbrains.kotlin.config.JvmTarget
 import org.jetbrains.kotlin.config.KotlinModuleKind
 import org.jetbrains.kotlin.gradle.KotlinCompilation
@@ -30,6 +29,7 @@ import org.jetbrains.kotlin.idea.inspections.gradle.findAll
 import org.jetbrains.kotlin.idea.inspections.gradle.findKotlinPluginVersion
 import org.jetbrains.kotlin.idea.platform.IdePlatformKindTooling
 import org.jetbrains.kotlin.idea.roots.migrateNonJvmSourceFolders
+import org.jetbrains.kotlin.idea.roots.populateNonJvmSourceRootTypes
 import org.jetbrains.kotlin.platform.TargetPlatform
 import org.jetbrains.kotlin.platform.impl.JvmIdePlatformKind
 import org.jetbrains.kotlin.platform.impl.NativeIdePlatformKind
@@ -37,6 +37,7 @@ import org.jetbrains.kotlin.platform.jvm.JvmPlatforms
 import org.jetbrains.kotlin.platform.konan.NativePlatforms
 import org.jetbrains.plugins.gradle.model.data.BuildScriptClasspathData
 import org.jetbrains.plugins.gradle.model.data.GradleSourceSetData
+import org.jetbrains.plugins.gradle.util.GradleConstants
 
 class KotlinSourceSetDataService : AbstractProjectDataService<GradleSourceSetData, Void>() {
     override fun getTargetDataKey() = GradleSourceSetData.KEY
@@ -60,6 +61,7 @@ class KotlinSourceSetDataService : AbstractProjectDataService<GradleSourceSetDat
 
             if (platform.platforms.any { it != KotlinPlatform.JVM && it != KotlinPlatform.ANDROID }) {
                 migrateNonJvmSourceFolders(rootModel)
+                populateNonJvmSourceRootTypes(nodeToImport, ideModule)
             }
 
             configureFacet(sourceSetData, kotlinSourceSet, mainModuleData, ideModule, modelsProvider)?.let { facet ->
@@ -108,10 +110,12 @@ class KotlinSourceSetDataService : AbstractProjectDataService<GradleSourceSetDat
                     when (platformKind) {
                         is JvmIdePlatformKind -> {
                             val jvmTarget = JvmTarget.fromString(moduleData.targetCompatibility ?: "") ?: JvmTarget.DEFAULT
-                            JvmPlatforms.jvmPlatformByTargetVersion(jvmTarget).componentPlatforms
+                            JvmPlatforms.jvmPlatformByTargetVersion(jvmTarget)
                         }
-                        is NativeIdePlatformKind -> NativePlatforms.nativePlatformByTargetNames(moduleData.konanTargets)
-                        else -> platformKind.defaultPlatform.componentPlatforms
+                        is NativeIdePlatformKind -> {
+                            NativePlatforms.nativePlatformByTargetNames(moduleData.konanTargets)
+                        }
+                        else -> platformKind.defaultPlatform
                     }
                 }
                 .distinct()
@@ -119,14 +123,13 @@ class KotlinSourceSetDataService : AbstractProjectDataService<GradleSourceSetDat
 
             val platform = TargetPlatform(platformKinds)
 
-            val coroutinesProperty = CoroutineSupport.byCompilerArgument(
-                mainModuleNode.coroutines ?: findKotlinCoroutinesProperty(ideModule.project)
-            )
-
-            val kotlinFacet = ideModule.getOrCreateFacet(modelsProvider, false)
+            val compilerArguments = kotlinSourceSet.compilerArguments
+            // Used ID is the same as used in org/jetbrains/kotlin/idea/configuration/KotlinGradleSourceSetDataService.kt:280
+            // because this DataService was separated from KotlinGradleSourceSetDataService for MPP projects only
+            val id = if (compilerArguments?.multiPlatform == true) GradleConstants.SYSTEM_ID.id else null
+            val kotlinFacet = ideModule.getOrCreateFacet(modelsProvider, false, id)
             kotlinFacet.configureFacet(
                 compilerVersion,
-                coroutinesProperty,
                 platform,
                 modelsProvider,
                 mainModuleNode.isHmpp,
@@ -134,7 +137,6 @@ class KotlinSourceSetDataService : AbstractProjectDataService<GradleSourceSetDat
                 kotlinSourceSet.dependsOn
             )
 
-            val compilerArguments = kotlinSourceSet.compilerArguments
             val defaultCompilerArguments = kotlinSourceSet.defaultCompilerArguments
             if (compilerArguments != null) {
                 applyCompilerArgumentsToFacet(

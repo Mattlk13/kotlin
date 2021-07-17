@@ -7,12 +7,14 @@ package org.jetbrains.kotlin.gradle.targets.js
 
 import org.gradle.api.NamedDomainObjectContainer
 import org.gradle.api.Project
+import org.gradle.api.Task
 import org.gradle.api.tasks.TaskProvider
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
 import org.jetbrains.kotlin.gradle.dsl.kotlinExtension
 import org.jetbrains.kotlin.gradle.plugin.*
 import org.jetbrains.kotlin.gradle.plugin.AbstractKotlinTargetConfigurator.Companion.runTaskNameSuffix
 import org.jetbrains.kotlin.gradle.plugin.KotlinCompilation.Companion.MAIN_COMPILATION_NAME
+import org.jetbrains.kotlin.gradle.plugin.KotlinJsCompilerType.LEGACY
 import org.jetbrains.kotlin.gradle.plugin.mpp.*
 import org.jetbrains.kotlin.gradle.targets.js.dsl.KotlinJsBrowserDsl
 import org.jetbrains.kotlin.gradle.targets.js.dsl.KotlinJsNodeDsl
@@ -22,6 +24,7 @@ import org.jetbrains.kotlin.gradle.targets.js.ir.KotlinJsBinaryContainer
 import org.jetbrains.kotlin.gradle.targets.js.ir.KotlinJsIrTarget
 import org.jetbrains.kotlin.gradle.targets.js.subtargets.KotlinBrowserJs
 import org.jetbrains.kotlin.gradle.targets.js.subtargets.KotlinNodeJs
+import org.jetbrains.kotlin.gradle.tasks.locateOrRegisterTask
 import org.jetbrains.kotlin.gradle.tasks.locateTask
 import org.jetbrains.kotlin.gradle.testing.internal.KotlinTestReport
 import org.jetbrains.kotlin.gradle.testing.testTaskName
@@ -50,9 +53,17 @@ constructor(
             field = value
         }
 
+    internal val commonFakeApiElementsConfigurationName: String
+        get() = lowerCamelCaseName(
+            irTarget?.let {
+                this.disambiguationClassifierInPlatform
+            } ?: disambiguationClassifier,
+            "commonFakeApiElements"
+        )
+
     val disambiguationClassifierInPlatform: String?
         get() = if (irTarget != null) {
-            disambiguationClassifier?.removeJsCompilerSuffix(KotlinJsCompilerType.LEGACY)
+            disambiguationClassifier?.removeJsCompilerSuffix(LEGACY)
         } else {
             disambiguationClassifier
         }
@@ -67,7 +78,7 @@ constructor(
 
             val componentName =
                 if (project.kotlinExtension is KotlinMultiplatformExtension)
-                    targetName
+                    irTarget?.let { targetName.removeJsCompilerSuffix(LEGACY) } ?: targetName
                 else PRIMARY_SINGLE_COMPONENT_NAME
 
             val result = createKotlinVariant(componentName, mainCompilation, usageContexts)
@@ -80,6 +91,20 @@ constructor(
         }
     }
 
+    override fun createUsageContexts(producingCompilation: KotlinCompilation<*>): Set<DefaultKotlinUsageContext> {
+        val usageContexts = super.createUsageContexts(producingCompilation)
+
+        if (isMpp!!) return usageContexts
+
+        return usageContexts +
+                DefaultKotlinUsageContext(
+                    compilation = compilations.getByName(KotlinCompilation.MAIN_COMPILATION_NAME),
+                    usage = project.usageByName("java-api-jars"),
+                    dependencyConfigurationName = commonFakeApiElementsConfigurationName,
+                    overrideConfigurationArtifacts = emptySet()
+                )
+    }
+
     override fun createKotlinVariant(
         componentName: String,
         compilation: KotlinCompilation<*>,
@@ -87,7 +112,7 @@ constructor(
     ): KotlinVariant {
         return super.createKotlinVariant(componentName, compilation, usageContexts).apply {
             irTarget?.let {
-                artifactTargetName = targetName.removeJsCompilerSuffix(KotlinJsCompilerType.LEGACY)
+                artifactTargetName = targetName.removeJsCompilerSuffix(LEGACY)
             }
         }
     }
@@ -99,20 +124,30 @@ constructor(
             .get()
 
     var irTarget: KotlinJsIrTarget? = null
+        internal set
+
+    open var isMpp: Boolean? = null
+        internal set
 
     val testTaskName get() = testRuns.getByName(KotlinTargetWithTests.DEFAULT_TEST_RUN_NAME).testTaskName
     val testTask: TaskProvider<KotlinTestReport>
         get() = checkNotNull(project.locateTask(testTaskName))
 
     val runTaskName get() = lowerCamelCaseName(disambiguationClassifier, runTaskNameSuffix)
-    val runTask
-        get() = project.tasks.maybeCreate(runTaskName).also {
+    val runTask: TaskProvider<Task>
+        get() = project.locateOrRegisterTask(runTaskName) {
             it.description = "Run js on all configured platforms"
         }
+
+    private val propertiesProvider = PropertiesProvider(project)
 
     private val browserLazyDelegate = lazy {
         project.objects.newInstance(KotlinBrowserJs::class.java, this).also {
             it.configure()
+
+            if (propertiesProvider.jsGenerateExecutableDefault && irTarget == null) {
+                binaries.executable()
+            }
 
             browserConfiguredHandlers.forEach { handler ->
                 handler(it)
@@ -136,6 +171,11 @@ constructor(
     private val nodejsLazyDelegate = lazy {
         project.objects.newInstance(KotlinNodeJs::class.java, this).also {
             it.configure()
+
+            if (propertiesProvider.jsGenerateExecutableDefault && irTarget == null) {
+                binaries.executable()
+            }
+
             nodejsConfiguredHandlers.forEach { handler ->
                 handler(it)
             }
@@ -174,7 +214,7 @@ constructor(
 
     override fun useCommonJs() {
         compilations.all {
-            it.compileKotlinTask.kotlinOptions {
+            it.kotlinOptions {
                 moduleKind = "commonjs"
                 sourceMap = true
                 sourceMapEmbedSources = null

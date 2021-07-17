@@ -8,12 +8,14 @@ package org.jetbrains.kotlin.idea.perf
 import com.intellij.application.options.CodeStyle
 import com.intellij.openapi.application.runWriteAction
 import com.intellij.psi.PsiDocumentManager
-import com.intellij.psi.codeStyle.PackageEntry
 import com.intellij.testFramework.LightProjectDescriptor
+import com.intellij.testFramework.RunAll
+import com.intellij.util.ThrowableRunnable
 import junit.framework.TestCase
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
 import org.jetbrains.kotlin.idea.core.formatter.KotlinCodeStyleSettings
+import org.jetbrains.kotlin.idea.core.formatter.KotlinPackageEntry
 import org.jetbrains.kotlin.idea.test.KotlinLightCodeInsightFixtureTestCase
 import org.jetbrains.kotlin.idea.test.KotlinWithJdkAndRuntimeLightProjectDescriptor
 import org.jetbrains.kotlin.idea.util.ImportInsertHelper
@@ -29,6 +31,12 @@ abstract class AbstractPerformanceImportTest : KotlinLightCodeInsightFixtureTest
     override fun getProjectDescriptor(): LightProjectDescriptor = KotlinWithJdkAndRuntimeLightProjectDescriptor.INSTANCE
 
     protected abstract fun stats(): Stats
+
+    override fun tearDown() {
+        RunAll(
+            ThrowableRunnable { super.tearDown() }
+        ).run()
+    }
 
     protected fun doPerfTest(unused: String) {
         val testName = getTestName(false)
@@ -61,10 +69,10 @@ abstract class AbstractPerformanceImportTest : KotlinLightCodeInsightFixtureTest
                 InTextDirectivesUtils.getPrefixedBoolean(fileText, "// IMPORT_NESTED_CLASSES:") ?: false
 
             InTextDirectivesUtils.findLinesWithPrefixesRemoved(fileText, "// PACKAGE_TO_USE_STAR_IMPORTS:").forEach {
-                codeStyleSettings.PACKAGES_TO_USE_STAR_IMPORTS.addEntry(PackageEntry(false, it.trim(), false))
+                codeStyleSettings.PACKAGES_TO_USE_STAR_IMPORTS.addEntry(KotlinPackageEntry(it.trim(), false))
             }
             InTextDirectivesUtils.findLinesWithPrefixesRemoved(fileText, "// PACKAGES_TO_USE_STAR_IMPORTS:").forEach {
-                codeStyleSettings.PACKAGES_TO_USE_STAR_IMPORTS.addEntry(PackageEntry(false, it.trim(), true))
+                codeStyleSettings.PACKAGES_TO_USE_STAR_IMPORTS.addEntry(KotlinPackageEntry(it.trim(), true))
             }
 
             var descriptorName = InTextDirectivesUtils.findStringWithPrefixes(file.text, "// IMPORT:")

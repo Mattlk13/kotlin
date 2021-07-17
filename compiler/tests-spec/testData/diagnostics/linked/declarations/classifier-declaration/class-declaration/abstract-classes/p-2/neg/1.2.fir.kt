@@ -2,15 +2,6 @@
 // !DIAGNOSTICS: -UNUSED_VARIABLE -ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE -UNUSED_VALUE -UNUSED_PARAMETER -UNUSED_EXPRESSION
 // SKIP_TXT
 
-/*
- * KOTLIN DIAGNOSTICS SPEC TEST (NEGATIVE)
- *
- * SPEC VERSION: 0.1-213
- * PLACE: declarations, classifier-declaration, class-declaration, abstract-classes -> paragraph 2 -> sentence 1
- * NUMBER: 2
- * DESCRIPTION: Abstract classes may contain abstract members, which should be implemented in an anonymous class that inherits from that abstract type
- */
-
 // TESTCASE NUMBER: 1
 private abstract class Base {
 
@@ -30,12 +21,12 @@ fun case1() {
         override var a: Any
             get() = TODO()
             set(value) {}
-        override val b: Any
+        override <!VAR_OVERRIDDEN_BY_VAL!>val<!> b: Any
             get() = TODO()
         override var c: Any
             get() = TODO()
             set(value) {}
-        override val d: Any
+        override <!VAR_OVERRIDDEN_BY_VAL!>val<!> d: Any
             get() = TODO()
 
         override fun foo() {}
@@ -53,7 +44,7 @@ fun case1() {
 * NOTE: property is not implemented
 */
 fun case2() {
-    val impl = object : Base() {
+    val impl = <!ABSTRACT_CLASS_MEMBER_NOT_IMPLEMENTED!>object<!> : Base() {
         override var b: Any
             get() = TODO()
             set(value) {}
@@ -80,7 +71,7 @@ fun case2() {
 */
 
 fun case3() {
-    val impl = object : Base() {
+    val impl = <!ABSTRACT_CLASS_MEMBER_NOT_IMPLEMENTED!>object<!> : Base() {
         override var b: Any
             get() = TODO()
             set(value) {}

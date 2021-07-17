@@ -1,6 +1,4 @@
 // !DIAGNOSTICS: -UNUSED_PARAMETER -UNUSED_VARIABLE
-// !LANGUAGE: -NonStrictOnlyInputTypesChecks
-// !WITH_NEW_INFERENCE
 
 open class Base()
 class CX : Base()

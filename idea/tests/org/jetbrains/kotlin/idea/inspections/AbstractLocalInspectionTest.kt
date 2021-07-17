@@ -8,16 +8,23 @@ package org.jetbrains.kotlin.idea.inspections
 import com.google.common.collect.Lists
 import com.intellij.codeHighlighting.HighlightDisplayLevel
 import com.intellij.codeHighlighting.Pass
+import com.intellij.codeHighlighting.TextEditorHighlightingPass
 import com.intellij.codeInsight.daemon.impl.HighlightInfoType
+import com.intellij.codeInsight.daemon.impl.TextEditorHighlightingPassRegistrarEx
 import com.intellij.codeInsight.intention.EmptyIntentionAction
 import com.intellij.codeInspection.ProblemHighlightType
 import com.intellij.openapi.util.SystemInfo
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.profile.codeInspection.ProjectInspectionProfileManager
 import com.intellij.testFramework.fixtures.impl.CodeInsightTestFixtureImpl
+import com.intellij.util.io.outputStream
+import com.intellij.util.io.write
 import junit.framework.ComparisonFailure
 import junit.framework.TestCase
+import org.jdom.Element
+import org.jetbrains.annotations.NotNull
 import org.jetbrains.kotlin.idea.core.script.ScriptConfigurationManager
+import org.jetbrains.kotlin.idea.highlighter.AbstractHighlightingPassBase
 import org.jetbrains.kotlin.idea.test.DirectiveBasedActionUtils
 import org.jetbrains.kotlin.idea.test.KotlinLightCodeInsightFixtureTestCase
 import org.jetbrains.kotlin.idea.test.withCustomCompilerOptions
@@ -27,9 +34,14 @@ import org.jetbrains.kotlin.test.InTextDirectivesUtils
 import org.jetbrains.kotlin.test.KotlinTestUtils
 import org.junit.Assert
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
+import kotlin.io.path.*
+
 
 abstract class AbstractLocalInspectionTest : KotlinLightCodeInsightFixtureTestCase() {
-    private val inspectionFileName: String
+    protected open val inspectionFileName: String
         get() = ".inspection"
 
     private val afterFileNameSuffix: String
@@ -116,19 +128,24 @@ abstract class AbstractLocalInspectionTest : KotlinLightCodeInsightFixtureTestCa
                 ScriptConfigurationManager.updateScriptDependenciesSynchronously(myFixture.file)
             }
 
-            doTestFor(mainFile.name, inspection, fileText)
+            doTestFor(mainFile, inspection, fileText)
 
             if (file is KtFile && !InTextDirectivesUtils.isDirectiveDefined(fileText, "// SKIP_ERRORS_AFTER")) {
-                DirectiveBasedActionUtils.checkForUnexpectedErrors(file as KtFile)
+                checkForUnexpectedErrors(fileText)
             }
         }
+    }
+
+    protected open fun checkForUnexpectedErrors(fileText: String) {
+        DirectiveBasedActionUtils.checkForUnexpectedErrors(file as KtFile)
     }
 
     protected fun runInspectionWithFixesAndCheck(
         inspection: AbstractKotlinInspection,
         expectedProblemString: String?,
         expectedHighlightString: String?,
-        localFixTextString: String?
+        localFixTextString: String?,
+        inspectionSettings: Element? = null
     ): Boolean {
         val problemExpected = expectedProblemString == null || expectedProblemString != "none"
         myFixture.enableInspections(inspection::class.java)
@@ -139,16 +156,27 @@ abstract class AbstractLocalInspectionTest : KotlinLightCodeInsightFixtureTestCa
         val state = inspectionProfile.getToolDefaultState(inspection.shortName, project)
         state.level = HighlightDisplayLevel.WARNING
 
+        if (inspectionSettings != null) {
+            state.tool.tool.readSettings(inspectionSettings)
+        }
+
+        val passIdsToIgnore = mutableListOf(
+            Pass.LINE_MARKERS,
+            Pass.EXTERNAL_TOOLS,
+            Pass.POPUP_HINTS,
+            Pass.UPDATE_ALL,
+            Pass.UPDATE_FOLDING,
+            Pass.WOLF
+        )
+        val passRegistrar = TextEditorHighlightingPassRegistrarEx.getInstanceEx(myFixture.project)
+        // to exclude AbstractHighlightingPassBase instances based on their ids
+        passRegistrar.instantiatePasses(
+            file, editor, passIdsToIgnore.toIntArray()
+        ).filterIsInstance<AbstractHighlightingPassBase>().map(TextEditorHighlightingPass::getId).forEach(passIdsToIgnore::add)
+
         val caretOffset = myFixture.caretOffset
         val highlightInfos = CodeInsightTestFixtureImpl.instantiateAndRun(
-            file, editor, intArrayOf(
-                Pass.LINE_MARKERS,
-                Pass.EXTERNAL_TOOLS,
-                Pass.POPUP_HINTS,
-                Pass.UPDATE_ALL,
-                Pass.UPDATE_FOLDING,
-                Pass.WOLF
-            ), (file as? KtFile)?.isScript() == true
+            file, editor, passIdsToIgnore.toIntArray(), (file as? KtFile)?.isScript() == true
         ).filter { it.description != null && caretOffset in it.startOffset..it.endOffset }
 
         Assert.assertTrue(
@@ -224,7 +252,8 @@ abstract class AbstractLocalInspectionTest : KotlinLightCodeInsightFixtureTestCa
         return true
     }
 
-    private fun doTestFor(mainFilePath: String, inspection: AbstractKotlinInspection, fileText: String) {
+    protected open fun doTestFor(mainFile: File, inspection: AbstractKotlinInspection, fileText: String) {
+        val mainFilePath = mainFile.name
         val expectedProblemString = InTextDirectivesUtils.findStringWithPrefixes(
             fileText, "// $expectedProblemDirectiveName: "
         )
@@ -240,6 +269,7 @@ abstract class AbstractLocalInspectionTest : KotlinLightCodeInsightFixtureTestCa
         }
 
         val canonicalPathToExpectedFile = mainFilePath + afterFileNameSuffix
+        createAfterFileIfItDoesNotExist(canonicalPathToExpectedFile)
         try {
             myFixture.checkResultByFile(canonicalPathToExpectedFile)
         } catch (e: ComparisonFailure) {
@@ -247,6 +277,16 @@ abstract class AbstractLocalInspectionTest : KotlinLightCodeInsightFixtureTestCa
                 File(testDataPath, canonicalPathToExpectedFile),
                 editor.document.text
             )
+        }
+    }
+
+    @OptIn(ExperimentalPathApi::class)
+    private fun createAfterFileIfItDoesNotExist(canonicalPathToExpectedFile: String) {
+        val path = Path(testDataPath) / canonicalPathToExpectedFile
+
+        if (!Files.exists(path)) {
+            path.createFile().write(editor.document.text)
+            error("File $canonicalPathToExpectedFile was not found and thus was generated")
         }
     }
 

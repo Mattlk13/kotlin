@@ -1,17 +1,17 @@
 class A {
     inner class I {
-        companion object A
+        companion <!NESTED_CLASS_NOT_ALLOWED!>object A<!>
 
-        companion object B
+        <!MANY_COMPANION_OBJECTS!>companion<!> <!NESTED_CLASS_NOT_ALLOWED!>object B<!>
 
-        companion object C
+        <!MANY_COMPANION_OBJECTS!>companion<!> <!NESTED_CLASS_NOT_ALLOWED!>object C<!>
     }
 }
 
 object O {
     companion object A
 
-    companion object B
+    <!MANY_COMPANION_OBJECTS!>companion<!> object B
 
-    companion object C
+    <!MANY_COMPANION_OBJECTS!>companion<!> object C
 }

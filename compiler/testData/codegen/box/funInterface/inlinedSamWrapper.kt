@@ -1,7 +1,7 @@
+// DONT_TARGET_EXACT_BACKEND: WASM
+// WASM_MUTE_REASON: SAM_CONVERSIONS
 // !LANGUAGE: +NewInference +FunctionalInterfaceConversion +SamConversionPerArgument +SamConversionForKotlinFunctions
-// IGNORE_BACKEND_FIR: JVM_IR
 // WITH_RUNTIME
-// SKIP_DCE_DRIVEN
 
 fun interface MyRunnable {
     fun invoke()

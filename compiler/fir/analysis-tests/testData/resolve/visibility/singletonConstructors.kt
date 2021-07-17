@@ -2,12 +2,12 @@ class A {
     companion object Comp {}
 
     fun foo() {
-        <!INAPPLICABLE_CANDIDATE!>Comp<!>()
+        <!INVISIBLE_REFERENCE!>Comp<!>()
     }
 }
 
 object B {
-    private val x = <!INAPPLICABLE_CANDIDATE!>B<!>()
+    private val x = <!INVISIBLE_REFERENCE!>B<!>()
 }
 
 class D {

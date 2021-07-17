@@ -7,7 +7,6 @@ package org.jetbrains.kotlin.gradle
 
 import org.jetbrains.kotlin.gradle.util.modify
 import org.jetbrains.kotlin.konan.target.HostManager
-import org.junit.Assume
 import java.io.File
 import java.util.zip.ZipFile
 import kotlin.test.Test
@@ -15,8 +14,6 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class KlibBasedMppIT : BaseGradleIT() {
-    override val defaultGradleVersion = GradleVersionRequired.AtLeast("6.0")
-
     companion object {
         private const val MODULE_GROUP = "com.example"
     }
@@ -38,6 +35,68 @@ class KlibBasedMppIT : BaseGradleIT() {
             deleteRecursively()
         }
         publishProjectDepAndAddDependency(validateHostSpecificPublication = false)
+    }
+
+    @Test
+    fun testHostSpecificSourceSetsInTransitiveDependencies() = with(Project("common-klib-lib-and-app")) {
+        // KT-41083
+        // Publish a lib with host specific source sets depending on another lib with host-specific source sets
+        setupWorkingDir()
+        val projectDepName = "dependency"
+        val publishedGroup = "published"
+        val producerProjectName = "producer"
+        embedProject(this, renameTo = projectDepName)
+        projectDir.resolve("$projectDepName/src").walkTopDown().filter { it.extension == "kt" }.forEach { ktFile ->
+            // Avoid FQN duplicates between producer & consumer
+            ktFile.modify { it.replace("package com.h0tk3y.hmpp.klib.demo", "package com.h0tk3y.hmpp.klib.lib") }
+        }
+
+        gradleBuildScript(projectDepName).appendText(
+            """
+            ${"\n"}
+            group = "$publishedGroup"
+            """.trimIndent()
+        )
+        gradleBuildScript().modify {
+            transformBuildScriptWithPluginsDsl(it) +
+                    """
+                    ${"\n"}
+                    dependencies { "commonMainImplementation"(project(":$projectDepName")) }
+                    group = "$publishedGroup"
+                    """.trimIndent()
+        }
+        gradleSettingsScript().appendText("\nrootProject.name = \"$producerProjectName\"")
+
+        build("publish") {
+            assertSuccessful()
+        }
+
+        // Then consume the published project. To do that, rename the modules so that Gradle chooses the published ones given the original
+        // Maven coordinates and doesn't resolve them as project dependencies.
+
+        val localGroup = "local"
+        gradleBuildScript(projectDepName).appendText("""${"\n"}group = "$localGroup"""")
+        gradleBuildScript().appendText(
+            """
+            ${"\n"}
+            repositories { maven("${'$'}rootDir/repo") }
+            dependencies { "commonMainImplementation"("$publishedGroup:$producerProjectName:1.0") }
+            group = "$localGroup"
+            """.trimIndent()
+        )
+
+        // The consumer should correctly receive the klibs of the host-specific source sets
+
+        checkTaskCompileClasspath(
+            "compile${hostSpecificSourceSet.capitalize()}KotlinMetadata",
+            listOf(
+                "published-producer-$hostSpecificSourceSet.klib",
+                "published-producer-commonMain.klib",
+                "published-dependency-$hostSpecificSourceSet.klib",
+                "published-dependency-commonMain.klib"
+            ),
+            isNative = true
+        )
     }
 
     @Test
@@ -115,7 +174,7 @@ class KlibBasedMppIT : BaseGradleIT() {
 
             assertFileExists("build/classes/kotlin/metadata/commonMain/default/manifest")
             assertFileExists("build/classes/kotlin/metadata/jvmAndJsMain/default/manifest")
-            assertFileExists("build/classes/kotlin/metadata/linuxMain/${projectName}_linuxMain.klib")
+            assertFileExists("build/classes/kotlin/metadata/linuxMain/klib/${projectName}_linuxMain.klib")
 
             // Check that the common and JVM+JS source sets don't receive the Kotlin/Native stdlib in the classpath:
             run {
@@ -148,7 +207,7 @@ class KlibBasedMppIT : BaseGradleIT() {
         // Check that the metadata JAR doesn't contain the host-specific source set entries, but contains the shared-Native source set
         // that can be built on every host:
 
-        ZipFile(groupDir.resolve("$dependencyModuleName-metadata/1.0/$dependencyModuleName-metadata-1.0.jar")).use { metadataJar ->
+        ZipFile(groupDir.resolve("$dependencyModuleName/1.0/$dependencyModuleName-1.0-all.jar")).use { metadataJar ->
             assertTrue { metadataJar.entries().asSequence().none { it.name.startsWith(hostSpecificSourceSet) } }
             assertTrue { metadataJar.entries().asSequence().any { it.name.startsWith("linuxMain") } }
         }
@@ -213,7 +272,12 @@ class KlibBasedMppIT : BaseGradleIT() {
         setupDependencies: Project.() -> Unit
     ) = with(Project("common-klib-lib-and-app")) {
         embedProject(Project("common-klib-lib-and-app"), renameTo = transitiveDepModuleName)
-        embedProject(Project("common-klib-lib-and-app"), renameTo = dependencyModuleName)
+        embedProject(Project("common-klib-lib-and-app"), renameTo = dependencyModuleName).apply {
+            projectDir.resolve(dependencyModuleName).walkTopDown().filter { it.extension == "kt" }.forEach { file ->
+                // Avoid duplicate FQNs as in the compatibility mode, the K2Metadata compiler reports duplicate symbols on them:
+                file.modify { it.replace("package com.h0tk3y.hmpp.klib.demo", "package com.h0tk3y.hmpp.klib.demo1") }
+            }
+        }
         gradleBuildScript().modify(::transformBuildScriptWithPluginsDsl)
         gradleBuildScript(dependencyModuleName).appendText("\ndependencies { \"commonMainImplementation\"(project(\":$transitiveDepModuleName\")) }")
 

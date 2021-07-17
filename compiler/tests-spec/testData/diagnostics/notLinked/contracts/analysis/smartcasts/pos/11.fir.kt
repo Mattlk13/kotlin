@@ -1,14 +1,5 @@
+// FIR_IDE_IGNORE
 // !USE_EXPERIMENTAL: kotlin.contracts.ExperimentalContracts
-
-/*
- * KOTLIN DIAGNOSTICS NOT LINKED SPEC TEST (POSITIVE)
- *
- * SECTIONS: contracts, analysis, smartcasts
- * NUMBER: 11
- * DESCRIPTION: Check smartcasts with passing same fields of instances of the same class in contract function with conjunction not-null condition.
- * ISSUES: KT-26300
- * HELPERS: contractFunctions
- */
 
 // FILE: contracts.kt
 
@@ -61,8 +52,8 @@ class case_3 {
     fun case_3(value_1: Any?, value_2: Number?) {
         val o = case_3()
         contracts.case_3(value_1, value_2, o.prop_1, this.prop_1)
-        <!AMBIGUITY!>println<!>(o.prop_1.<!AMBIGUITY!>plus<!>(3))
-        <!AMBIGUITY!>println<!>(this.prop_1.<!AMBIGUITY!>plus<!>(3))
+        println(o.prop_1.plus(3))
+        println(this.prop_1.plus(3))
     }
 }
 
@@ -72,8 +63,8 @@ class case_4 {
     fun case_4(value_1: Any?, value_2: Number?) {
         val o = case_4()
         if (contracts.case_4(value_1, value_2, o.prop_1, this.prop_1)) {
-            <!AMBIGUITY!>println<!>(o.prop_1.<!AMBIGUITY!>plus<!>(3))
-            <!AMBIGUITY!>println<!>(this.prop_1.<!AMBIGUITY!>plus<!>(3))
+            println(o.prop_1.plus(3))
+            println(this.prop_1.plus(3))
         }
     }
 }

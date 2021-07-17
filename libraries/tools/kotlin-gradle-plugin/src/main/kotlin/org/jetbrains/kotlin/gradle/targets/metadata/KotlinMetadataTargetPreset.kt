@@ -13,16 +13,12 @@ import org.jetbrains.kotlin.gradle.plugin.sources.applyLanguageSettingsToKotlinO
 import org.jetbrains.kotlin.gradle.targets.metadata.KotlinMetadataTargetConfigurator
 
 class KotlinMetadataTargetPreset(
-    project: Project,
-    kotlinPluginVersion: String
-) : KotlinOnlyTargetPreset<KotlinMetadataTarget, AbstractKotlinCompilation<*>>(
-    project,
-    kotlinPluginVersion
-) {
+    project: Project
+) : KotlinOnlyTargetPreset<KotlinMetadataTarget, AbstractKotlinCompilation<*>>(project) {
     override fun getName(): String = PRESET_NAME
 
     override fun createCompilationFactory(
-        forTarget: KotlinOnlyTarget<AbstractKotlinCompilation<*>>
+        forTarget: KotlinMetadataTarget
     ): KotlinCompilationFactory<AbstractKotlinCompilation<*>> =
         object : KotlinCompilationFactory<AbstractKotlinCompilation<*>> {
             override val itemClass: Class<AbstractKotlinCompilation<*>>
@@ -42,7 +38,7 @@ class KotlinMetadataTargetPreset(
     }
 
     override fun createKotlinTargetConfigurator(): KotlinOnlyTargetConfigurator<AbstractKotlinCompilation<*>, KotlinMetadataTarget> =
-        KotlinMetadataTargetConfigurator(kotlinPluginVersion)
+        KotlinMetadataTargetConfigurator()
 
     override fun instantiateTarget(name: String): KotlinMetadataTarget {
         return project.objects.newInstance(KotlinMetadataTarget::class.java, project)
@@ -57,8 +53,9 @@ class KotlinMetadataTargetPreset(
 
             project.whenEvaluated {
                 // Since there's no default source set, apply language settings from commonMain:
-                val compileKotlinMetadata = mainCompilation.compileKotlinTask
-                applyLanguageSettingsToKotlinOptions(commonMainSourceSet.languageSettings, compileKotlinMetadata.kotlinOptions)
+                mainCompilation.compileKotlinTaskProvider.configure { compileKotlinMetadata ->
+                    applyLanguageSettingsToKotlinOptions(commonMainSourceSet.languageSettings, compileKotlinMetadata.kotlinOptions)
+                }
             }
         }
 }

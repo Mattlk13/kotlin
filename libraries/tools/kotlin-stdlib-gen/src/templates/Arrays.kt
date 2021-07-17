@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -53,7 +53,7 @@ object ArrayOps : TemplateGroupBase() {
             "get() = size - 1"
         }
         specialFor(ArraysOfUnsigned) {
-            // TODO: Make inlineOnly after KT-30185 is fixed.
+            // TODO: Make inlineOnly after KT-30015 is fixed.
             // InlineOnly properties currently are not inlined and may lead to IllegalAccessException
             // when accessed from an inline (or inlineOnly) method.
             // It is because the method body contains access call to inlineOnly property in nonpublic multifile part,
@@ -72,7 +72,7 @@ object ArrayOps : TemplateGroupBase() {
             "get() = IntRange(0, lastIndex)"
         }
         specialFor(ArraysOfUnsigned) {
-            // TODO: Make inlineOnly after KT-30185 is fixed.
+            // TODO: Make inlineOnly after KT-30015 is fixed.
             // InlineOnly properties currently are not inlined and may lead to IllegalAccessException
             // when accessed from an inline (or inlineOnly) method.
             // It is because the method body contains access call to inlineOnly property in nonpublic multifile part,
@@ -82,11 +82,16 @@ object ArrayOps : TemplateGroupBase() {
         }
     }
 
+    private fun MemberBuilder.deprecatedNonNullArrayFunction() {
+        deprecate("Use Kotlin compiler 1.4 to avoid deprecation warning.")
+        annotation("""@DeprecatedSinceKotlin(hiddenSince = "1.4")""")
+    }
+
     val f_contentEquals = fn("contentEquals(other: SELF)") {
         include(ArraysOfObjects, ArraysOfPrimitives, ArraysOfUnsigned)
     } builder {
         since("1.1")
-        annotation("@kotlin.internal.LowPriorityInOverloadResolution")
+        deprecatedNonNullArrayFunction()
         infix(true)
         doc {
             """
@@ -247,7 +252,7 @@ object ArrayOps : TemplateGroupBase() {
         include(ArraysOfObjects, ArraysOfPrimitives, ArraysOfUnsigned)
     } builder {
         since("1.1")
-        annotation("@kotlin.internal.LowPriorityInOverloadResolution")
+        deprecatedNonNullArrayFunction()
         doc {
             """
             Returns a string representation of the contents of the specified array as if it is [List].
@@ -369,7 +374,7 @@ object ArrayOps : TemplateGroupBase() {
         include(ArraysOfObjects, ArraysOfPrimitives, ArraysOfUnsigned)
     } builder {
         since("1.1")
-        annotation("@kotlin.internal.LowPriorityInOverloadResolution")
+        deprecatedNonNullArrayFunction()
         doc {
             "Returns a hash code based on the contents of this array as if it is [List]."
         }
@@ -914,6 +919,26 @@ object ArrayOps : TemplateGroupBase() {
                         """
                     }
                 }
+                on(Backend.Wasm) {
+                    body {
+                        """
+                        AbstractList.checkRangeIndexes(startIndex, endIndex, this.size)
+                        val rangeSize = endIndex - startIndex
+                        AbstractList.checkRangeIndexes(destinationOffset, destinationOffset + rangeSize, destination.size)
+                        
+                        if (this !== destination || destinationOffset <= startIndex) {
+                            for (index in 0 until rangeSize) {
+                                destination[destinationOffset + index] = this[startIndex + index]
+                            }
+                        } else {
+                            for (index in rangeSize - 1 downTo 0) {
+                                destination[destinationOffset + index] = this[startIndex + index]
+                            }
+                        }
+                        return destination
+                        """
+                    }
+                }
             }
         }
     }
@@ -1149,6 +1174,9 @@ object ArrayOps : TemplateGroupBase() {
             }
             on(Platform.Native) {
                 body { "return this.copyOfNulls(newSize)" }
+                on(Backend.Wasm) {
+                    body { """TODO("Wasm stdlib: $signature")""" }
+                }
             }
         }
         specialFor(ArraysOfPrimitives, InvariantArraysOfObjects) {
@@ -1228,6 +1256,9 @@ object ArrayOps : TemplateGroupBase() {
             }
             on(Platform.Native) {
                 body { """if (size > 1) sortArray(this, 0, size)""" }
+                on(Backend.Wasm) {
+                    body { """TODO("Wasm stdlib: $signature")""" }
+                }
             }
         }
     }
@@ -1250,6 +1281,9 @@ object ArrayOps : TemplateGroupBase() {
         }
         on(Platform.Native) {
             body { """if (size > 1) sortArrayWith(this, 0, size, comparator)""" }
+            on(Backend.Wasm) {
+                body { """TODO("Wasm stdlib: $signature")""" }
+            }
         }
     }
 
@@ -1326,7 +1360,7 @@ object ArrayOps : TemplateGroupBase() {
         specialFor(ArraysOfObjects) {
             sample("samples.collections.Arrays.Sorting.sortRangeOfArrayOfComparable")
         }
-        specialFor(ArraysOfPrimitives) {
+        specialFor(ArraysOfPrimitives, ArraysOfUnsigned) {
             sample("samples.collections.Arrays.Sorting.sortRangeOfArray")
         }
         returns("Unit")
@@ -1357,6 +1391,9 @@ object ArrayOps : TemplateGroupBase() {
                 AbstractList.checkRangeIndexes(fromIndex, toIndex, size)
                 sortArray(this, fromIndex, toIndex)
                 """
+            }
+            on(Backend.Wasm) {
+                body { """TODO("Wasm stdlib: $signature")""" }
             }
         }
         on(Platform.JS) {
@@ -1414,6 +1451,9 @@ object ArrayOps : TemplateGroupBase() {
                 sortArrayWith(this, fromIndex, toIndex, comparator)
                 """
             }
+            on(Backend.Wasm) {
+                body { """TODO("Wasm stdlib: $signature")""" }
+            }
         }
         on(Platform.JS) {
             since("1.4")
@@ -1467,16 +1507,26 @@ object ArrayOps : TemplateGroupBase() {
             body { """return ArrayList<T>(this.unsafeCast<Array<Any?>>())""" }
         }
 
-        val objectLiteralImpl = """
-                        return object : AbstractList<T>(), RandomAccess {
-                            override val size: Int get() = this@asList.size
-                            override fun isEmpty(): Boolean = this@asList.isEmpty()
-                            override fun contains(element: T): Boolean = this@asList.contains(element)
-                            override fun get(index: Int): T = this@asList[index]
-                            override fun indexOf(element: T): Int = this@asList.indexOf(element)
-                            override fun lastIndexOf(element: T): Int = this@asList.lastIndexOf(element)
-                        }
-                        """
+        val objectLiteralImpl = if (primitive in PrimitiveType.floatingPointPrimitives) """
+            return object : AbstractList<T>(), RandomAccess {
+                override val size: Int get() = this@asList.size
+                override fun isEmpty(): Boolean = this@asList.isEmpty()
+                override fun contains(element: T): Boolean = this@asList.any { it.toBits() == element.toBits() }
+                override fun get(index: Int): T = this@asList[index]
+                override fun indexOf(element: T): Int = this@asList.indexOfFirst { it.toBits() == element.toBits() }
+                override fun lastIndexOf(element: T): Int = this@asList.indexOfLast { it.toBits() == element.toBits() }
+            }
+            """
+        else """
+            return object : AbstractList<T>(), RandomAccess {
+                override val size: Int get() = this@asList.size
+                override fun isEmpty(): Boolean = this@asList.isEmpty()
+                override fun contains(element: T): Boolean = this@asList.contains(element)
+                override fun get(index: Int): T = this@asList[index]
+                override fun indexOf(element: T): Int = this@asList.indexOf(element)
+                override fun lastIndexOf(element: T): Int = this@asList.lastIndexOf(element)
+            }
+            """
         specialFor(ArraysOfPrimitives, ArraysOfUnsigned) {
             on(Platform.JVM) {
                 body { objectLiteralImpl }
@@ -1494,10 +1544,12 @@ object ArrayOps : TemplateGroupBase() {
                                 return this@asList[index]
                             }
                             override fun indexOf(element: T): Int {
+                                @Suppress("USELESS_CAST")
                                 if ((element as Any?) !is T) return -1
                                 return this@asList.indexOf(element)
                             }
                             override fun lastIndexOf(element: T): Int {
+                                @Suppress("USELESS_CAST")
                                 if ((element as Any?) !is T) return -1
                                 return this@asList.lastIndexOf(element)
                             }
@@ -1606,6 +1658,15 @@ object ArrayOps : TemplateGroupBase() {
                 since("1.3")
                 body {
                     "arrayFill(this, fromIndex, toIndex, element)"
+                }
+                on(Backend.Wasm) {
+                    body {
+                        """
+                        for (index in fromIndex..toIndex) {
+                            this[index] = element    
+                        }
+                        """
+                    }
                 }
             }
             on(Platform.Common) {

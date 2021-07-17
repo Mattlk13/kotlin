@@ -7,6 +7,11 @@ package org.jetbrains.kotlin.tools.projectWizard.templates
 
 
 import org.jetbrains.annotations.NonNls
+import org.jetbrains.kotlin.tools.projectWizard.KotlinNewProjectWizardBundle
+import org.jetbrains.kotlin.tools.projectWizard.Versions
+import org.jetbrains.kotlin.tools.projectWizard.WizardGradleRunConfiguration
+import org.jetbrains.kotlin.tools.projectWizard.WizardRunConfiguration
+import org.jetbrains.kotlin.tools.projectWizard.core.Reader
 import org.jetbrains.kotlin.tools.projectWizard.core.Writer
 import org.jetbrains.kotlin.tools.projectWizard.core.asPath
 import org.jetbrains.kotlin.tools.projectWizard.core.buildList
@@ -15,35 +20,38 @@ import org.jetbrains.kotlin.tools.projectWizard.ir.buildsystem.*
 import org.jetbrains.kotlin.tools.projectWizard.ir.buildsystem.gradle.multiplatform.TargetConfigurationIR
 import org.jetbrains.kotlin.tools.projectWizard.ir.buildsystem.gradle.multiplatform.addWithJavaIntoJvmTarget
 import org.jetbrains.kotlin.tools.projectWizard.library.MavenArtifact
+import org.jetbrains.kotlin.tools.projectWizard.moduleConfigurators.moduleType
 import org.jetbrains.kotlin.tools.projectWizard.phases.GenerationPhase
+import org.jetbrains.kotlin.tools.projectWizard.plugins.kotlin.KotlinPlugin
 import org.jetbrains.kotlin.tools.projectWizard.plugins.kotlin.ModuleType
+import org.jetbrains.kotlin.tools.projectWizard.plugins.kotlin.ProjectKind
 import org.jetbrains.kotlin.tools.projectWizard.settings.DisplayableSettingItem
 import org.jetbrains.kotlin.tools.projectWizard.settings.buildsystem.DefaultRepository
+import org.jetbrains.kotlin.tools.projectWizard.settings.buildsystem.Module
 import org.jetbrains.kotlin.tools.projectWizard.settings.buildsystem.Repositories
 import org.jetbrains.kotlin.tools.projectWizard.settings.buildsystem.SourcesetType
+import org.jetbrains.kotlin.tools.projectWizard.settings.version.Version
 import org.jetbrains.kotlin.tools.projectWizard.transformers.interceptors.InterceptionPoint
-import org.jetbrains.kotlin.tools.projectWizard.KotlinNewProjectWizardBundle
-import org.jetbrains.kotlin.tools.projectWizard.Versions
-import org.jetbrains.kotlin.tools.projectWizard.WizardGradleRunConfiguration
-import org.jetbrains.kotlin.tools.projectWizard.WizardRunConfiguration
-import org.jetbrains.kotlin.tools.projectWizard.core.Reader
-import org.jetbrains.kotlin.tools.projectWizard.settings.buildsystem.ModuleKind
+import java.util.*
 
 class KtorServerTemplate : Template() {
     override val title: String = KotlinNewProjectWizardBundle.message("module.template.ktor.server.title")
     override val description: String = KotlinNewProjectWizardBundle.message("module.template.ktor.server.description")
-    override val moduleTypes: Set<ModuleType> = setOf(ModuleType.jvm)
+
+    override fun isSupportedByModuleType(module: Module, projectKind: ProjectKind): Boolean =
+        module.configurator.moduleType == ModuleType.jvm
 
     @NonNls
     override val id: String = "ktorServer"
 
     override fun Writer.getRequiredLibraries(module: ModuleIR): List<DependencyIR> =
         withSettingsOf(module.originalModule) {
+            val kotlinVersion = KotlinPlugin.version.propertyValue.version
             buildList {
-                +ktorArtifactDependency(serverEngine.reference.settingValue.dependencyName)
-                +ktorArtifactDependency("ktor-html-builder")
+                +ktorArtifactDependency(serverEngine.reference.settingValue.dependencyName, kotlinVersion)
+                +ktorArtifactDependency("ktor-html-builder", kotlinVersion)
                 +ArtifactBasedLibraryDependencyIR(
-                    MavenArtifact(DefaultRepository.JCENTER, "org.jetbrains.kotlinx", "kotlinx-html-jvm"),
+                    MavenArtifact(Repositories.KOTLINX_HTML, "org.jetbrains.kotlinx", "kotlinx-html-jvm"),
                     Versions.KOTLINX.KOTLINX_HTML,
                     DependencyType.MAIN
                 )
@@ -51,7 +59,7 @@ class KtorServerTemplate : Template() {
         }
 
     override fun Writer.getIrsToAddToBuildFile(module: ModuleIR): List<BuildSystemIR> = buildList {
-        +RepositoryIR(Repositories.KTOR_BINTRAY)
+        +RepositoryIR(Repositories.KTOR)
         +RepositoryIR(DefaultRepository.JCENTER)
         +runTaskIrs(mainClass = "ServerKt")
     }
@@ -80,8 +88,8 @@ class KtorServerTemplate : Template() {
     override val settings: List<TemplateSetting<*, *>> = listOf(serverEngine)
 }
 
-private fun ktorArtifactDependency(@NonNls name: String) = ArtifactBasedLibraryDependencyIR(
-    MavenArtifact(Repositories.KTOR_BINTRAY, "io.ktor", name),
+private fun ktorArtifactDependency(@NonNls name: String, kotlinVersion: Version) = ArtifactBasedLibraryDependencyIR(
+    MavenArtifact(Repositories.KTOR, "io.ktor", name),
     Versions.KTOR,
     DependencyType.MAIN
 )
@@ -103,8 +111,8 @@ enum class KtorServerEngine(val engineName: String, val dependencyName: String) 
     );
 
     override val text: String
-        get() = engineName.capitalize()
+        get() = engineName.replaceFirstChar(Char::uppercaseChar)
 
     val import: String
-        get() = "io.ktor.server.${engineName.decapitalize()}.${engineName.capitalize()}"
+        get() = "io.ktor.server.${engineName.replaceFirstChar(Char::lowercaseChar)}.${engineName.replaceFirstChar(Char::uppercaseChar)}"
 }

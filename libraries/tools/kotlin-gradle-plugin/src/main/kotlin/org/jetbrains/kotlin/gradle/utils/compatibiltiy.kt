@@ -16,16 +16,25 @@
 
 package org.jetbrains.kotlin.gradle.utils
 
-import org.gradle.api.Action
 import org.gradle.api.GradleException
+import org.gradle.api.Project
 import org.gradle.api.Task
-import org.gradle.api.artifacts.repositories.IvyArtifactRepository
-import org.gradle.api.artifacts.repositories.IvyPatternRepositoryLayout
+import org.gradle.api.file.ArchiveOperations
+import org.gradle.api.file.CopySpec
+import org.gradle.api.file.FileSystemOperations
+import org.gradle.api.file.FileTree
+import org.gradle.api.internal.project.ProjectInternal
+import org.gradle.api.internal.tasks.testing.TestDescriptorInternal
 import org.gradle.api.tasks.TaskInputs
 import org.gradle.api.tasks.TaskOutputs
+import org.gradle.api.tasks.WorkResult
 import org.gradle.api.tasks.bundling.AbstractArchiveTask
+import org.gradle.api.tasks.testing.TestDescriptor
 import org.gradle.util.GradleVersion
 import java.io.File
+import java.io.Serializable
+
+const val minSupportedGradleVersion = "6.1.1"
 
 internal val Task.inputsCompatible: TaskInputs get() = inputs
 
@@ -53,7 +62,7 @@ internal fun TaskInputs.dirCompatible(dirPath: Any) {
 
 internal fun checkGradleCompatibility(
     withComponent: String = "the Kotlin Gradle plugin",
-    minSupportedVersion: GradleVersion = GradleVersion.version("4.9")
+    minSupportedVersion: GradleVersion = GradleVersion.version(minSupportedGradleVersion)
 ) {
     val currentVersion = GradleVersion.current()
     if (currentVersion < minSupportedVersion) {
@@ -64,49 +73,56 @@ internal fun checkGradleCompatibility(
     }
 }
 
-internal fun AbstractArchiveTask.setArchiveAppendixCompatible(appendixProvider: () -> String) {
-    if (isGradleVersionAtLeast(5, 2)) {
-        archiveAppendix.set(project.provider { appendixProvider() })
-    } else {
-        @Suppress("DEPRECATION")
-        appendix = appendixProvider()
-    }
-}
-
 internal val AbstractArchiveTask.archivePathCompatible: File
-    get() =
-        if (isGradleVersionAtLeast(5, 1)) {
-            archiveFile.get().asFile
-        } else {
-            @Suppress("DEPRECATION")
-            archivePath
-        }
+    get() = archiveFile.get().asFile
 
-internal val AbstractArchiveTask.archiveNameCompatible: String
-    get() =
-        if (isGradleVersionAtLeast(5, 1)) {
-            archiveFileName.get()
-        } else {
-            @Suppress("DEPRECATION")
-            archiveName
-        }
+internal class ArchiveOperationsCompat(@Transient private val project: Project) : Serializable {
+    private val archiveOperations: Any? = try {
+        (project as ProjectInternal).services.get(ArchiveOperations::class.java)
+    } catch (e: NoClassDefFoundError) {
+        // Gradle version < 6.6
+        null
+    }
 
-internal fun AbstractArchiveTask.setArchiveClassifierCompatible(classifierProvider: () -> String) {
-    if (isGradleVersionAtLeast(5, 2)) {
-        archiveClassifier.set(project.provider { classifierProvider() })
-    } else {
-        @Suppress("DEPRECATION")
-        classifier = classifierProvider()
+    fun zipTree(obj: Any): FileTree {
+        return when (archiveOperations) {
+            is ArchiveOperations -> archiveOperations.zipTree(obj)
+            else -> project.zipTree(obj)
+        }
+    }
+
+    fun tarTree(obj: Any): FileTree {
+        return when (archiveOperations) {
+            is ArchiveOperations -> archiveOperations.tarTree(obj)
+            else -> project.tarTree(obj)
+        }
     }
 }
 
-internal fun IvyArtifactRepository.patternLayoutCompatible(config: IvyPatternRepositoryLayout.() -> Unit) {
-    if (isGradleVersionAtLeast(5, 0)) {
-        patternLayout(config)
-    } else {
-        // The "layout" method is planned to be removed in Gradle 6.0. Access it using reflection.
-        javaClass
-            .getMethod("layout", String::class.java, Action::class.java)
-            .invoke(this, "pattern", Action<IvyPatternRepositoryLayout> { it.config() })
+internal class FileSystemOperationsCompat(@Transient private val project: Project) : Serializable {
+    private val fileSystemOperations: Any? = try {
+        (project as ProjectInternal).services.get(FileSystemOperations::class.java)
+    } catch (e: NoClassDefFoundError) {
+        // Gradle version < 6.0
+        null
     }
+
+    fun copy(action: (CopySpec) -> Unit): WorkResult? {
+        return when (fileSystemOperations) {
+            is FileSystemOperations -> fileSystemOperations.copy(action)
+            else -> project.copy(action)
+        }
+    }
+}
+
+// Gradle dropped out getOwnerBuildOperationId. Workaround to build correct plugin for Gradle < 6.8
+// See https://github.com/gradle/gradle/commit/0296f4441ae69ad608cfef6a90fef3fdf314fa2c
+internal interface LegacyTestDescriptorInternal : TestDescriptor {
+    override fun getParent(): TestDescriptorInternal?
+
+    fun getId(): Any?
+
+    fun getOwnerBuildOperationId(): Any?
+
+    fun getClassDisplayName(): String?
 }

@@ -9,17 +9,15 @@ import org.jetbrains.kotlin.descriptors.ClassKind
 import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.descriptors.Visibility
 import org.jetbrains.kotlin.fir.FirImplementationDetail
-import org.jetbrains.kotlin.fir.FirSession
+import org.jetbrains.kotlin.fir.FirModuleData
 import org.jetbrains.kotlin.fir.FirSourceElement
 import org.jetbrains.kotlin.fir.builder.FirAnnotationContainerBuilder
 import org.jetbrains.kotlin.fir.builder.FirBuilderDsl
 import org.jetbrains.kotlin.fir.declarations.*
-import org.jetbrains.kotlin.fir.declarations.builder.AbstractFirRegularClassBuilder
-import org.jetbrains.kotlin.fir.declarations.impl.FirDeclarationStatusImpl
+import org.jetbrains.kotlin.fir.declarations.builder.FirRegularClassBuilder
 import org.jetbrains.kotlin.fir.expressions.FirAnnotationCall
 import org.jetbrains.kotlin.fir.java.JavaTypeParameterStack
 import org.jetbrains.kotlin.fir.references.FirControlFlowGraphReference
-import org.jetbrains.kotlin.fir.references.impl.FirEmptyControlFlowGraphReference
 import org.jetbrains.kotlin.fir.scopes.FirScopeProvider
 import org.jetbrains.kotlin.fir.symbols.impl.FirRegularClassSymbol
 import org.jetbrains.kotlin.fir.types.FirTypeRef
@@ -33,7 +31,7 @@ import kotlin.properties.Delegates
 @OptIn(FirImplementationDetail::class)
 class FirJavaClass @FirImplementationDetail internal constructor(
     override val source: FirSourceElement?,
-    override val session: FirSession,
+    override val moduleData: FirModuleData,
     override var resolvePhase: FirResolvePhase,
     override val name: Name,
     override val annotations: MutableList<FirAnnotationCall>,
@@ -48,7 +46,8 @@ class FirJavaClass @FirImplementationDetail internal constructor(
     internal val existingNestedClassifierNames: List<Name>
 ) : FirRegularClass() {
     override val hasLazyNestedClassifiers: Boolean get() = true
-    override val controlFlowGraphReference: FirControlFlowGraphReference get() = FirEmptyControlFlowGraphReference
+    override val controlFlowGraphReference: FirControlFlowGraphReference? get() = null
+    override var deprecation: DeprecationsPerUseSite? = null
 
     init {
         symbol.bind(this)
@@ -71,6 +70,12 @@ class FirJavaClass @FirImplementationDetail internal constructor(
         resolvePhase = newResolvePhase
     }
 
+    override fun replaceDeprecation(newDeprecation: DeprecationsPerUseSite?) {
+        deprecation = newDeprecation
+    }
+
+    override fun replaceControlFlowGraphReference(newControlFlowGraphReference: FirControlFlowGraphReference?) {}
+
     override fun <R, D> acceptChildren(visitor: FirVisitor<R, D>, data: D) {
         declarations.forEach { it.accept(visitor, data) }
         annotations.forEach { it.accept(visitor, data) }
@@ -80,7 +85,7 @@ class FirJavaClass @FirImplementationDetail internal constructor(
     }
 
     override fun <D> transformChildren(transformer: FirTransformer<D>, data: D): FirJavaClass {
-        typeParameters.transformInplace(transformer, data)
+        transformTypeParameters(transformer, data)
         transformDeclarations(transformer, data)
         status = status.transformSingle(transformer, data)
         transformSuperTypeRefs(transformer, data)
@@ -98,10 +103,6 @@ class FirJavaClass @FirImplementationDetail internal constructor(
         return this
     }
 
-    override fun <D> transformControlFlowGraphReference(transformer: FirTransformer<D>, data: D): FirRegularClass {
-        return this
-    }
-
     override fun <D> transformAnnotations(transformer: FirTransformer<D>, data: D): FirJavaClass {
         annotations.transformInplace(transformer, data)
         return this
@@ -115,10 +116,15 @@ class FirJavaClass @FirImplementationDetail internal constructor(
     override fun <D> transformCompanionObject(transformer: FirTransformer<D>, data: D): FirJavaClass {
         return this
     }
+
+    override fun <D> transformTypeParameters(transformer: FirTransformer<D>, data: D): FirRegularClass {
+        typeParameters.transformInplace(transformer, data)
+        return this
+    }
 }
 
 @FirBuilderDsl
-internal class FirJavaClassBuilder : AbstractFirRegularClassBuilder, FirAnnotationContainerBuilder {
+internal class FirJavaClassBuilder : FirRegularClassBuilder(), FirAnnotationContainerBuilder {
     lateinit var visibility: Visibility
     var modality: Modality? = null
     var isTopLevel: Boolean by Delegates.notNull()
@@ -128,32 +134,18 @@ internal class FirJavaClassBuilder : AbstractFirRegularClassBuilder, FirAnnotati
     val existingNestedClassifierNames: MutableList<Name> = mutableListOf()
 
     override var source: FirSourceElement? = null
-    override lateinit var session: FirSession
     override var resolvePhase: FirResolvePhase = FirResolvePhase.RAW_FIR
-    override lateinit var name: Name
     override val annotations: MutableList<FirAnnotationCall> = mutableListOf()
     override val typeParameters: MutableList<FirTypeParameterRef> = mutableListOf()
-    override lateinit var status: FirDeclarationStatus
-    override lateinit var classKind: ClassKind
     override val declarations: MutableList<FirDeclaration> = mutableListOf()
-    override lateinit var scopeProvider: FirScopeProvider
-    override lateinit var symbol: FirRegularClassSymbol
 
     override val superTypeRefs: MutableList<FirTypeRef> = mutableListOf()
 
     @OptIn(FirImplementationDetail::class)
     override fun build(): FirJavaClass {
-        val isInner = !isTopLevel && !isStatic
-        val status = FirDeclarationStatusImpl(visibility, modality).apply {
-            this.isInner = isInner
-            isCompanion = false
-            isData = false
-            isInline = false
-        }
-
         return FirJavaClass(
             source,
-            session,
+            moduleData,
             resolvePhase = FirResolvePhase.ANALYZED_DEPENDENCIES,
             name,
             annotations,
@@ -169,31 +161,17 @@ internal class FirJavaClassBuilder : AbstractFirRegularClassBuilder, FirAnnotati
         )
     }
 
-    @Deprecated("Modification of 'hasLazyNestedClassifiers' has no impact for FirClassImplBuilder", level = DeprecationLevel.HIDDEN)
+    @Deprecated("Modification of 'hasLazyNestedClassifiers' has no impact for FirRegularClassImplBuilder", level = DeprecationLevel.HIDDEN)
     override var companionObject: FirRegularClass?
         get() = throw IllegalStateException()
-        set(value) {
-            throw IllegalStateException()
-        }
-
-    @Deprecated("Modification of 'hasLazyNestedClassifiers' has no impact for FirClassImplBuilder", level = DeprecationLevel.HIDDEN)
-    override var hasLazyNestedClassifiers: Boolean
-        get() = throw IllegalStateException()
-        set(value) {
-            throw IllegalStateException()
-        }
-
-    @Deprecated("Modification of 'controlFlowGraphReference' has no impact for FirClassImplBuilder", level = DeprecationLevel.HIDDEN)
-    override var controlFlowGraphReference: FirControlFlowGraphReference
-        get() = throw IllegalStateException()
-        set(value) {
+        set(@Suppress("UNUSED_PARAMETER") value) {
             throw IllegalStateException()
         }
 
     @Deprecated("Modification of 'origin' has no impact for FirJavaClassBuilder", level = DeprecationLevel.HIDDEN)
     override var origin: FirDeclarationOrigin
         get() = throw IllegalStateException()
-        set(value) {
+        set(@Suppress("UNUSED_PARAMETER") value) {
             throw IllegalStateException()
         }
 }

@@ -16,13 +16,12 @@
 
 package org.jetbrains.kotlin.gradle.tasks
 
-import org.gradle.api.GradleException
 import org.gradle.api.Project
 import org.gradle.api.artifacts.Configuration
 import org.gradle.api.artifacts.ResolvedDependency
 import org.gradle.api.initialization.dsl.ScriptHandler
-import org.jetbrains.kotlin.gradle.plugin.KotlinBasePluginWrapper
 import org.jetbrains.kotlin.gradle.plugin.KotlinPlugin
+import org.jetbrains.kotlin.gradle.plugin.getKotlinPluginVersion
 import java.io.File
 import java.net.URLClassLoader
 import java.net.URLDecoder
@@ -39,6 +38,7 @@ private val KOTLIN_SCRIPT_ANNOTATION_EXPECTED_CLASS = "kotlin.script.experimenta
 private val KOTLIN_JVM_SCRIPT_COMPILER_EXPECTED_CLASS = "kotlin.script.experimental.jvm.JvmScriptCompiler"
 private val KOTLIN_REFLECT_EXPECTED_CLASS = "kotlin.reflect.full.KClasses"
 private val TROVE4J_EXPECTED_CLASS = "gnu.trove.THashMap"
+private val JNA_EXPECTED_CLASS = "com.sun.jna.Structure"
 private val DAEMON_EXPECTED_CLASS = "org.jetbrains.kotlin.daemon.CompileServiceImpl"
 internal const val KOTLIN_MODULE_GROUP = "org.jetbrains.kotlin"
 private val KOTLIN_GRADLE_PLUGIN = "kotlin-gradle-plugin"
@@ -78,7 +78,7 @@ internal fun findKotlinCompilerClasspath(project: Project): List<File> {
     return findKotlinStdlibClasspath(project) +
             findKotlinScriptRuntimeClasspath(project) +
             findKotlinReflectClasspath(project) +
-            listOfNotNull(findTrove4j(), findDaemon())
+            listOfNotNull(findTrove4j(), findJna(), findDaemon())
 }
 
 internal fun findJarByClass(classFqName: String): File? {
@@ -93,6 +93,7 @@ internal fun findJarByClass(classFqName: String): File? {
 }
 
 internal fun findTrove4j() = findJarByClass(TROVE4J_EXPECTED_CLASS)
+internal fun findJna() = findJarByClass(JNA_EXPECTED_CLASS)
 internal fun findDaemon() = findJarByClass(DAEMON_EXPECTED_CLASS)
 
 internal fun findKotlinStdlibClasspath(project: Project): List<File> =
@@ -104,22 +105,7 @@ internal fun findKotlinScriptRuntimeClasspath(project: Project): List<File> =
 internal fun findKotlinReflectClasspath(project: Project): List<File> =
     findKotlinModuleJar(project, KOTLIN_REFLECT_EXPECTED_CLASS, KOTLIN_REFLECT)
 
-internal fun findToolsJar(): File? {
-    val javacUtilContextClass =
-        try {
-            Class.forName("com.sun.tools.javac.util.Context")
-        } catch (classNotFound: ClassNotFoundException) {
-            val javaHome = System.getProperty("java.home") // current Java installation path
-            throw GradleException(
-                "Kotlin could not find the required JDK tools in the Java installation ${javaHome?.let { "'$it' " }.orEmpty()}" +
-                        "used by Gradle. Make sure Gradle is running on a JDK, not JRE.",
-                classNotFound
-            )
-        }
-    return javacUtilContextClass?.let(::findJarByClass)
-}
-
-private fun findJarByClass(klass: Class<*>): File? {
+internal fun findJarByClass(klass: Class<*>): File? {
     val classFileName = klass.name.substringAfterLast(".") + ".class"
     val resource = klass.getResource(classFileName) ?: return null
     val uri = resource.toString()
@@ -130,16 +116,13 @@ private fun findJarByClass(klass: Class<*>): File? {
 }
 
 private fun findKotlinModuleJar(project: Project, expectedClassName: String, moduleId: String): List<File> {
-    val pluginVersion = pluginVersionFromAppliedPlugin(project)
+    val pluginVersion = project.getKotlinPluginVersion()
 
-    val filesToCheck = sequenceOf(pluginVersion?.let { version -> getModuleFromClassLoader(moduleId, version) }) +
+    val filesToCheck = sequenceOf(getModuleFromClassLoader(moduleId, pluginVersion)) +
             Sequence { findPotentialModuleJars(project, moduleId).iterator() } //call the body only when queried
     val entryToFind = expectedClassName.replace(".", "/") + ".class"
-    return filesToCheck.filterNotNull().firstOrNull { it.hasEntry(entryToFind) }?.let { listOf(it) } ?: emptyList()
+    return filesToCheck.filterNotNull().firstOrNull { it.hasEntry(entryToFind) }?.let { listOf(it) }.orEmpty()
 }
-
-private fun pluginVersionFromAppliedPlugin(project: Project): String? =
-    project.plugins.filterIsInstance<KotlinBasePluginWrapper>().firstOrNull()?.kotlinPluginVersion
 
 private fun getModuleFromClassLoader(moduleId: String, moduleVersion: String): File? {
     val urlClassLoader = KotlinPlugin::class.java.classLoader as? URLClassLoader ?: return null

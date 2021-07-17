@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -394,15 +394,15 @@ abstract class IterableTests<T : Iterable<String>>(val createFrom: (Array<out St
     }
 
     @Test
-    fun max() {
-        expect("foo") { data.max() }
-        expect("bar") { data.maxBy { it.last() } }
+    fun maxOrNull() {
+        expect("foo") { data.maxOrNull() }
+        expect("bar") { data.maxByOrNull { it.last() } }
     }
 
     @Test
-    fun min() {
-        expect("bar") { data.min() }
-        expect("foo") { data.minBy { it.last() } }
+    fun minOrNull() {
+        expect("bar") { data.minOrNull() }
+        expect("foo") { data.minByOrNull { it.last() } }
     }
 
     @Test
@@ -417,6 +417,7 @@ abstract class IterableTests<T : Iterable<String>>(val createFrom: (Array<out St
         expect(0) { empty.count { it.startsWith("x") } }
     }
 
+    @Suppress("DEPRECATION")
     @Test
     fun sumBy() {
         expect(6) { data.sumBy { it.length } }
@@ -468,16 +469,16 @@ abstract class IterableTests<T : Iterable<String>>(val createFrom: (Array<out St
     }
 
     @Test
-    fun scanReduce() {
-        val accumulators = data.scanReduce { acc, e -> acc + e }
+    fun runningReduce() {
+        val accumulators = data.runningReduce { acc, e -> acc + e }
         assertEquals(2, accumulators.size)
         assertTrue(accumulators.first() in listOf("foo", "bar"))
         assertTrue(accumulators.last() in listOf("foobar", "barfoo"))
     }
 
     @Test
-    fun scanReduceIndexed() {
-        val accumulators = data.scanReduceIndexed { i, acc, e -> acc + i + e }
+    fun runningReduceIndexed() {
+        val accumulators = data.runningReduceIndexed { i, acc, e -> acc + i + e }
         assertEquals(2, accumulators.size)
         assertTrue(accumulators.first() in listOf("foo", "bar"))
         assertTrue(accumulators.last() in listOf("foo1bar", "bar1foo"))
@@ -485,7 +486,7 @@ abstract class IterableTests<T : Iterable<String>>(val createFrom: (Array<out St
 
     @Test
     fun mapAndJoinToString() {
-        val result = data.joinToString(separator = "-") { it.toUpperCase() }
+        val result = data.joinToString(separator = "-") { it.uppercase() }
         assertEquals("FOO-BAR", result)
     }
 

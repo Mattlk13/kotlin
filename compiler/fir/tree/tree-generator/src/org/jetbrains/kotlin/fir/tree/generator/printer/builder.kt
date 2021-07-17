@@ -5,14 +5,17 @@
 
 package org.jetbrains.kotlin.fir.tree.generator.printer
 
+import org.jetbrains.kotlin.fir.tree.generator.declarationAttributesType
 import org.jetbrains.kotlin.fir.tree.generator.model.*
+import org.jetbrains.kotlin.util.SmartPrinter
+import org.jetbrains.kotlin.util.withIndent
 import java.io.File
 
-fun Builder.generateCode(generationPath: File) {
+fun Builder.generateCode(generationPath: File): GeneratedFile {
     val dir = generationPath.resolve(packageName.replace(".", "/"))
-    dir.mkdirs()
     val file = File(dir, "$type.kt")
-    file.useSmartPrinter {
+    val stringBuilder = StringBuilder()
+    SmartPrinter(stringBuilder).apply {
         printCopyright()
         println("package $packageName")
         println()
@@ -24,6 +27,7 @@ fun Builder.generateCode(generationPath: File) {
         printGeneratedMessage()
         printBuilder(this@generateCode)
     }
+    return GeneratedFile(file, stringBuilder.toString())
 }
 
 private fun SmartPrinter.printBuilder(builder: Builder) {
@@ -111,6 +115,11 @@ private fun SmartPrinter.printBuilder(builder: Builder) {
     if (builder is LeafBuilder) {
         println()
         printDslBuildFunction(builder, hasRequiredFields)
+
+        if (builder.wantsCopy) {
+            println()
+            printDslBuildCopyFunction(builder, hasRequiredFields)
+        }
     }
 }
 
@@ -147,7 +156,7 @@ private fun SmartPrinter.printFieldInBuilder(field: FieldWithDefault, builder: B
             println()
             withIndent {
                 println("get() = throw IllegalStateException()")
-                println("set(value) {")
+                println("set(_) {")
                 withIndent {
                     println("throw IllegalStateException()")
                 }
@@ -259,6 +268,43 @@ private fun SmartPrinter.printDslBuildFunction(
         } else {
             println("$builderType().apply(init).build()")
         }
+    }
+    println("}")
+}
+
+private fun SmartPrinter.printDslBuildCopyFunction(
+    builder: LeafBuilder,
+    hasRequiredFields: Boolean
+) {
+    println("@OptIn(ExperimentalContracts::class)")
+    print("inline ")
+    print("fun ")
+    builder.implementation.element.typeArguments.takeIf { it.isNotEmpty() }?.let {
+        print(it.joinToString(separator = ", ", prefix = "<", postfix = "> ") { it.name })
+    }
+    val builderType = builder.typeWithArguments
+    val name = builder.implementation.name?.replaceFirst("Fir", "") ?: builder.implementation.element.name
+    print("build${name}Copy(")
+    print("original: ${builder.implementation.element.typeWithArguments}, init: $builderType.() -> Unit")
+    if (!hasRequiredFields) {
+        print(" = {}")
+    }
+    println("): ${builder.implementation.element.typeWithArguments} {")
+    withIndent {
+        println("contract {")
+        withIndent {
+            println("callsInPlace(init, kotlin.contracts.InvocationKind.EXACTLY_ONCE)")
+        }
+        println("}")
+        println("val copyBuilder = $builderType()")
+        for (field in builder.allFields) {
+            when {
+                field.origin is FieldList -> println("copyBuilder.${field.name}.addAll(original.${field.name})")
+                field.type == declarationAttributesType.type -> println("copyBuilder.${field.name} = original.${field.name}.copy()")
+                else -> println("copyBuilder.${field.name} = original.${field.name}")
+            }
+        }
+        println("return copyBuilder.apply(init).build()")
     }
     println("}")
 }

@@ -4,8 +4,6 @@ plugins {
     id("jps-compatible")
 }
 
-jvmTarget = "1.6"
-
 val ktorExcludesForDaemon: List<Pair<String, String>> by rootProject.extra
 
 dependencies {
@@ -26,4 +24,12 @@ dependencies {
 sourceSets {
     "main" { projectDefault() }
     "test" {}
+}
+
+tasks {
+    val compileKotlin by existing(org.jetbrains.kotlin.gradle.tasks.KotlinCompile::class) {
+        kotlinOptions {
+            freeCompilerArgs += "-Xopt-in=kotlinx.coroutines.DelicateCoroutinesApi"
+        }
+    }
 }

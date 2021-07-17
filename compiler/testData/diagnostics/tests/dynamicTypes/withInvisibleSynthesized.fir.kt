@@ -20,16 +20,16 @@ public class J {
 import p.*
 
 class K: J.C() {
-    fun dynamic.test() {
-        <!INAPPLICABLE_CANDIDATE!>sam<!>(null)
-        <!INAPPLICABLE_CANDIDATE!>sam<!>(
+    fun <!UNSUPPORTED!>dynamic<!>.test() {
+        <!INVISIBLE_REFERENCE!>sam<!>(null)
+        <!INVISIBLE_REFERENCE!>sam<!>(
             name = null,
             name = null
         )
     }
 
     fun test() {
-        <!INAPPLICABLE_CANDIDATE!>sam<!>(null)
+        <!INVISIBLE_REFERENCE!>sam<!>(null)
     }
 
 }

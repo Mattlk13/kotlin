@@ -5,6 +5,7 @@
 
 package org.jetbrains.kotlin.compilerRunner
 
+import com.intellij.openapi.util.text.StringUtil.escapeStringCharacters
 import org.gradle.api.Project
 import org.jetbrains.kotlin.konan.target.HostManager
 import java.io.File
@@ -21,11 +22,15 @@ internal abstract class KotlinToolRunner(
     abstract val mainClass: String
     open val daemonEntryPoint: String get() = "main"
 
-    open val environment: Map<String, String> = emptyMap()
-    open val environmentBlacklist: Set<String> = emptySet()
+    open val execEnvironment: Map<String, String> = emptyMap()
+    open val execEnvironmentBlacklist: Set<String> = emptySet()
 
-    open val systemProperties: Map<String, String> = emptyMap()
-    open val systemPropertiesBlacklist: Set<String> = setOf("java.endorsed.dirs")
+    open val execSystemProperties: Map<String, String> = emptyMap()
+    open val execSystemPropertiesBlacklist: Set<String> = setOf(
+        "java.endorsed.dirs",       // Fix for KT-25887
+        "user.dir",                 // Don't propagate the working dir of the current Gradle process
+        "java.system.class.loader"  // Don't use custom class loaders
+    )
 
     abstract val classpath: Set<File>
     open fun checkClasspath(): Unit = check(classpath.isNotEmpty()) { "Classpath of the tool is empty: $displayName" }
@@ -33,7 +38,9 @@ internal abstract class KotlinToolRunner(
     abstract val isolatedClassLoaderCacheKey: Any
     private fun getIsolatedClassLoader(): ClassLoader = isolatedClassLoadersMap.computeIfAbsent(isolatedClassLoaderCacheKey) {
         val arrayOfURLs = classpath.map { File(it.absolutePath).toURI().toURL() }.toTypedArray()
-        URLClassLoader(arrayOfURLs, null)
+        URLClassLoader(arrayOfURLs, null).apply {
+            setDefaultAssertionStatus(enableAssertions)
+        }
     }
 
     open val defaultMaxHeapSize: String get() = "3G"
@@ -65,68 +72,62 @@ internal abstract class KotlinToolRunner(
     }
 
     fun run(args: List<String>) {
-        project.logger.info("Run tool: \"$displayName\" with args: ${args.joinToString(separator = " ")}")
         checkClasspath()
 
         if (mustRunViaExec) runViaExec(args) else runInProcess(args)
     }
 
     private fun runViaExec(args: List<String>) {
+        val transformedArgs = transformArgs(args)
+        val classpath = project.files(classpath)
+        val systemProperties = System.getProperties().asSequence()
+            .map { (k, v) -> k.toString() to v.toString() }
+            .filter { (k, _) -> k !in execSystemPropertiesBlacklist }
+            .escapeQuotesForWindows()
+            .toMap() + execSystemProperties
+
+        project.logger.info(
+            """|Run "$displayName" tool in a separate JVM process
+               |Main class = $mainClass
+               |Arguments = ${args.toPrettyString()}
+               |Transformed arguments = ${if (transformedArgs == args) "same as arguments" else transformedArgs.toPrettyString()}
+               |Classpath = ${classpath.files.map { it.absolutePath }.toPrettyString()}
+               |JVM options = ${jvmArgs.toPrettyString()}
+               |Java system properties = ${systemProperties.toPrettyString()}
+               |Suppressed ENV variables = ${execEnvironmentBlacklist.toPrettyString()}
+               |Custom ENV variables = ${execEnvironment.toPrettyString()}
+            """.trimMargin()
+        )
+
         project.javaexec { spec ->
             spec.main = mainClass
-            spec.classpath = project.files(classpath)
+            spec.classpath = classpath
             spec.jvmArgs(jvmArgs)
-            spec.systemProperties(
-                System.getProperties().asSequence()
-                    .map { (k, v) -> k.toString() to v.toString() }
-                    .filter { (k, _) -> k !in systemPropertiesBlacklist }
-                    .escapeQuotesForWindows()
-                    .toMap()
-            )
             spec.systemProperties(systemProperties)
-            environmentBlacklist.forEach { spec.environment.remove(it) }
-            spec.environment(environment)
-            spec.args(transformArgs(args))
+            execEnvironmentBlacklist.forEach { spec.environment.remove(it) }
+            spec.environment(execEnvironment)
+            spec.args(transformedArgs)
         }
     }
 
-    // TODO: Make it private again once KT-37550 is fixed.
-    protected open fun runInProcess(args: List<String>) {
-        val oldProperties = setUpSystemProperties()
+    private fun runInProcess(args: List<String>) {
+        val transformedArgs = transformArgs(args)
+
+        project.logger.info(
+            """|Run in-process tool "$displayName"
+               |Entry point method = $mainClass.$daemonEntryPoint
+               |Arguments = ${args.toPrettyString()}
+               |Transformed arguments = ${if (transformedArgs == args) "same as arguments" else transformedArgs.toPrettyString()}
+            """.trimMargin()
+        )
 
         try {
             val mainClass = getIsolatedClassLoader().loadClass(mainClass)
             val entryPoint = mainClass.methods.single { it.name == daemonEntryPoint }
 
-            entryPoint.invoke(null, transformArgs(args).toTypedArray())
+            entryPoint.invoke(null, transformedArgs.toTypedArray())
         } catch (t: InvocationTargetException) {
             throw t.targetException
-        } finally {
-            restoreSystemProperties(oldProperties)
-        }
-    }
-
-    private fun setUpSystemProperties(): Map<String, String?> {
-        val oldProperties = mutableMapOf<String, String?>()
-
-        systemProperties.forEach { (k, v) -> oldProperties[k] = System.getProperty(v) }
-
-        System.getProperties().toList()
-            .map { (k, v) -> k.toString() to v.toString() }
-            .filter { (k, _) -> k in systemPropertiesBlacklist }
-            .forEach { (k, v) ->
-                oldProperties[k] = v
-                System.clearProperty(k)
-            }
-
-        systemProperties.forEach { (k, v) -> System.setProperty(k, v) }
-
-        return oldProperties
-    }
-
-    private fun restoreSystemProperties(oldProperties: Map<String, String?>) {
-        oldProperties.forEach { (k, v) ->
-            if (v == null) System.clearProperty(k) else System.setProperty(k, v)
         }
     }
 
@@ -137,5 +138,28 @@ internal abstract class KotlinToolRunner(
             if (HostManager.hostIsMingw) map { (key, value) -> key.escapeQuotes() to value.escapeQuotes() } else this
 
         private val isolatedClassLoadersMap = ConcurrentHashMap<Any, ClassLoader>()
+
+        private fun Map<String, String>.toPrettyString(): String = buildString {
+            append('[')
+            if (this@toPrettyString.isNotEmpty()) append('\n')
+            this@toPrettyString.entries.forEach { (key, value) ->
+                append('\t').append(key).append(" = ").append(value.toPrettyString()).append('\n')
+            }
+            append(']')
+        }
+
+        private fun Collection<String>.toPrettyString(): String = buildString {
+            append('[')
+            if (this@toPrettyString.isNotEmpty()) append('\n')
+            this@toPrettyString.forEach { append('\t').append(it.toPrettyString()).append('\n') }
+            append(']')
+        }
+
+        private fun String.toPrettyString(): String =
+            when {
+                isEmpty() -> "\"\""
+                any { it == '"' || it.isWhitespace() } -> '"' + escapeStringCharacters(this) + '"'
+                else -> this
+            }
     }
 }

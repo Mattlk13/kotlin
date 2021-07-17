@@ -1,7 +1,5 @@
-// !LANGUAGE: -NewInference
-
-// IGNORE_BACKEND_FIR: JVM_IR
 // TARGET_BACKEND: JVM
+// SAM_CONVERSIONS: CLASS
 
 // WITH_RUNTIME
 // FILE: Test.java
@@ -20,7 +18,7 @@ class Test {
     }
 }
 
-// FILE: test.kt
+// FILE: samFunReference.kt
 
 import java.lang.reflect.Method
 import kotlin.test.assertEquals

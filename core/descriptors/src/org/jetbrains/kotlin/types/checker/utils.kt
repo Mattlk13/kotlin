@@ -17,6 +17,7 @@
 package org.jetbrains.kotlin.types.checker
 
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
+import org.jetbrains.kotlin.descriptors.TypeParameterDescriptor
 import org.jetbrains.kotlin.renderer.DescriptorRenderer
 import org.jetbrains.kotlin.resolve.calls.inference.wrapWithCapturingSubstitution
 import org.jetbrains.kotlin.types.*
@@ -86,7 +87,7 @@ fun findCorrespondingSupertype(
 private fun KotlinType.approximate() = approximateCapturedTypes(this).upper
 
 private fun TypeConstructor.debugInfo() = buildString {
-    operator fun String.unaryPlus() = appendln(this)
+    operator fun String.unaryPlus() = appendLine(this)
 
     + "type: ${this@debugInfo}"
     + "hashCode: ${this@debugInfo.hashCode()}"
@@ -101,4 +102,6 @@ private fun TypeConstructor.debugInfo() = buildString {
     }
 }
 
-interface NewTypeVariableConstructor
+interface NewTypeVariableConstructor {
+    val originalTypeParameter: TypeParameterDescriptor?
+}

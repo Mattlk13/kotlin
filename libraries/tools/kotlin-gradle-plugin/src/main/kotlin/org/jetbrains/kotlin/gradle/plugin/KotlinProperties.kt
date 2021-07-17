@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2021 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -8,18 +8,28 @@ package org.jetbrains.kotlin.gradle.plugin
 import org.gradle.api.Project
 import org.jetbrains.kotlin.gradle.dsl.Coroutines
 import org.jetbrains.kotlin.gradle.dsl.NativeCacheKind
+import org.jetbrains.kotlin.gradle.internal.testing.TCServiceMessageOutputStreamHandler.Companion.IGNORE_TCSM_OVERFLOW
+import org.jetbrains.kotlin.gradle.plugin.Kotlin2JsPlugin.Companion.NOWARN_2JS_FLAG
 import org.jetbrains.kotlin.gradle.plugin.KotlinJsCompilerType.Companion.jsCompilerProperty
+import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinMultiplatformPlugin
+import org.jetbrains.kotlin.gradle.plugin.statistics.KotlinBuildStatsService
+import org.jetbrains.kotlin.gradle.targets.js.dukat.ExternalsOutputFormat
+import org.jetbrains.kotlin.gradle.targets.js.dukat.ExternalsOutputFormat.Companion.externalsOutputFormatProperty
+import org.jetbrains.kotlin.gradle.targets.js.webpack.WebpackMajorVersion
 import org.jetbrains.kotlin.gradle.targets.native.DisabledNativeTargetsReporter
 import org.jetbrains.kotlin.gradle.tasks.AbstractKotlinCompile
-import org.jetbrains.kotlin.gradle.tasks.CacheBuilder
+import org.jetbrains.kotlin.gradle.tasks.CompileUsingKotlinDaemon
 import org.jetbrains.kotlin.gradle.tasks.Kotlin2JsCompile
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import org.jetbrains.kotlin.gradle.utils.SingleWarningPerBuild
+import org.jetbrains.kotlin.gradle.utils.getSystemProperty
+import org.jetbrains.kotlin.konan.target.KonanTarget
+import org.jetbrains.kotlin.konan.target.presetName
+import org.jetbrains.kotlin.statistics.metrics.StringMetrics
 import java.io.File
 import java.util.*
 
 internal fun PropertiesProvider.mapKotlinTaskProperties(task: AbstractKotlinCompile<*>) {
-    coroutines?.let { task.coroutinesFromGradleProperties = it }
     useFallbackCompilerSearch?.let { task.useFallbackCompilerSearch = it }
 
     if (task is KotlinCompile) {
@@ -27,11 +37,24 @@ internal fun PropertiesProvider.mapKotlinTaskProperties(task: AbstractKotlinComp
         usePreciseJavaTracking?.let {
             task.usePreciseJavaTracking = it
         }
+        task.useClasspathSnapshot.value(useClasspathSnapshot).disallowChanges()
+        useFir?.let {
+            if (it == true) {
+                task.kotlinOptions.useFir = true
+            }
+        }
+        task.jvmTargetValidationMode.set(jvmTargetValidationMode)
     }
 
     if (task is Kotlin2JsCompile) {
         incrementalJs?.let { task.incremental = it }
         incrementalJsKlib?.let { task.incrementalJsKlib = it }
+    }
+}
+
+internal fun PropertiesProvider.mapKotlinDaemonProperties(task: CompileUsingKotlinDaemon) {
+    kotlinDaemonJvmArgs?.let {
+        task.kotlinDaemonJvmArguments.set(it.split("\\s+".toRegex()))
     }
 }
 
@@ -50,8 +73,14 @@ internal class PropertiesProvider private constructor(private val project: Proje
     val coroutines: Coroutines?
         get() = property("kotlin.coroutines")?.let { Coroutines.byCompilerArgument(it) }
 
+    val singleBuildMetricsFile: File?
+        get() = property("kotlin.internal.single.build.metrics.file")?.let { File(it) }
+
     val buildReportEnabled: Boolean
         get() = booleanProperty("kotlin.build.report.enable") ?: false
+
+    val buildReportMetrics: Boolean
+        get() = booleanProperty("kotlin.build.report.metrics") ?: false
 
     val buildReportVerbose: Boolean
         get() = booleanProperty("kotlin.build.report.verbose") ?: false
@@ -68,14 +97,41 @@ internal class PropertiesProvider private constructor(private val project: Proje
     val incrementalJsKlib: Boolean?
         get() = booleanProperty("kotlin.incremental.js.klib")
 
+    val incrementalJsIr: Boolean
+        get() = booleanProperty("kotlin.incremental.js.ir") ?: false
+
     val incrementalMultiplatform: Boolean?
         get() = booleanProperty("kotlin.incremental.multiplatform")
 
     val usePreciseJavaTracking: Boolean?
         get() = booleanProperty("kotlin.incremental.usePreciseJavaTracking")
 
+    val useClasspathSnapshot: Boolean
+        get() {
+            // The feature should be controlled by a Gradle property.
+            // Currently, we also allow it to be controlled by a system property to make it easier to test the feature during development.
+            // TODO: Remove the system property later.
+            val gradleProperty = booleanProperty("kotlin.incremental.useClasspathSnapshot") ?: false
+            val systemProperty = project.getSystemProperty("kotlin.incremental.useClasspathSnapshot")?.toBoolean() ?: false
+            return gradleProperty || systemProperty
+        }
+
+    val useFir: Boolean?
+        get() = booleanProperty("kotlin.useFir")
+
+    private val useFallbackCompilerSearchPropName = "kotlin.useFallbackCompilerSearch"
+
+    @Deprecated("Unsupported and will be removed in next major releases")
     val useFallbackCompilerSearch: Boolean?
-        get() = booleanProperty("kotlin.useFallbackCompilerSearch")
+        get() {
+            if (property(useFallbackCompilerSearchPropName) != null) {
+                SingleWarningPerBuild.show(
+                    project,
+                    "Project property '$useFallbackCompilerSearchPropName' is deprecated."
+                )
+            }
+            return booleanProperty(useFallbackCompilerSearchPropName)
+        }
 
     val keepMppDependenciesIntactInPoms: Boolean?
         get() = booleanProperty("kotlin.mpp.keepMppDependenciesIntactInPoms")
@@ -86,14 +142,28 @@ internal class PropertiesProvider private constructor(private val project: Proje
     val setJvmTargetFromAndroidCompileOptions: Boolean?
         get() = booleanProperty("kotlin.setJvmTargetFromAndroidCompileOptions")
 
+    val keepAndroidBuildTypeAttribute: Boolean
+        get() = booleanProperty("kotlin.android.buildTypeAttribute.keep") ?: false
+
     val enableGranularSourceSetsMetadata: Boolean?
         get() = booleanProperty("kotlin.mpp.enableGranularSourceSetsMetadata")
 
-    val enableCompatibilityMetadataVariant: Boolean?
-        get() = booleanProperty("kotlin.mpp.enableCompatibilityMetadataVariant")
+    val enableCompatibilityMetadataVariant: Boolean
+        get() = booleanProperty("kotlin.mpp.enableCompatibilityMetadataVariant") ?: true
+
+    val enableKotlinToolingMetadataArtifact: Boolean
+        get() = booleanProperty("kotlin.mpp.enableKotlinToolingMetadataArtifact") ?: true
+
+    val mppStabilityNoWarn: Boolean?
+        get() = booleanProperty(KotlinMultiplatformPlugin.STABILITY_NOWARN_FLAG)
 
     val ignoreDisabledNativeTargets: Boolean?
         get() = booleanProperty(DisabledNativeTargetsReporter.DISABLE_WARNING_PROPERTY_NAME)
+
+    val ignoreIncorrectNativeDependencies: Boolean?
+        get() = booleanProperty(KOTLIN_NATIVE_IGNORE_INCORRECT_DEPENDENCIES)
+
+    private val parallelTasksInProjectPropName = "kotlin.parallel.tasks.in.project"
 
     /**
      * Enables parallel tasks execution within a project with Workers API.
@@ -101,7 +171,20 @@ internal class PropertiesProvider private constructor(private val project: Proje
      * (Kotlin Daemon can be shared which uses less memory)
      */
     val parallelTasksInProject: Boolean?
-        get() = booleanProperty("kotlin.parallel.tasks.in.project")
+        get() {
+            return if (property(parallelTasksInProjectPropName) != null) {
+                SingleWarningPerBuild.show(
+                    project,
+                    """
+                    Project property '$parallelTasksInProjectPropName' is deprecated.
+                    By default it depends on Gradle parallel project execution option value.
+                    """.trimIndent()
+                )
+                booleanProperty(parallelTasksInProjectPropName)
+            } else {
+                return project.gradle.startParameter.isParallelProjectExecutionEnabled
+            }
+        }
 
     /**
      * Enables individual test task reporting for aggregated test tasks.
@@ -167,23 +250,53 @@ internal class PropertiesProvider private constructor(private val project: Proje
      * Forces to run a compilation in a separate JVM.
      */
     val nativeDisableCompilerDaemon: Boolean?
-        get() = booleanProperty(KOTLIN_NATIVE_DISABLE_COMPILER_DAEMON)
-
-    // TODO: Remove once KT-37550 is fixed
-    val nativeEnableParallelExecutionCheck: Boolean
-        get() = booleanProperty(KOTLIN_NATIVE_ENABLE_PARALLEL_EXECUTION_CHECK) ?: true
+        get() = booleanProperty("kotlin.native.disableCompilerDaemon")
 
     /**
-     * Dependencies caching strategy. The default is static.
+     * Allows a user to specify additional arguments of a JVM executing KLIB commonizer.
      */
-    val nativeCacheKind: NativeCacheKind
-        get() = property("kotlin.native.cacheKind")?.let { NativeCacheKind.byCompilerArgument(it) } ?: CacheBuilder.DEFAULT_CACHE_KIND
+    val commonizerJvmArgs: String?
+        get() = propertyWithDeprecatedVariant("kotlin.mpp.commonizerJvmArgs", "kotlin.commonizer.jvmArgs")
+
+    /**
+     * Enables experimental commonization of user defined c-interop libraries.
+     */
+    val enableCInteropCommonization: Boolean
+        get() = booleanProperty("kotlin.mpp.enableCInteropCommonization") ?: false
+
+
+    val commonizerLogLevel: String?
+        get() = property("kotlin.mpp.commonizerLogLevel")
+
+    val enableNativeDistributionCommonizationCache: Boolean
+        get() = booleanProperty("kotlin.mpp.enableNativeDistributionCommonizationCache") ?: true
+
+    val enableIntransitiveMetadataConfiguration: Boolean
+        get() = booleanProperty("kotlin.mpp.enableIntransitiveMetadataConfiguration") ?: false
+
+    /**
+     * Dependencies caching strategy for all targets that support caches.
+     */
+    val nativeCacheKind: NativeCacheKind?
+        get() = property("kotlin.native.cacheKind")?.let { NativeCacheKind.byCompilerArgument(it) }
+
+    /**
+     * Dependencies caching strategy for [target].
+     */
+    fun nativeCacheKindForTarget(target: KonanTarget): NativeCacheKind? =
+        property("kotlin.native.cacheKind.${target.presetName}")?.let { NativeCacheKind.byCompilerArgument(it) }
+
+    /**
+     * Ignore overflow in [org.jetbrains.kotlin.gradle.internal.testing.TCServiceMessageOutputStreamHandler]
+     */
+    val ignoreTcsmOverflow: Boolean
+        get() = booleanProperty(IGNORE_TCSM_OVERFLOW) ?: false
 
     /**
      * Generate kotlin/js external declarations from all .d.ts files found in npm modules
      */
-    val jsGenerateExternals: Boolean?
-        get() = booleanProperty("kotlin.js.experimental.generateKotlinExternals")
+    val jsGenerateExternals: Boolean
+        get() = booleanProperty("kotlin.js.generate.externals") ?: DEFAULT_GENERATE_EXTERNALS
 
     /**
      * Automaticaly discover external .d.ts declarations
@@ -197,6 +310,54 @@ internal class PropertiesProvider private constructor(private val project: Proje
     val jsCompiler: KotlinJsCompilerType
         get() = property(jsCompilerProperty)?.let { KotlinJsCompilerType.byArgumentOrNull(it) } ?: KotlinJsCompilerType.LEGACY
 
+    /**
+     * Use Webpack 4 for compatibility
+     */
+    val webpackMajorVersion: WebpackMajorVersion
+        get() = property(WebpackMajorVersion.webpackMajorVersion)?.let { WebpackMajorVersion.byArgument(it) }
+            ?.also { version ->
+                if (!WebpackMajorVersion.webpackVersionWarning && version != WebpackMajorVersion.DEFAULT) {
+                    WebpackMajorVersion.webpackVersionWarning = true
+                    project.logger.warn(WebpackMajorVersion.warningMessage)
+                }
+            }
+            ?: WebpackMajorVersion.DEFAULT
+
+
+    /**
+     * Default mode of generating of Dukat
+     */
+    val externalsOutputFormat: ExternalsOutputFormat?
+        get() = property(externalsOutputFormatProperty)?.let { ExternalsOutputFormat.byArgumentOrNull(it) }
+
+    /**
+     * Use Kotlin/JS backend compiler type
+     */
+    val jsGenerateExecutableDefault: Boolean
+        get() = (booleanProperty("kotlin.js.generate.executable.default") ?: true).also {
+            KotlinBuildStatsService.getInstance()
+                ?.report(StringMetrics.JS_GENERATE_EXECUTABLE_DEFAULT, it.toString())
+        }
+
+    val noWarn2JsPlugin: Boolean
+        get() = booleanProperty(NOWARN_2JS_FLAG) ?: false
+
+    val stdlibDefaultDependency: Boolean
+        get() = booleanProperty("kotlin.stdlib.default.dependency") ?: true
+
+    val kotlinTestInferJvmVariant: Boolean
+        get() = booleanProperty("kotlin.test.infer.jvm.variant") ?: true
+
+    enum class JvmTargetValidationMode {
+        IGNORE, WARNING, ERROR
+    }
+
+    val jvmTargetValidationMode: JvmTargetValidationMode
+        get() = enumProperty("kotlin.jvm.target.validation.mode", JvmTargetValidationMode.WARNING)
+
+    val kotlinDaemonJvmArgs: String?
+        get() = property("kotlin.daemon.jvmargs")
+
     private fun propertyWithDeprecatedVariant(propName: String, deprecatedPropName: String): String? {
         val deprecatedProperty = property(deprecatedPropName)
         if (deprecatedProperty != null) {
@@ -207,6 +368,11 @@ internal class PropertiesProvider private constructor(private val project: Proje
 
     private fun booleanProperty(propName: String): Boolean? =
         property(propName)?.toBoolean()
+
+    private inline fun <reified T : Enum<T>> enumProperty(
+        propName: String,
+        defaultValue: T
+    ): T = property(propName)?.let { enumValueOf<T>(it.toUpperCase()) } ?: defaultValue
 
     private fun property(propName: String): String? =
         if (project.hasProperty(propName)) {
@@ -220,10 +386,7 @@ internal class PropertiesProvider private constructor(private val project: Proje
 
         private const val CACHED_PROVIDER_EXT_NAME = "kotlin.properties.provider"
 
-        internal const val KOTLIN_NATIVE_DISABLE_COMPILER_DAEMON = "kotlin.native.disableCompilerDaemon"
-
-        // TODO: Remove once KT-37550 is fixed
-        internal const val KOTLIN_NATIVE_ENABLE_PARALLEL_EXECUTION_CHECK = "kotlin.native.enableParallelExecutionCheck"
+        internal const val KOTLIN_NATIVE_IGNORE_INCORRECT_DEPENDENCIES = "kotlin.native.ignoreIncorrectDependencies"
 
         operator fun invoke(project: Project): PropertiesProvider =
             with(project.extensions.extraProperties) {

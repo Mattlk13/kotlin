@@ -1,5 +1,6 @@
-// IGNORE_BACKEND_FIR: JVM_IR
 // TARGET_BACKEND: JVM
+// SAM_CONVERSIONS: CLASS
+//  ^ SAM-convertion classes created with LambdaMetafactory have 'enclosingMethod' and 'enclosingClass'
 
 // WITH_REFLECT
 package test
@@ -18,7 +19,7 @@ fun box(): String {
     val javaClass = lambda.javaClass
 
     val enclosingMethod = javaClass.getEnclosingMethod()
-    if (enclosingMethod?.getName() != "run") return "method: $enclosingMethod"
+    if (enclosingMethod?.getName() != "run") return "enclosing method: $enclosingMethod"
 
     val enclosingClass = javaClass.getEnclosingClass()!!.getName()
     if (enclosingClass != "test.A\$prop\$1") return "enclosing class: $enclosingClass"

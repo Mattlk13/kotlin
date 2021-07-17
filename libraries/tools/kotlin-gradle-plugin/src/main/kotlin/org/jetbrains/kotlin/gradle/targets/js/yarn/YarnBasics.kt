@@ -6,10 +6,13 @@
 package org.jetbrains.kotlin.gradle.targets.js.yarn
 
 import org.gradle.api.Project
+import org.gradle.api.logging.Logger
+import org.gradle.internal.service.ServiceRegistry
 import org.jetbrains.kotlin.gradle.internal.execWithProgress
-import org.jetbrains.kotlin.gradle.targets.js.nodejs.NodeJsRootPlugin
+import org.jetbrains.kotlin.gradle.targets.js.nodejs.NodeJsRootExtension
 import org.jetbrains.kotlin.gradle.targets.js.npm.NpmApi
 import org.jetbrains.kotlin.gradle.targets.js.npm.NpmDependency
+import org.jetbrains.kotlin.gradle.targets.js.npm.NpmDependency.Scope.PEER
 import org.jetbrains.kotlin.gradle.targets.js.npm.resolved.KotlinCompilationNpmResolution
 import java.io.File
 
@@ -23,19 +26,33 @@ abstract class YarnBasics : NpmApi {
     }
 
     fun yarnExec(
-        project: Project,
+        services: ServiceRegistry,
+        logger: Logger,
+        nodeJs: NodeJsRootExtension,
+        command: String,
+        isStandalone: Boolean,
         dir: File,
         description: String,
         args: List<String>
     ) {
-        val nodeJs = NodeJsRootPlugin.apply(project)
-        val yarnPlugin = YarnPlugin.apply(project)
+        services.execWithProgress(description) { exec ->
+            val arguments = args +
+                    if (logger.isDebugEnabled) "--verbose" else ""
 
-        project.execWithProgress(description) { exec ->
-            exec.executable = nodeJs.requireConfigured().nodeExecutable
-            exec.args = listOf(yarnPlugin.requireConfigured().home.resolve("bin/yarn.js").absolutePath) +
-                    args +
-                    if (project.logger.isDebugEnabled) "--verbose" else ""
+            val nodeExecutable = nodeJs.requireConfigured().nodeExecutable
+            exec.environment(
+                "PATH",
+                "$nodeExecutable${File.pathSeparator}${System.getenv("PATH")}"
+            )
+
+            if (isStandalone) {
+                exec.executable = command
+                exec.args = arguments
+            } else {
+                exec.executable = nodeExecutable
+                exec.args = listOf(command) + arguments
+            }
+
             exec.workingDir = dir
         }
 
@@ -105,13 +122,17 @@ abstract class YarnBasics : NpmApi {
         val entryRegistry = YarnEntryRegistry(yarnLock)
         val visited = mutableMapOf<NpmDependency, NpmDependency>()
 
-        fun resolveRecursively(src: NpmDependency): NpmDependency {
+        fun resolveRecursively(src: NpmDependency) {
+            if (src.scope == PEER) {
+                return
+            }
+
             val copy = visited[src]
             if (copy != null) {
                 src.resolvedVersion = copy.resolvedVersion
                 src.integrity = copy.integrity
                 src.dependencies.addAll(copy.dependencies)
-                return src
+                return
             }
             visited[src] = src
 
@@ -133,8 +154,6 @@ abstract class YarnBasics : NpmApi {
 
                 child
             }
-
-            return src
         }
 
         srcDependenciesList.forEach { src ->

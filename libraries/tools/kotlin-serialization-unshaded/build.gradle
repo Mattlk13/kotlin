@@ -1,16 +1,9 @@
 apply plugin: 'kotlin'
 
-configureJvmProject(project)
 configurePublishing(project)
 
 dependencies {
     embedded(project(":kotlinx-serialization-compiler-plugin")) { transitive = false }
-}
-
-compileJava {
-    sourceCompatibility = 1.8
-    targetCompatibility = 1.8
-    options.fork = false
 }
 
 TaskProvider<Jar> jar = tasks.named("jar")
@@ -19,9 +12,5 @@ jar.configure {
 }
 
 ArtifactsKt.runtimeJar(project, jar, {})
-
-artifacts {
-    archives sourcesJar
-}
-
-javadocJar()
+configureSourcesJar()
+configureJavadocJar()

@@ -1,5 +1,6 @@
-// IGNORE_BACKEND_FIR: JVM_IR
-// IGNORE_BACKEND: JS_IR
+// DONT_TARGET_EXACT_BACKEND: WASM
+// WASM_MUTE_REASON: SAM_CONVERSIONS
+// IGNORE_BACKEND: JS_IR_ES6
 
 fun interface FunWithReceiver {
     fun String.foo(): String

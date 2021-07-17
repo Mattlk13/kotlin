@@ -1,7 +1,6 @@
 // !LANGUAGE: +AllowContractsForCustomFunctions +UseReturnsEffect
 // !USE_EXPERIMENTAL: kotlin.contracts.ExperimentalContracts
 // !DIAGNOSTICS: -INVISIBLE_REFERENCE -INVISIBLE_MEMBER
-// !WITH_NEW_INFERENCE
 
 import kotlin.contracts.*
 
@@ -14,20 +13,20 @@ fun nullWhenNull(x: Int?): Int? {
 
 fun testNullWhenNull(x: Int?) {
     if (nullWhenNull(x) == null) {
-        x.dec()
+        x<!UNSAFE_CALL!>.<!>dec()
     }
     else {
-        x.<!AMBIGUITY!>dec<!>()
+        x.dec()
     }
 
     if (nullWhenNull(x) != null) {
-        x.<!AMBIGUITY!>dec<!>()
-    }
-    else {
         x.dec()
     }
+    else {
+        x<!UNSAFE_CALL!>.<!>dec()
+    }
 
-    x.<!AMBIGUITY!>dec<!>()
+    x<!UNSAFE_CALL!>.<!>dec()
 }
 
 // NB. it is the same function as `nullWhenNull`, but annotations specifies other facet of the function behaviour
@@ -43,15 +42,15 @@ fun testNotNullWhenNotNull (x: Int?) {
         x == null
     }
     else {
-        x.<!AMBIGUITY!>dec<!>()
+        x<!UNSAFE_CALL!>.<!>dec()
     }
 
     if (notNullWhenNotNull(x) != null) {
-        x.<!AMBIGUITY!>dec<!>()
+        x<!UNSAFE_CALL!>.<!>dec()
     }
     else {
         x == null
     }
 
-    x.<!AMBIGUITY!>dec<!>()
+    x<!UNSAFE_CALL!>.<!>dec()
 }

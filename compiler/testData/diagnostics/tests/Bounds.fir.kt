@@ -1,4 +1,3 @@
-// !WITH_NEW_INFERENCE
 // FILE: a.kt
 package boundsWithSubstitutors
     open class A<T>
@@ -7,13 +6,13 @@ package boundsWithSubstitutors
     class C : A<C>()
 
     val a = B<C>()
-    val a1 = B<Int>()
+    val a1 = B<<!UPPER_BOUND_VIOLATED!>Int<!>>()
 
     class X<A, B : A>()
 
     val b = X<Any, X<A<C>, C>>()
-    val b0 = X<Any, Any?>()
-    val b1 = X<Any, X<A<C>, String>>()
+    val b0 = X<Any, <!UPPER_BOUND_VIOLATED!>Any?<!>>()
+    val b1 = X<Any, X<A<C>, <!UPPER_BOUND_VIOLATED!>String<!>>>()
 
 // FILE: b.kt
   open class A {}
@@ -21,23 +20,23 @@ package boundsWithSubstitutors
 
   class Pair<A, B>
 
-  abstract class C<T : B<Int>, X :  (B<Char>) -> Pair<B<Any>, B<A>>>() : B<Any>() { // 2 errors
-    val a = B<Char>() // error
+  abstract class C<T : B<<!UPPER_BOUND_VIOLATED!>Int<!>>, X :  (B<<!UPPER_BOUND_VIOLATED, UPPER_BOUND_VIOLATED!>Char<!>>) -> Pair<B<<!UPPER_BOUND_VIOLATED!>Any<!>>, B<A>>>() : B<<!UPPER_BOUND_VIOLATED!>Any<!>>() { // 2 errors
+    val a = B<<!UPPER_BOUND_VIOLATED!>Char<!>>() // error
 
-    abstract val x :  (B<Char>) -> B<Any>
+    abstract val x :  (B<<!UPPER_BOUND_VIOLATED, UPPER_BOUND_VIOLATED!>Char<!>>) -> B<<!UPPER_BOUND_VIOLATED!>Any<!>>
   }
 
 
 fun test() {
-    foo<Int?>()
+    foo<<!UPPER_BOUND_VIOLATED!>Int?<!>>()
     foo<Int>()
     bar<Int?>()
     bar<Int>()
-    bar<Double?>()
-    bar<Double>()
+    bar<<!UPPER_BOUND_VIOLATED!>Double?<!>>()
+    bar<<!UPPER_BOUND_VIOLATED!>Double<!>>()
     1.<!INAPPLICABLE_CANDIDATE!>buzz<!><Double>()
 }
 
 fun <T : Any> foo() {}
 fun <T : Int?> bar() {}
-fun <T : Int> Int.buzz() : Unit {}
+fun <T : <!FINAL_UPPER_BOUND!>Int<!>> Int.buzz() : Unit {}

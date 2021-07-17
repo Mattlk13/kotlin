@@ -5,30 +5,28 @@
 
 package org.jetbrains.kotlin.ir.declarations.lazy
 
+import org.jetbrains.kotlin.descriptors.DescriptorVisibility
 import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.descriptors.PropertyDescriptor
-import org.jetbrains.kotlin.descriptors.Visibility
-import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
-import org.jetbrains.kotlin.ir.declarations.IrField
-import org.jetbrains.kotlin.ir.declarations.IrProperty
-import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
+import org.jetbrains.kotlin.ir.ObsoleteDescriptorBasedAPI
+import org.jetbrains.kotlin.ir.declarations.*
+import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
 import org.jetbrains.kotlin.ir.symbols.IrPropertySymbol
 import org.jetbrains.kotlin.ir.util.DeclarationStubGenerator
 import org.jetbrains.kotlin.ir.util.TypeTranslator
-import org.jetbrains.kotlin.ir.visitors.IrElementTransformer
-import org.jetbrains.kotlin.ir.visitors.IrElementVisitor
 import org.jetbrains.kotlin.name.Name
-import org.jetbrains.kotlin.resolve.BindingContext
-import org.jetbrains.kotlin.resolve.hasBackingField
+import org.jetbrains.kotlin.serialization.deserialization.descriptors.DeserializedContainerSource
+import org.jetbrains.kotlin.serialization.deserialization.descriptors.DeserializedPropertyDescriptor
 
 class IrLazyProperty(
-    startOffset: Int,
-    endOffset: Int,
-    origin: IrDeclarationOrigin,
+    override val startOffset: Int,
+    override val endOffset: Int,
+    override var origin: IrDeclarationOrigin,
     override val symbol: IrPropertySymbol,
+    @OptIn(ObsoleteDescriptorBasedAPI::class)
     override val descriptor: PropertyDescriptor,
     override val name: Name,
-    override val visibility: Visibility,
+    override var visibility: DescriptorVisibility,
     override val modality: Modality,
     override val isVar: Boolean,
     override val isConst: Boolean,
@@ -37,50 +35,57 @@ class IrLazyProperty(
     override val isExternal: Boolean,
     override val isExpect: Boolean,
     override val isFakeOverride: Boolean,
-    stubGenerator: DeclarationStubGenerator,
-    typeTranslator: TypeTranslator,
-    bindingContext: BindingContext? = null
-) :
-    IrLazyDeclarationBase(startOffset, endOffset, origin, stubGenerator, typeTranslator),
-    IrProperty {
-
+    override val stubGenerator: DeclarationStubGenerator,
+    override val typeTranslator: TypeTranslator,
+) : IrProperty(), IrLazyDeclarationBase {
     init {
         symbol.bind(this)
     }
 
-    private val hasBackingField: Boolean =
-        descriptor.hasBackingField(bindingContext) || stubGenerator.extensions.isPropertyWithPlatformField(descriptor)
+    override var parent: IrDeclarationParent by createLazyParent()
 
-    override var backingField: IrField? by lazyVar {
+    override var annotations: List<IrConstructorCall> by createLazyAnnotations()
+
+    private val hasBackingField: Boolean =
+        descriptor.compileTimeInitializer != null || descriptor.getter == null ||
+                stubGenerator.extensions.isPropertyWithPlatformField(descriptor)
+
+    override var backingField: IrField? by lazyVar(stubGenerator.lock) {
         if (hasBackingField) {
             stubGenerator.generateFieldStub(descriptor).apply {
                 correspondingPropertySymbol = this@IrLazyProperty.symbol
             }
         } else null
     }
-    override var getter: IrSimpleFunction? by lazyVar {
-        descriptor.getter?.let { stubGenerator.generateFunctionStub(it, createPropertyIfNeeded = false) }?.apply {
-            correspondingPropertySymbol = this@IrLazyProperty.symbol
-        }
-    }
-    override var setter: IrSimpleFunction? by lazyVar {
-        descriptor.setter?.let { stubGenerator.generateFunctionStub(it, createPropertyIfNeeded = false) }?.apply {
-            correspondingPropertySymbol = this@IrLazyProperty.symbol
+
+    override var getter: IrSimpleFunction? by lazyVar(stubGenerator.lock) {
+        descriptor.getter?.let {
+            stubGenerator.generateFunctionStub(it, createPropertyIfNeeded = false)
+                .apply { correspondingPropertySymbol = this@IrLazyProperty.symbol }
         }
     }
 
-    override fun <R, D> accept(visitor: IrElementVisitor<R, D>, data: D): R =
-        visitor.visitProperty(this, data)
-
-    override fun <D> acceptChildren(visitor: IrElementVisitor<Unit, D>, data: D) {
-        backingField?.accept(visitor, data)
-        getter?.accept(visitor, data)
-        setter?.accept(visitor, data)
+    override var setter: IrSimpleFunction? by lazyVar(stubGenerator.lock) {
+        descriptor.setter?.let {
+            stubGenerator.generateFunctionStub(it, createPropertyIfNeeded = false)
+                .apply { correspondingPropertySymbol = this@IrLazyProperty.symbol }
+        }
     }
 
-    override fun <D> transformChildren(transformer: IrElementTransformer<D>, data: D) {
-        backingField = backingField?.transform(transformer, data) as? IrField
-        getter = getter?.run { transform(transformer, data) as IrSimpleFunction }
-        setter = setter?.run { transform(transformer, data) as IrSimpleFunction }
+    override var overriddenSymbols: List<IrPropertySymbol> by lazyVar(stubGenerator.lock) {
+        descriptor.overriddenDescriptors.mapTo(ArrayList()) {
+            stubGenerator.generatePropertyStub(it.original).symbol
+        }
     }
+
+    override val containerSource: DeserializedContainerSource?
+        get() = (descriptor as? DeserializedPropertyDescriptor)?.containerSource
+
+    override var metadata: MetadataSource?
+        get() = null
+        set(_) = error("We should never need to store metadata of external declarations.")
+
+    override var attributeOwnerId: IrAttributeContainer
+        get() = this
+        set(_) = error("We should never need to change attributeOwnerId of external declarations.")
 }

@@ -28,15 +28,19 @@ data class ModuleData(
     val rawClasspath: List<String>,
     val rawSources: List<String>,
     val rawJavaSourceRoots: List<String>,
+    val rawFriendDirs: List<String>,
     val isCommon: Boolean
 ) {
     val qualifiedName get() = if (name in qualifier) qualifier else "$name.$qualifier"
 
-    val outputDir = File(ROOT_PATH_PREFIX, rawOutputDir.removePrefix("/"))
-    val classpath = rawClasspath.map { File(ROOT_PATH_PREFIX, it.removePrefix("/")) }
-    val sources = rawSources.map { File(ROOT_PATH_PREFIX, it.removePrefix("/")) }
-    val javaSourceRoots = rawJavaSourceRoots.map { File(ROOT_PATH_PREFIX, it.removePrefix("/")) }
+    val outputDir = rawOutputDir.fixPath()
+    val classpath = rawClasspath.map { it.fixPath() }
+    val sources = rawSources.map { it.fixPath() }
+    val javaSourceRoots = rawJavaSourceRoots.map { it.fixPath() }
+    val friendDirs = rawFriendDirs.map { it.fixPath() }
 }
+
+private fun String.fixPath(): File = File(ROOT_PATH_PREFIX, this.removePrefix("/"))
 
 private fun NodeList.toList(): List<Node> {
     val list = mutableListOf<Node>()
@@ -88,7 +92,7 @@ abstract class AbstractModularizedTest : KtUsefulTestCase() {
 
         configuration.addAll(
             CLIConfigurationKeys.CONTENT_ROOTS,
-            moduleData.sources.filter { it.extension == "kt" }.map { KotlinSourceRoot(it.absolutePath, false) })
+            moduleData.sources.filter { it.extension == "kt" || it.isDirectory }.map { KotlinSourceRoot(it.absolutePath, false) })
         return configuration
     }
 
@@ -106,50 +110,51 @@ abstract class AbstractModularizedTest : KtUsefulTestCase() {
         val javaSourceRoots = mutableListOf<String>()
         val classpath = mutableListOf<String>()
         val sources = mutableListOf<String>()
+        val friendDirs = mutableListOf<String>()
         var isCommon = false
 
         for (index in 0 until moduleElement.childNodes.length) {
             val item = moduleElement.childNodes.item(index)
 
-            if (item.nodeName == "classpath") {
-                val path = item.attributes.getNamedItem("path").nodeValue
-                if (path != outputDir) {
-                    classpath += path
+            when (item.nodeName) {
+                "classpath" -> {
+                    val path = item.attributes.getNamedItem("path").nodeValue
+                    if (path != outputDir) {
+                        classpath += path
+                    }
                 }
-            }
-            if (item.nodeName == "javaSourceRoots") {
-                javaSourceRoots += item.attributes.getNamedItem("path").nodeValue
-            }
-            if (item.nodeName == "sources") {
-                sources += item.attributes.getNamedItem("path").nodeValue
-            }
-            if (item.nodeName == "commonSources") {
-                isCommon = true
+                "friendDir" -> {
+                    val path = item.attributes.getNamedItem("path").nodeValue
+                    friendDirs += path
+                }
+                "javaSourceRoots" -> javaSourceRoots += item.attributes.getNamedItem("path").nodeValue
+                "sources" -> sources += item.attributes.getNamedItem("path").nodeValue
+                "commonSources" -> isCommon = true
             }
         }
 
-        return ModuleData(moduleName, outputDir, moduleNameQualifier, classpath, sources, javaSourceRoots, isCommon)
+        return ModuleData(moduleName, outputDir, moduleNameQualifier, classpath, sources, javaSourceRoots, friendDirs, isCommon)
     }
 
 
-    protected abstract fun beforePass()
+    protected abstract fun beforePass(pass: Int)
     protected abstract fun afterPass(pass: Int)
     protected open fun afterAllPasses() {}
     protected abstract fun processModule(moduleData: ModuleData): ProcessorAction
 
     protected fun runTestOnce(pass: Int) {
-        beforePass()
+        beforePass(pass)
         val testDataPath = System.getProperty("fir.bench.jps.dir")?.toString() ?: "/Users/jetbrains/jps"
         val root = File(testDataPath)
 
         println("BASE PATH: ${root.absolutePath}")
 
         val filterRegex = (System.getProperty("fir.bench.filter") ?: ".*").toRegex()
-        val modules =
-            root.listFiles().filter { it.extension == "xml" }
-                .sortedBy { it.lastModified() }.map { loadModule(it) }
-                .filter { it.rawOutputDir.matches(filterRegex) }
-                .filter { !it.isCommon }
+        val files = root.listFiles() ?: emptyArray()
+        val modules = files.filter { it.extension == "xml" }
+            .sortedBy { it.lastModified() }.map { loadModule(it) }
+            .filter { it.rawOutputDir.matches(filterRegex) }
+            .filter { !it.isCommon }
 
 
         for (module in modules.progress(step = 0.0) { "Analyzing ${it.qualifiedName}" }) {

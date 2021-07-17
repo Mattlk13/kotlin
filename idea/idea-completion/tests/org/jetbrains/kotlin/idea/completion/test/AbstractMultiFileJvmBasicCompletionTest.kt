@@ -8,9 +8,10 @@ package org.jetbrains.kotlin.idea.completion.test
 import com.intellij.codeInsight.completion.CompletionType
 import org.jetbrains.kotlin.idea.test.AstAccessControl
 import org.jetbrains.kotlin.platform.jvm.JvmPlatforms
+import org.jetbrains.kotlin.test.util.KtTestUtil
 
 abstract class AbstractMultiFileJvmBasicCompletionTest : KotlinCompletionTestCase() {
-    protected fun doTest(testPath: String) {
+    protected open fun doTest(testPath: String) {
         configureByFile(getTestName(false) + ".kt", "")
         val shouldFail = testPath.contains("NoSpecifiedType")
         AstAccessControl.testWithControlledAccessToAst(shouldFail, getFile().getVirtualFile(), getProject(), getTestRootDisposable(), {
@@ -23,6 +24,6 @@ abstract class AbstractMultiFileJvmBasicCompletionTest : KotlinCompletionTestCas
     }
 
     override fun getTestDataPath(): String {
-        return COMPLETION_TEST_DATA_BASE_PATH + "/basic/multifile/" + getTestName(false) + "/"
+        return KtTestUtil.getTestsRoot(this::class.java) + "/" + getTestName(false) + "/"
     }
 }

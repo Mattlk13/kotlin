@@ -6,10 +6,12 @@
 package org.jetbrains.kotlin.idea.codeInsight.gradle
 
 import com.intellij.openapi.vfs.LocalFileSystem
+import com.intellij.testFramework.Parameterized
 import junit.framework.AssertionFailedError
 import org.jetbrains.kotlin.idea.KotlinIdeaGradleBundle
 import org.jetbrains.kotlin.idea.core.script.ScriptConfigurationManager
 import org.jetbrains.kotlin.idea.core.script.applySuggestedScriptConfiguration
+import org.jetbrains.kotlin.idea.core.script.configuration.CompositeScriptConfigurationManager
 import org.jetbrains.kotlin.idea.core.script.configuration.loader.DefaultScriptConfigurationLoader
 import org.jetbrains.kotlin.idea.core.script.configuration.loader.ScriptConfigurationLoadingContext
 import org.jetbrains.kotlin.idea.core.script.configuration.utils.areSimilar
@@ -19,33 +21,28 @@ import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.scripting.definitions.ScriptDefinition
 import org.jetbrains.kotlin.scripting.resolve.ScriptCompilationConfigurationWrapper
 import org.jetbrains.kotlin.test.JUnitParameterizedWithIdeaConfigurationRunner
-import org.jetbrains.kotlin.test.RunnerFactoryWithMuteInDatabase
 import org.jetbrains.plugins.gradle.settings.GradleSettings
-import org.jetbrains.plugins.gradle.tooling.annotation.TargetVersions
+import org.jetbrains.plugins.gradle.tooling.annotation.PluginTargetVersions
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.junit.runners.Parameterized
-import org.junit.runners.Parameterized.Parameters
 import java.io.File
 
 @RunWith(value = JUnitParameterizedWithIdeaConfigurationRunner::class)
-@Parameterized.UseParametersRunnerFactory(RunnerFactoryWithMuteInDatabase::class)
-class GradleKtsImportTest : GradleImportingTestCase() {
-    companion object {
-        @JvmStatic
-        @Parameters(name = "{index}: with Gradle-{0}")
-        fun data(): Collection<Array<Any?>> = listOf(arrayOf<Any?>("6.0.1"))
-    }
+class GradleKtsImportTest : MultiplePluginVersionGradleImportingTestCase() {
 
-    val scriptConfigurationManager get() = ScriptConfigurationManager.getInstance(myProject)
+    val scriptConfigurationManager get() = ScriptConfigurationManager.getInstance(myProject) as CompositeScriptConfigurationManager
     val projectDir get() = File(GradleSettings.getInstance(myProject).linkedProjectsSettings.first().externalProjectPath)
 
     override fun testDataDirName(): String {
         return "gradleKtsImportTest"
     }
 
+    override fun importProject() {
+        importProject(true)
+    }
+
     @Test
-    @TargetVersions("6.0.1+")
+    @PluginTargetVersions(gradleVersion = "6.0.1+")
     fun testEmpty() {
         configureByFiles()
         importProject()
@@ -54,7 +51,7 @@ class GradleKtsImportTest : GradleImportingTestCase() {
     }
 
     @Test
-    @TargetVersions("6.0.1+")
+    @PluginTargetVersions(gradleVersion = "6.0.1+")
     fun testError() {
         configureByFiles()
 
@@ -70,7 +67,7 @@ class GradleKtsImportTest : GradleImportingTestCase() {
     }
 
     @Test
-    @TargetVersions("6.0.1+")
+    @PluginTargetVersions(gradleVersion = "6.0.1+")
     fun testCompositeBuild() {
         configureByFiles()
         importProject()
@@ -98,8 +95,8 @@ class GradleKtsImportTest : GradleImportingTestCase() {
 
         // reload configuration and check this it is not changed
         scripts.forEach {
-            val reloadedConfiguration = scriptConfigurationManager.forceReloadConfiguration(
-                it.virtualFile,
+            val reloadedConfiguration = scriptConfigurationManager.default.runLoader(
+                it.psiFile,
                 object : DefaultScriptConfigurationLoader(it.psiFile.project) {
                     override fun shouldRunInBackground(scriptDefinition: ScriptDefinition) = false
                     override fun loadDependencies(

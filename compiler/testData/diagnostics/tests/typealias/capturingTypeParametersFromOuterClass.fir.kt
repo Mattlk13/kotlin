@@ -18,7 +18,7 @@ class Outer<TO> {
 fun <TF> foo() {
     class Local<TL> {
         typealias LTF = List<TF>
-        typealias LTL = List<TL>
+        typealias LTL = List<<!UNRESOLVED_REFERENCE!>TL<!>>
     }
 
     fun <TLF> localfun() =

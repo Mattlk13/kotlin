@@ -48,7 +48,7 @@ class Derived : Base() {
         foo() // Ok
         gav() // Ok
         bar()
-        <!INAPPLICABLE_CANDIDATE!>baz<!>()
+        baz()
         prop = 0
     }
 
@@ -57,7 +57,7 @@ class Derived : Base() {
             foo() // Ok
             gav() // Ok
             bar()
-            <!INAPPLICABLE_CANDIDATE!>baz<!>()
+            baz()
             prop = 0
         }
     }
@@ -66,7 +66,7 @@ class Derived : Base() {
         fun test2() {
             gav() // Ok
             bar()
-            <!INAPPLICABLE_CANDIDATE!>baz<!>()
+            baz()
             prop = 0
         }
     }
@@ -74,20 +74,20 @@ class Derived : Base() {
 
 class Other {
     fun test(base: Base, derived: Derived) {
-        base.<!INAPPLICABLE_CANDIDATE!>foo<!>()
+        base.<!INVISIBLE_REFERENCE!>foo<!>()
         base.<!UNRESOLVED_REFERENCE!>gav<!>()
         base.<!UNRESOLVED_REFERENCE!>bar<!>()
-        derived.<!INAPPLICABLE_CANDIDATE!>foo<!>()
+        derived.<!INVISIBLE_REFERENCE!>foo<!>()
         derived.<!UNRESOLVED_REFERENCE!>gav<!>()
         derived.<!UNRESOLVED_REFERENCE!>bar<!>()
     }
 }
 
 fun top(base: Base, derived: Derived) {
-    base.<!INAPPLICABLE_CANDIDATE!>foo<!>()
+    base.<!INVISIBLE_REFERENCE!>foo<!>()
     base.<!UNRESOLVED_REFERENCE!>bar<!>()
     base.<!UNRESOLVED_REFERENCE!>gav<!>()
-    derived.<!INAPPLICABLE_CANDIDATE!>foo<!>()
+    derived.<!INVISIBLE_REFERENCE!>foo<!>()
     derived.<!UNRESOLVED_REFERENCE!>bar<!>()
     derived.<!UNRESOLVED_REFERENCE!>gav<!>()
 }

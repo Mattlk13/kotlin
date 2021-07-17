@@ -4,7 +4,7 @@
  * KOTLIN DIAGNOSTICS SPEC TEST (POSITIVE)
  *
  * SPEC VERSION: 0.1-100
- * PLACE: expressions, when-expression -> paragraph 2 -> sentence 2
+ * MAIN LINK: expressions, when-expression -> paragraph 2 -> sentence 2
  * NUMBER: 1
  * DESCRIPTION: When without bound value, various boolean values in the when condition.
  * HELPERS: typesProvider, enumClasses, sealedClasses, classes
@@ -77,7 +77,7 @@ fun case_5(value_1: Boolean) {
 // TESTCASE NUMBER: 6
 fun case_6(value_1: Any) {
     when {
-        value_1 is Nothing -> {}
+        <!USELESS_IS_CHECK!>value_1 is Nothing<!> -> {}
         value_1 is Int -> {}
         value_1 is Boolean -> {}
         value_1 is String -> {}

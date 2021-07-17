@@ -1,5 +1,6 @@
+// DONT_TARGET_EXACT_BACKEND: WASM
+// WASM_MUTE_REASON: IGNORED_IN_JS
 // !LANGUAGE: +NewInference +FunctionReferenceWithDefaultValueAsOtherType
-// IGNORE_BACKEND_FIR: JVM_IR
 
 fun foo(s: String = "kotlin", vararg t: String): Boolean {
     if (s != "kotlin") throw AssertionError(s)

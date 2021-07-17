@@ -1,10 +1,10 @@
 interface Inv<T>
 
 fun <Y: X, X : Inv<out String>> foo(x: X, y: Y) {
-    val rX = <!INAPPLICABLE_CANDIDATE!>bar<!>(x)
+    val rX = bar(<!ARGUMENT_TYPE_MISMATCH!>x<!>)
     rX.<!UNRESOLVED_REFERENCE!>length<!>
 
-    val rY = <!INAPPLICABLE_CANDIDATE!>bar<!>(y)
+    val rY = bar(<!ARGUMENT_TYPE_MISMATCH!>y<!>)
     rY.<!UNRESOLVED_REFERENCE!>length<!>
 }
 

@@ -35,6 +35,7 @@ import org.jetbrains.kotlin.idea.framework.KotlinSdkType
 import org.jetbrains.kotlin.idea.framework.detectLibraryKind
 import org.jetbrains.kotlin.idea.maven.configuration.KotlinMavenConfigurator
 import org.jetbrains.kotlin.idea.platform.tooling
+import org.jetbrains.kotlin.idea.util.application.getServiceSafe
 import org.jetbrains.kotlin.platform.IdePlatformKind
 import org.jetbrains.kotlin.platform.TargetPlatform
 import org.jetbrains.kotlin.platform.impl.CommonIdePlatformKind
@@ -189,10 +190,6 @@ class KotlinMavenImporter : MavenImporter(KOTLIN_PLUGIN_GROUP_ID, KOTLIN_PLUGIN_
         arguments.multiPlatform = configuration?.getChild("multiPlatform")?.text?.trim()?.toBoolean() ?: false
         arguments.suppressWarnings = configuration?.getChild("nowarn")?.text?.trim()?.toBoolean() ?: false
 
-        configuration?.getChild("experimentalCoroutines")?.text?.trim()?.let {
-            arguments.coroutinesState = it
-        }
-
         when (arguments) {
             is K2JVMCompilerArguments -> {
                 arguments.classpath = configuration?.getChild("classpath")?.text
@@ -255,7 +252,6 @@ class KotlinMavenImporter : MavenImporter(KOTLIN_PLUGIN_GROUP_ID, KOTLIN_PLUGIN_
 
         kotlinFacet.configureFacet(
             compilerVersion,
-            LanguageFeature.Coroutines.defaultState,
             platform,
             modifiableModelsProvider
         )
@@ -422,3 +418,6 @@ class KotlinImporterComponent : PersistentStateComponent<KotlinImporterComponent
         return State(addedSources.sorted())
     }
 }
+
+internal val Module.kotlinImporterComponent: KotlinImporterComponent
+    get() = this.getServiceSafe()

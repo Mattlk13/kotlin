@@ -8,10 +8,20 @@ package kotlin.collections
 import kotlin.comparisons.naturalOrder
 import kotlin.random.Random
 
-/** Returns the array if it's not `null`, or an empty array otherwise. */
+/**
+ * Returns the array if it's not `null`, or an empty array otherwise.
+ * @sample samples.collections.Arrays.Usage.arrayOrEmpty
+ */
 @kotlin.internal.InlineOnly
 public actual inline fun <T> Array<out T>?.orEmpty(): Array<out T> = this ?: emptyArray<T>()
 
+/**
+ * Returns a *typed* array containing all of the elements of this collection.
+ *
+ * Allocates an array of runtime type `T` having its size equal to the size of this collection
+ * and populates the array with the elements of this collection.
+ * @sample samples.collections.Collections.Collections.collectionToTypedArray
+ */
 @kotlin.internal.InlineOnly
 public actual inline fun <T> Collection<T>.toTypedArray(): Array<T> = copyToArray(this)
 
@@ -49,21 +59,74 @@ internal actual fun <T> copyToArrayImpl(collection: Collection<*>, array: Array<
     return array
 }
 
+
 /**
  * Returns an immutable list containing only the specified object [element].
  */
 public fun <T> listOf(element: T): List<T> = arrayListOf(element)
+
+@PublishedApi
+@SinceKotlin("1.3")
+@ExperimentalStdlibApi
+@kotlin.internal.InlineOnly
+internal actual inline fun <E> buildListInternal(builderAction: MutableList<E>.() -> Unit): List<E> {
+    return ArrayList<E>().apply(builderAction).build()
+}
+
+@PublishedApi
+@SinceKotlin("1.3")
+@ExperimentalStdlibApi
+@kotlin.internal.InlineOnly
+internal actual inline fun <E> buildListInternal(capacity: Int, builderAction: MutableList<E>.() -> Unit): List<E> {
+    checkBuilderCapacity(capacity)
+    return ArrayList<E>(capacity).apply(builderAction).build()
+}
+
 
 /**
  * Returns an immutable set containing only the specified object [element].
  */
 public fun <T> setOf(element: T): Set<T> = hashSetOf(element)
 
+@PublishedApi
+@SinceKotlin("1.3")
+@ExperimentalStdlibApi
+@kotlin.internal.InlineOnly
+internal actual inline fun <E> buildSetInternal(builderAction: MutableSet<E>.() -> Unit): Set<E> {
+    return LinkedHashSet<E>().apply(builderAction).build()
+}
+
+@PublishedApi
+@SinceKotlin("1.3")
+@ExperimentalStdlibApi
+@kotlin.internal.InlineOnly
+internal actual inline fun <E> buildSetInternal(capacity: Int, builderAction: MutableSet<E>.() -> Unit): Set<E> {
+    return LinkedHashSet<E>(capacity).apply(builderAction).build()
+}
+
+
 /**
  * Returns an immutable map, mapping only the specified key to the
  * specified value.
  */
 public fun <K, V> mapOf(pair: Pair<K, V>): Map<K, V> = hashMapOf(pair)
+
+@PublishedApi
+@SinceKotlin("1.3")
+@ExperimentalStdlibApi
+@kotlin.internal.InlineOnly
+internal actual inline fun <K, V> buildMapInternal(builderAction: MutableMap<K, V>.() -> Unit): Map<K, V> {
+    return LinkedHashMap<K, V>().apply(builderAction).build()
+}
+
+@PublishedApi
+@SinceKotlin("1.3")
+@ExperimentalStdlibApi
+@kotlin.internal.InlineOnly
+internal actual inline fun <K, V> buildMapInternal(capacity: Int, builderAction: MutableMap<K, V>.() -> Unit): Map<K, V> {
+    return LinkedHashMap<K, V>(capacity).apply(builderAction).build()
+}
+
 
 /**
  * Fills the list with the provided [value].
@@ -95,6 +158,8 @@ public actual fun <T> Iterable<T>.shuffled(): List<T> = toMutableList().apply { 
  * Sorts elements in the list in-place according to their natural sort order.
  *
  * The sort is _stable_. It means that equal elements preserve their order relative to each other after sorting.
+ *
+ * @sample samples.collections.Collections.Sorting.sortMutableList
  */
 public actual fun <T : Comparable<T>> MutableList<T>.sort(): Unit {
     collectionsSort(this, naturalOrder())
@@ -104,6 +169,8 @@ public actual fun <T : Comparable<T>> MutableList<T>.sort(): Unit {
  * Sorts elements in the list in-place according to the order specified with [comparator].
  *
  * The sort is _stable_. It means that equal elements preserve their order relative to each other after sorting.
+ *
+ * @sample samples.collections.Collections.Sorting.sortMutableListWith
  */
 public actual fun <T> MutableList<T>.sortWith(comparator: Comparator<in T>): Unit {
     collectionsSort(this, comparator)
@@ -196,6 +263,6 @@ internal actual fun mapCapacity(expectedSize: Int) = expectedSize
 @SinceKotlin("1.3")
 @ExperimentalStdlibApi
 @PublishedApi
-internal actual fun checkBuilderCapacity(capacity: Int) {
+internal fun checkBuilderCapacity(capacity: Int) {
     require(capacity >= 0) { "capacity must be non-negative." }
 }

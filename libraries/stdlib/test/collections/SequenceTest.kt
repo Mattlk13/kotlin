@@ -122,7 +122,7 @@ public class SequenceTest {
         data.forEach {  }
         assertEquals(0, count, "onEach should be executed only when resulting sequence is iterated")
 
-        val sum = newData.sumBy { it.length }
+        val sum = newData.sumOf { it.length }
         assertEquals(sum, count)
     }
 
@@ -572,18 +572,32 @@ public class SequenceTest {
     }
 
     @Test fun flatMap() {
-        val result = sequenceOf(1, 2).flatMap { (0..it).asSequence() }
-        assertEquals(listOf(0, 1, 0, 1, 2), result.toList())
+        val result1 = sequenceOf(1, 2).flatMap { (0..it).asSequence() }
+        val result2 = sequenceOf(1, 2).flatMap { 0..it }
+        val expected = listOf(0, 1, 0, 1, 2)
+        assertEquals(expected, result1.toList())
+        assertEquals(expected, result2.toList())
     }
 
     @Test fun flatMapOnEmpty() {
-        val result = sequenceOf<Int>().flatMap { (0..it).asSequence() }
-        assertTrue(result.none())
+        assertTrue(sequenceOf<Int>().flatMap { sequenceOf(1) }.none())
+        assertTrue(sequenceOf<Int>().flatMap { listOf(1) }.none())
     }
 
     @Test fun flatMapWithEmptyItems() {
-        val result = sequenceOf(1, 2, 4).flatMap { if (it == 2) sequenceOf<Int>() else (it - 1..it).asSequence() }
-        assertEquals(listOf(0, 1, 3, 4), result.toList())
+        val result1 = sequenceOf(1, 2, 4).flatMap { if (it == 2) sequenceOf<Int>() else (it - 1..it).asSequence() }
+        val result2 = sequenceOf(1, 2, 4).flatMap { if (it == 2) emptyList<Int>() else it - 1..it }
+        val expected = listOf(0, 1, 3, 4)
+        assertEquals(expected, result1.toList())
+        assertEquals(expected, result2.toList())
+    }
+
+    @Test fun flatMapIndexed() {
+        val result1 = sequenceOf(1, 2).flatMapIndexed { index, v -> (0..v + index).asSequence() }
+        val result2 = sequenceOf(1, 2).flatMapIndexed { index, v -> 0..v + index }
+        val expected = listOf(0, 1, 0, 1, 2, 3)
+        assertEquals(expected, result1.toList())
+        assertEquals(expected, result2.toList())
     }
 
     @Test fun flatten() {
@@ -704,7 +718,7 @@ public class SequenceTest {
         assertEquals(mapOf("Alice" to 5, "Bob" to 3, "Carol" to 5), itemsWithTheirLength)
 
         val updatedLength =
-            items.drop(1).associateWithTo(itemsWithTheirLength.toMutableMap()) { name -> name.toLowerCase().count { it in "aeuio" }}
+            items.drop(1).associateWithTo(itemsWithTheirLength.toMutableMap()) { name -> name.lowercase().count { it in "aeuio" }}
 
         assertEquals(mapOf("Alice" to 5, "Bob" to 1, "Carol" to 2), updatedLength)
     }
@@ -715,6 +729,20 @@ public class SequenceTest {
 
         val s2: Sequence<Int>? = sequenceOf(1)
         assertEquals(s2, s2.orEmpty())
+    }
+
+    @Test
+    fun firstNotNullOf() {
+        fun Int.isMonodigit(): Boolean = toString().toHashSet().size == 1
+        fun Int.doubleIfNotMonodigit(): Int? = if (this > 9 && this.isMonodigit()) this * 2 else null
+
+        assertEquals(110, fibonacci().firstNotNullOf { it.doubleIfNotMonodigit() })
+        assertEquals(110, fibonacci().firstNotNullOfOrNull { it.doubleIfNotMonodigit() })
+
+        assertFailsWith<NoSuchElementException> {
+            fibonacci().take(10).firstNotNullOf<Int, Int> { it.doubleIfNotMonodigit() }
+        }
+        assertNull(fibonacci().take(10).firstNotNullOfOrNull { it.doubleIfNotMonodigit() })
     }
 
     /*

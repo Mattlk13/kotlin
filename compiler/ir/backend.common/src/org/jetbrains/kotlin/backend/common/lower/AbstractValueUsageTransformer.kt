@@ -5,9 +5,9 @@
 
 package org.jetbrains.kotlin.backend.common.lower
 
+import org.jetbrains.kotlin.ir.IrBuiltIns
 import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.declarations.*
-import org.jetbrains.kotlin.ir.descriptors.IrBuiltIns
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.expressions.impl.IrStringConcatenationImpl
 import org.jetbrains.kotlin.ir.symbols.IrConstructorSymbol
@@ -148,10 +148,10 @@ abstract class AbstractValueUsageTransformer(
         return expression
     }
 
-    override fun visitSetVariable(expression: IrSetVariable): IrExpression {
+    override fun visitSetValue(expression: IrSetValue): IrExpression {
         expression.transformChildrenVoid(this)
 
-        expression.value = expression.value.useForVariable(expression.symbol.owner)
+        expression.value = expression.value.useAsValue(expression.symbol.owner)
 
         return expression
     }

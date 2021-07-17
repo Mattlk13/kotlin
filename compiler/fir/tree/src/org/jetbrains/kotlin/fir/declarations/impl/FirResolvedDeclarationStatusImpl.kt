@@ -5,23 +5,32 @@
 
 package org.jetbrains.kotlin.fir.declarations.impl
 
+import org.jetbrains.kotlin.descriptors.EffectiveVisibility
 import org.jetbrains.kotlin.descriptors.Modality
+import org.jetbrains.kotlin.descriptors.Visibilities
 import org.jetbrains.kotlin.descriptors.Visibility
-import org.jetbrains.kotlin.fir.FirEffectiveVisibility
 import org.jetbrains.kotlin.fir.declarations.FirResolvedDeclarationStatus
 
 class FirResolvedDeclarationStatusImpl(
     visibility: Visibility,
-    override var effectiveVisibility: FirEffectiveVisibility,
-    modality: Modality
+    modality: Modality,
+    override val effectiveVisibility: EffectiveVisibility
 ) : FirDeclarationStatusImpl(visibility, modality), FirResolvedDeclarationStatus {
+
+    companion object {
+        val DEFAULT_STATUS_FOR_STATUSLESS_DECLARATIONS = FirResolvedDeclarationStatusImpl(
+            Visibilities.Public,
+            Modality.FINAL,
+            EffectiveVisibility.Public
+        )
+    }
 
     internal constructor(
         visibility: Visibility,
-        effectiveVisibility: FirEffectiveVisibility,
         modality: Modality,
+        effectiveVisibility: EffectiveVisibility,
         flags: Int
-    ) : this(visibility, effectiveVisibility, modality) {
+    ) : this(visibility, modality, effectiveVisibility) {
         this.flags = flags
     }
 

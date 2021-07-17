@@ -6,19 +6,24 @@
 package org.jetbrains.kotlin.gradle.targets.js.nodejs
 
 import org.gradle.api.Project
+import org.gradle.api.Task
+import org.gradle.api.tasks.TaskProvider
 import org.jetbrains.kotlin.gradle.internal.ConfigurationPhaseAware
 import org.jetbrains.kotlin.gradle.logging.kotlinInfo
 import org.jetbrains.kotlin.gradle.plugin.PropertiesProvider
 import org.jetbrains.kotlin.gradle.targets.js.NpmVersions
 import org.jetbrains.kotlin.gradle.targets.js.npm.KotlinNpmResolutionManager
 import org.jetbrains.kotlin.gradle.targets.js.npm.NpmApi
+import org.jetbrains.kotlin.gradle.targets.js.npm.resolver.PACKAGE_JSON_UMBRELLA_TASK_NAME
+import org.jetbrains.kotlin.gradle.targets.js.npm.tasks.KotlinNpmCachesSetup
 import org.jetbrains.kotlin.gradle.targets.js.npm.tasks.KotlinNpmInstallTask
 import org.jetbrains.kotlin.gradle.targets.js.npm.tasks.RootPackageJsonTask
 import org.jetbrains.kotlin.gradle.targets.js.yarn.Yarn
 import org.jetbrains.kotlin.gradle.tasks.internal.CleanableStore
 import java.io.File
+import java.io.Serializable
 
-open class NodeJsRootExtension(val rootProject: Project) : ConfigurationPhaseAware<NodeJsEnv>() {
+open class NodeJsRootExtension(@Transient val rootProject: Project) : ConfigurationPhaseAware<NodeJsEnv>(), Serializable {
     init {
         check(rootProject.rootProject == rootProject)
     }
@@ -32,38 +37,45 @@ open class NodeJsRootExtension(val rootProject: Project) : ConfigurationPhaseAwa
     var download by Property(true)
 
     var nodeDownloadBaseUrl by Property("https://nodejs.org/dist")
-    var nodeVersion by Property("12.16.1")
+    var nodeVersion by Property("14.17.0")
 
     var nodeCommand by Property("node")
 
     var packageManager: NpmApi by Property(Yarn())
 
+    @Transient
     private val projectProperties = PropertiesProvider(rootProject)
 
     inner class Experimental {
-        val generateKotlinExternals: Boolean
-            get() = projectProperties.jsGenerateExternals == true
-
         val discoverTypes: Boolean
             get() = projectProperties.jsDiscoverTypes == true
     }
 
     val experimental = Experimental()
 
-    val nodeJsSetupTask: NodeJsSetupTask
-        get() = rootProject.tasks.getByName(NodeJsSetupTask.NAME) as NodeJsSetupTask
+    val taskRequirements: TasksRequirements = TasksRequirements()
 
-    val npmInstallTask: KotlinNpmInstallTask
-        get() = rootProject.tasks.getByName(KotlinNpmInstallTask.NAME) as KotlinNpmInstallTask
+    val nodeJsSetupTaskProvider: TaskProvider<out NodeJsSetupTask>
+        get() = rootProject.tasks.withType(NodeJsSetupTask::class.java).named(NodeJsSetupTask.NAME)
 
-    val rootPackageJsonTask: RootPackageJsonTask
-        get() = rootProject.tasks.getByName(RootPackageJsonTask.NAME) as RootPackageJsonTask
+    @Suppress("UNNECESSARY_SAFE_CALL") // TODO: investigate this warning; fixing it breaks integration tests.
+    val npmInstallTaskProvider: TaskProvider<out KotlinNpmInstallTask>?
+        get() = rootProject?.tasks?.withType(KotlinNpmInstallTask::class.java)?.named(KotlinNpmInstallTask.NAME)
 
-    val rootPackageDir: File
-        get() = rootProject.buildDir.resolve("js")
+    val packageJsonUmbrellaTaskProvider: TaskProvider<Task>
+        get() = rootProject.tasks.named(PACKAGE_JSON_UMBRELLA_TASK_NAME)
 
-    internal val rootNodeModulesStateFile: File
-        get() = rootPackageDir.resolve("node_modules.state")
+    @Suppress("UNNECESSARY_SAFE_CALL") // TODO: investigate this warning; fixing it breaks integration tests.
+    val rootPackageJsonTaskProvider: TaskProvider<RootPackageJsonTask>?
+        get() = rootProject?.tasks?.withType(RootPackageJsonTask::class.java)?.named(RootPackageJsonTask.NAME)
+
+    @Suppress("UNNECESSARY_SAFE_CALL") // TODO: investigate this warning; fixing it breaks integration tests.
+    val npmCachesSetupTaskProvider: TaskProvider<out KotlinNpmCachesSetup>?
+        get() = rootProject?.tasks?.withType(KotlinNpmCachesSetup::class.java)?.named(KotlinNpmCachesSetup.NAME)
+
+    val rootPackageDir: File by lazy {
+        rootProject.buildDir.resolve("js")
+    }
 
     val projectPackagesDir: File
         get() = rootPackageDir.resolve("packages")
@@ -98,20 +110,22 @@ open class NodeJsRootExtension(val rootProject: Project) : ConfigurationPhaseAwa
             nodeExecutable = getExecutable("node", nodeCommand, "exe"),
             platformName = platform,
             architectureName = architecture,
-            ivyDependency = getIvyDependency()
+            ivyDependency = getIvyDependency(),
+            downloadBaseUrl = nodeDownloadBaseUrl
         )
     }
 
     internal fun executeSetup() {
-        val nodeJsEnv = requireConfigured()
         if (download) {
-            if (!nodeJsEnv.nodeBinDir.isDirectory) {
-                nodeJsSetupTask.exec()
+            val nodeJsSetupTask = nodeJsSetupTaskProvider.get()
+            nodeJsSetupTask.actions.forEach {
+                it.execute(nodeJsSetupTask)
             }
         }
     }
 
     val versions = NpmVersions()
+
     internal val npmResolutionManager = KotlinNpmResolutionManager(this)
 
     companion object {

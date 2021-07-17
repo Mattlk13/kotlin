@@ -5,6 +5,9 @@
 package org.jetbrains.kotlin.fir
 
 import com.intellij.openapi.fileEditor.FileDocumentManager
+import com.intellij.openapi.util.io.FileUtil
+import com.intellij.openapi.util.text.StringUtil
+import com.intellij.openapi.vfs.CharsetToolkit
 import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.fir.builder.RawFirBuilder
 import org.jetbrains.kotlin.fir.declarations.FirFile
@@ -14,22 +17,25 @@ import org.jetbrains.kotlin.fir.expressions.FirQualifiedAccessExpression
 import org.jetbrains.kotlin.fir.lightTree.LightTree2Fir
 import org.jetbrains.kotlin.fir.references.FirErrorNamedReference
 import org.jetbrains.kotlin.fir.resolve.firProvider
-import org.jetbrains.kotlin.fir.resolve.impl.FirProviderImpl
+import org.jetbrains.kotlin.fir.resolve.providers.impl.FirProviderImpl
+import org.jetbrains.kotlin.fir.resolve.transformers.FirGlobalResolveProcessor
+import org.jetbrains.kotlin.fir.resolve.transformers.FirResolveProcessor
+import org.jetbrains.kotlin.fir.resolve.transformers.FirTransformerBasedResolveProcessor
 import org.jetbrains.kotlin.fir.types.*
 import org.jetbrains.kotlin.fir.visitors.FirDefaultVisitorVoid
-import org.jetbrains.kotlin.fir.visitors.FirTransformer
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.psiUtil.startOffset
 import org.jetbrains.kotlin.utils.addToStdlib.sumByLong
 import java.io.File
 import java.io.PrintStream
+import java.text.DecimalFormat
 import kotlin.math.max
 import kotlin.reflect.KClass
 import kotlin.system.measureNanoTime
 
 
 fun checkFirProvidersConsistency(firFiles: List<FirFile>) {
-    for ((session, files) in firFiles.groupBy { it.session }) {
+    for ((session, files) in firFiles.groupBy { it.moduleData.session }) {
         val provider = session.firProvider as FirProviderImpl
         provider.ensureConsistent(files)
     }
@@ -38,7 +44,12 @@ fun checkFirProvidersConsistency(firFiles: List<FirFile>) {
 private data class FailureInfo(val transformer: KClass<*>, val throwable: Throwable, val file: String)
 data class ErrorTypeReport(val report: String, var count: Int = 0)
 
-class FirResolveBench(val withProgress: Boolean) {
+abstract class BenchListener {
+    abstract fun before()
+    abstract fun after(stageClass: KClass<*>)
+}
+
+class FirResolveBench(val withProgress: Boolean, val listener: BenchListener? = null) {
     data class TotalStatistics(
         val unresolvedTypes: Int,
         val resolvedTypes: Int,
@@ -47,6 +58,7 @@ class FirResolveBench(val withProgress: Boolean) {
         val errorFunctionCallTypes: Int,
         val errorQualifiedAccessTypes: Int,
         val fileCount: Int,
+        val totalLines: Int,
         val errorTypesReports: Map<String, ErrorTypeReport>,
         val timePerTransformer: Map<String, Measure>
     ) {
@@ -60,7 +72,7 @@ class FirResolveBench(val withProgress: Boolean) {
                 user = sumByLong { it.user }
                 cpu = sumByLong { it.cpu }
                 gcTime = sumByLong { it.gcTime }
-                gcCollections = sumBy { it.gcCollections }
+                gcCollections = sumOf { it.gcCollections }
                 files = map { it.files }.average().toInt()
             }
         }
@@ -74,7 +86,8 @@ class FirResolveBench(val withProgress: Boolean) {
         var cpu: Long = 0,
         var gcTime: Long = 0,
         var gcCollections: Int = 0,
-        var files: Int = 0
+        var files: Int = 0,
+        var vmCounters: VMCounters = VMCounters()
     )
 
     val timePerTransformer = mutableMapOf<KClass<*>, Measure>()
@@ -86,6 +99,7 @@ class FirResolveBench(val withProgress: Boolean) {
     var implicitTypes = 0
     var fileCount = 0
     var totalTime = 0L
+    var totalLines = 0
 
 
     private val fails = mutableListOf<FailureInfo>()
@@ -97,6 +111,7 @@ class FirResolveBench(val withProgress: Boolean) {
         builder: RawFirBuilder,
         ktFiles: List<KtFile>
     ): List<FirFile> {
+        listener?.before()
         return ktFiles.map { file ->
             val before = vmStateSnapshot()
             val firFile: FirFile
@@ -107,8 +122,10 @@ class FirResolveBench(val withProgress: Boolean) {
             val after = vmStateSnapshot()
             val diff = after - before
             recordTime(builder::class, diff, time)
+            totalLines += StringUtil.countNewLines(file.text)
             firFile
         }.also {
+            listener?.after(builder::class)
             totalTime = timePerTransformer.values.sumByLong { it.time }
         }
     }
@@ -117,18 +134,23 @@ class FirResolveBench(val withProgress: Boolean) {
         builder: LightTree2Fir,
         files: List<File>
     ): List<FirFile> {
+        listener?.before()
         return files.map { file ->
             val before = vmStateSnapshot()
             val firFile: FirFile
+            val code: String
             val time = measureNanoTime {
-                firFile = builder.buildFirFile(file)
+                code = FileUtil.loadFile(file, CharsetToolkit.UTF8, true).trim()
+                firFile = builder.buildFirFile(code, file.name)
                 (builder.session.firProvider as FirProviderImpl).recordFile(firFile)
             }
             val after = vmStateSnapshot()
             val diff = after - before
             recordTime(builder::class, diff, time)
+            totalLines += StringUtil.countNewLines(code)
             firFile
         }.also {
+            listener?.after(builder::class)
             totalTime = timePerTransformer.values.sumByLong { it.time }
         }
     }
@@ -139,52 +161,82 @@ class FirResolveBench(val withProgress: Boolean) {
             this.files += 1
             this.user += diff.userTime
             this.cpu += diff.cpuTime
-            this.gcCollections += diff.gcInfo.values.sumBy { it.collections.toInt() }
+            this.gcCollections += diff.gcInfo.values.sumOf { it.collections.toInt() }
             this.gcTime += diff.gcInfo.values.sumByLong { it.gcTime }
         }
     }
 
-    private fun runStage(transformer: FirTransformer<Nothing?>, firFileSequence: Sequence<FirFile>) {
+    private fun runStage(processor: FirResolveProcessor, firFileSequence: Sequence<FirFile>) {
+        when (processor) {
+            is FirTransformerBasedResolveProcessor -> runStage(processor, firFileSequence)
+            is FirGlobalResolveProcessor -> runStage(processor, firFileSequence.toList())
+        }
+    }
+
+    private fun runStage(processor: FirTransformerBasedResolveProcessor, firFileSequence: Sequence<FirFile>) {
+        val transformer = processor.transformer
+        listener?.before()
         for (firFile in firFileSequence) {
-            var fail = false
-            val before = vmStateSnapshot()
-            val time = measureNanoTime {
-                try {
-                    transformer.transformFile(firFile, null)
-                } catch (e: Throwable) {
-                    val ktFile = firFile.psi
-                    if (ktFile is KtFile) {
-                        println("Fail in file: ${ktFile.virtualFilePath}")
-                        fails += FailureInfo(transformer::class, e, ktFile.virtualFilePath)
-                    } else {
-                        println("Fail in file: ${firFile.packageFqName} / ${firFile.name}")
-                        fails += FailureInfo(transformer::class, e, firFile.packageFqName.asString() + "/" + firFile.name)
-                    }
-                    fail = true
-                    //println(ktFile.text)
-                    //throw e
+            processWithTimeMeasure(
+                transformer::class,
+                { transformer.transformFile(firFile, null) }
+            ) { e ->
+                val ktFile = firFile.psi
+                if (ktFile is KtFile) {
+                    println("Fail in file: ${ktFile.virtualFilePath}")
+                    FailureInfo(transformer::class, e, ktFile.virtualFilePath)
+                } else {
+                    println("Fail in file: ${firFile.packageFqName} / ${firFile.name}")
+                    FailureInfo(transformer::class, e, firFile.packageFqName.asString() + "/" + firFile.name)
                 }
             }
-            if (!fail) {
-                val after = vmStateSnapshot()
-                val diff = after - before
-                recordTime(transformer::class, diff, time)
+        }
+        listener?.after(transformer::class)
+    }
 
+    private fun runStage(processor: FirGlobalResolveProcessor, firFiles: List<FirFile>) {
+        processWithTimeMeasure(
+            processor::class,
+            { processor.process(firFiles) }
+        ) { e ->
+            val message = "Fail on stage ${processor::class}"
+            println(message)
+            FailureInfo(processor::class, e, message)
+        }
+    }
+
+    private inline fun processWithTimeMeasure(
+        kClass: KClass<*>,
+        block: () -> Unit,
+        catchBlock: (Throwable) -> FailureInfo
+    ) {
+        var fail = false
+        val before = vmStateSnapshot()
+        val time = measureNanoTime {
+            try {
+                block()
+            } catch (e: Throwable) {
+                fails += catchBlock(e)
+                fail = true
             }
-            //totalLength += StringBuilder().apply { FirRenderer(this).visitFile(firFile) }.length
+        }
+        if (!fail) {
+            val after = vmStateSnapshot()
+            val diff = after - before
+            recordTime(kClass, diff, time)
         }
     }
 
     fun processFiles(
         firFiles: List<FirFile>,
-        transformers: List<FirTransformer<Nothing?>>
+        processors: List<FirResolveProcessor>
     ) {
         fileCount += firFiles.size
         try {
-            for ((stage, transformer) in transformers.withIndex()) {
+            for ((_, processor) in processors.withIndex()) {
                 //println("Starting stage #$stage. $transformer")
                 val firFileSequence = if (withProgress) firFiles.progress("   ~ ") else firFiles.asSequence()
-                runStage(transformer, firFileSequence)
+                runStage(processor, firFileSequence)
                 checkFirProvidersConsistency(firFiles)
             }
 
@@ -194,7 +246,6 @@ class FirResolveBench(val withProgress: Boolean) {
                 println("ERROR!")
             }
         } finally {
-
 
             val fileDocumentManager = FileDocumentManager.getInstance()
 
@@ -268,23 +319,17 @@ class FirResolveBench(val withProgress: Boolean) {
                         visitTypeRef(implicitTypeRef)
                     }
 
-                    override fun visitComposedSuperTypeRef(composedSuperTypeRef: FirComposedSuperTypeRef) {}
-
                     override fun visitResolvedTypeRef(resolvedTypeRef: FirResolvedTypeRef) {
                         resolvedTypes++
                         val type = resolvedTypeRef.type
                         if (type is ConeKotlinErrorType || type is ConeClassErrorType) {
-                            if (resolvedTypeRef.psi == null) {
-                                implicitTypes++
-                            } else {
-                                errorTypes++
-                                if (resolvedTypeRef is FirErrorTypeRef && resolvedTypeRef.diagnostic is ConeStubDiagnostic) {
-                                    return
-                                }
-                                val psi = resolvedTypeRef.psi!!
-                                val problem = "${resolvedTypeRef::class.simpleName} -> ${type::class.simpleName}: ${type.render()}"
-                                reportProblem(problem, psi)
+                            errorTypes++
+                            if (resolvedTypeRef is FirErrorTypeRef && resolvedTypeRef.diagnostic is ConeStubDiagnostic) {
+                                return
                             }
+                            val psi = resolvedTypeRef.psi ?: return
+                            val problem = "${resolvedTypeRef::class.simpleName} -> ${type::class.simpleName}: ${type.render()}"
+                            reportProblem(problem, psi)
                         }
                     }
                 })
@@ -309,6 +354,7 @@ class FirResolveBench(val withProgress: Boolean) {
         errorFunctionCallTypes,
         errorQualifiedAccessTypes,
         fileCount,
+        totalLines,
         errorTypesReports,
         timePerTransformer.mapKeys { (klass, _) -> klass.simpleName!!.toString() }
     )
@@ -316,7 +362,7 @@ class FirResolveBench(val withProgress: Boolean) {
 
 fun doFirResolveTestBench(
     firFiles: List<FirFile>,
-    transformers: List<FirTransformer<Nothing?>>,
+    processors: List<FirResolveProcessor>,
     gc: Boolean = true,
     withProgress: Boolean = false,
     silent: Boolean = true
@@ -327,7 +373,7 @@ fun doFirResolveTestBench(
     }
 
     val bench = FirResolveBench(withProgress)
-    bench.processFiles(firFiles, transformers)
+    bench.processFiles(firFiles, processors)
     if (!silent) bench.getTotalStatistics().report(System.out, "")
     bench.throwFailure()
 }
@@ -369,6 +415,24 @@ fun FirResolveBench.TotalStatistics.reportErrors(stream: PrintStream) {
     }
 }
 
+fun FirResolveBench.TotalStatistics.reportTimings(stream: PrintStream) {
+    printTable(stream) {
+        row {
+            cell("Stage", LEFT)
+            cells("Time", "Time per file", "Files: OK/E/T", "CPU", "User", "GC", "GC count", "L/S")
+        }
+        separator()
+        timePerTransformer.forEach { (transformer, measure) ->
+            printMeasureAsTable(measure, this@reportTimings, transformer)
+        }
+
+        if (timePerTransformer.keys.isNotEmpty()) {
+            separator()
+            printMeasureAsTable(totalMeasure, this@reportTimings, "Total time")
+        }
+    }
+}
+
 fun FirResolveBench.TotalStatistics.report(stream: PrintStream, header: String) {
     with(stream) {
         infix fun Int.percentOf(other: Int): String {
@@ -385,21 +449,7 @@ fun FirResolveBench.TotalStatistics.report(stream: PrintStream, header: String) 
         println("Erroneously resolved implicit types: $implicitTypes (${implicitTypes percentOf resolvedTypes} of resolved)")
         println("Unique error types: $uniqueErrorTypes")
 
-        printTable(stream) {
-            row {
-                cell("Stage", LEFT)
-                cells("Time", "Time per file", "Files: OK/E/T", "CPU", "User", "GC", "GC count")
-            }
-            separator()
-            timePerTransformer.forEach { (transformer, measure) ->
-                printMeasureAsTable(measure, this@report, transformer)
-            }
-
-            if (timePerTransformer.keys.isNotEmpty()) {
-                separator()
-                printMeasureAsTable(totalMeasure, this@report, "Total time")
-            }
-        }
+        this@report.reportTimings(stream)
     }
 }
 
@@ -415,7 +465,24 @@ private fun RTableContext.printMeasureAsTable(measure: FirResolveBench.Measure, 
         timeCell(measure.user)
         timeCell(measure.gcTime, inputUnit = TableTimeUnit.MS)
         cell(measure.gcCollections.toString())
+
+        linePerSecondCell(statistics.totalLines, time, timeUnit = TableTimeUnit.NS)
     }
 }
+
+
+
+fun RTableContext.RTableRowContext.linePerSecondCell(linePerSec: Double) {
+    val df = DecimalFormat().apply {
+        maximumFractionDigits = 1
+        isGroupingUsed = true
+    }
+    cell(df.format(linePerSec))
+}
+fun RTableContext.RTableRowContext.linePerSecondCell(lines: Int, time: Long, timeUnit: TableTimeUnit = TableTimeUnit.NS) {
+    val linePerSec = lines / TableTimeUnit.S.convert(time, from = timeUnit)
+    linePerSecondCell(linePerSec)
+}
+
 
 class FirRuntimeException(override val message: String, override val cause: Throwable) : RuntimeException(message, cause)

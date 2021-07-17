@@ -40,6 +40,6 @@ class B : A() {
 }
 
 fun baz(a: A) {
-    a.<!INAPPLICABLE_CANDIDATE!>foo<!>
+    a.<!INVISIBLE_REFERENCE!>foo<!>
     a.bar = a.bar + ""
 }

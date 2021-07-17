@@ -16,6 +16,7 @@
 
 package org.jetbrains.kotlin.load.java.lazy.descriptors
 
+import org.jetbrains.kotlin.builtins.StandardNames
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.ClassifierDescriptor
 import org.jetbrains.kotlin.descriptors.PropertyDescriptor
@@ -29,7 +30,6 @@ import org.jetbrains.kotlin.load.java.structure.JavaClass
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.DescriptorFactory.createEnumValueOfMethod
 import org.jetbrains.kotlin.resolve.DescriptorFactory.createEnumValuesMethod
-import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.scopes.DescriptorKindFilter
 import org.jetbrains.kotlin.resolve.scopes.MemberScope
 import org.jetbrains.kotlin.utils.DFS
@@ -46,8 +46,9 @@ class LazyJavaStaticClassScope(
         declaredMemberIndex().getMethodNames().toMutableSet().apply {
             addAll(ownerDescriptor.getParentJavaStaticClassScope()?.getFunctionNames().orEmpty())
             if (jClass.isEnum) {
-                addAll(listOf(DescriptorUtils.ENUM_VALUE_OF, DescriptorUtils.ENUM_VALUES))
+                addAll(listOf(StandardNames.ENUM_VALUE_OF, StandardNames.ENUM_VALUES))
             }
+            addAll(c.components.syntheticPartsProvider.getStaticFunctionNames(ownerDescriptor))
         }
 
     override fun computePropertyNames(kindFilter: DescriptorKindFilter, nameFilter: ((Name) -> Boolean)?) =
@@ -75,10 +76,14 @@ class LazyJavaStaticClassScope(
 
         if (jClass.isEnum) {
             when (name) {
-                DescriptorUtils.ENUM_VALUE_OF -> result.add(createEnumValueOfMethod(ownerDescriptor))
-                DescriptorUtils.ENUM_VALUES -> result.add(createEnumValuesMethod(ownerDescriptor))
+                StandardNames.ENUM_VALUE_OF -> result.add(createEnumValueOfMethod(ownerDescriptor))
+                StandardNames.ENUM_VALUES -> result.add(createEnumValuesMethod(ownerDescriptor))
             }
         }
+    }
+
+    override fun computeImplicitlyDeclaredFunctions(result: MutableCollection<SimpleFunctionDescriptor>, name: Name) {
+        c.components.syntheticPartsProvider.generateStaticFunctions(ownerDescriptor, name, result)
     }
 
     override fun computeNonDeclaredProperties(name: Name, result: MutableCollection<PropertyDescriptor>) {

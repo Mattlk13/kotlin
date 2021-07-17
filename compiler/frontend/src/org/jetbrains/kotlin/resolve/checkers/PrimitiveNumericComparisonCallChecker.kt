@@ -6,6 +6,7 @@
 package org.jetbrains.kotlin.resolve.checkers
 
 import com.intellij.psi.PsiElement
+import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.descriptors.TypeParameterDescriptor
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.KtBinaryExpression
@@ -17,7 +18,6 @@ import org.jetbrains.kotlin.resolve.calls.checkers.CallCheckerContext
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.typeUtil.*
-import org.jetbrains.kotlin.utils.addToStdlib.firstNotNullResult
 
 class PrimitiveNumericComparisonInfo(
     val comparisonType: KotlinType,
@@ -35,6 +35,8 @@ object PrimitiveNumericComparisonCallChecker : CallChecker {
         // Primitive number comparisons only take part in binary operator convention resolution
         val binaryExpression = resolvedCall.call.callElement as? KtBinaryExpression ?: return
         if (!comparisonOperatorTokens.contains(binaryExpression.operationReference.getReferencedNameElementType())) return
+
+        if (!resolvedCall.isStandardComparison()) return
 
         val leftExpr = binaryExpression.left ?: return
         val rightExpr = binaryExpression.right ?: return
@@ -68,6 +70,11 @@ object PrimitiveNumericComparisonCallChecker : CallChecker {
         )
     }
 
+    private fun ResolvedCall<*>.isStandardComparison(): Boolean =
+        extensionReceiver == null &&
+                dispatchReceiver != null &&
+                KotlinBuiltIns.isUnderKotlinPackage(resultingDescriptor)
+
     private fun leastCommonPrimitiveNumericType(t1: KotlinType, t2: KotlinType): KotlinType {
         val pt1 = t1.promoteIntegerTypeToIntIfRequired()
         val pt2 = t2.promoteIntegerTypeToIntIfRequired()
@@ -99,12 +106,12 @@ object PrimitiveNumericComparisonCallChecker : CallChecker {
     }
 
     private fun List<KotlinType>.findPrimitiveOrNullablePrimitiveType() =
-        firstNotNullResult { it.getPrimitiveTypeOrSupertype() }
+        firstNotNullOfOrNull { it.getPrimitiveTypeOrSupertype() }
 
     private fun KotlinType.getPrimitiveTypeOrSupertype(): KotlinType? =
         when {
             constructor.declarationDescriptor is TypeParameterDescriptor ->
-                immediateSupertypes().firstNotNullResult {
+                immediateSupertypes().firstNotNullOfOrNull {
                     it.getPrimitiveTypeOrSupertype()
                 }
             isPrimitiveNumberOrNullableType() ->

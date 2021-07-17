@@ -16,6 +16,7 @@
 
 package org.jetbrains.kotlin.renderer
 
+import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.descriptors.ValueParameterDescriptor
 import org.jetbrains.kotlin.descriptors.annotations.AnnotationDescriptor
 import org.jetbrains.kotlin.name.FqName
@@ -47,7 +48,7 @@ internal class DescriptorRendererOptionsImpl : DescriptorRendererOptions {
             assert(!field.name.startsWith("is")) { "Fields named is* are not supported here yet" }
             val value = property.getValue(
                     this,
-                    PropertyReference1Impl(DescriptorRendererOptionsImpl::class, field.name, "get" + field.name.capitalize())
+                    PropertyReference1Impl(DescriptorRendererOptionsImpl::class, field.name, "get" + field.name.replaceFirstChar(Char::uppercaseChar))
             )
             field.set(copy, copy.property(value))
         }

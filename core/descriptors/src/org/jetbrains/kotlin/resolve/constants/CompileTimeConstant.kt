@@ -17,10 +17,14 @@
 package org.jetbrains.kotlin.resolve.constants
 
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
+import org.jetbrains.kotlin.builtins.StandardNames
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
 import org.jetbrains.kotlin.descriptors.annotations.Annotations
 import org.jetbrains.kotlin.descriptors.findClassAcrossModuleDependencies
-import org.jetbrains.kotlin.types.*
+import org.jetbrains.kotlin.types.ErrorUtils
+import org.jetbrains.kotlin.types.KotlinType
+import org.jetbrains.kotlin.types.KotlinTypeFactory
+import org.jetbrains.kotlin.types.TypeUtils
 
 interface CompileTimeConstant<out T> {
     val isError: Boolean
@@ -42,6 +46,8 @@ interface CompileTimeConstant<out T> {
 
     val isUnsignedNumberLiteral: Boolean get() = parameters.isUnsignedNumberLiteral
 
+    val hasIntegerLiteralType: Boolean
+
     data class Parameters(
         val canBeUsedInAnnotation: Boolean,
         val isPure: Boolean,
@@ -52,7 +58,8 @@ interface CompileTimeConstant<out T> {
         val usesVariableAsConstant: Boolean,
         val usesNonConstValAsConstant: Boolean,
         // `isConvertableConstVal` means that this is `const val` that has `ImplicitIntegerCoercion` annotation
-        val isConvertableConstVal: Boolean
+        val isConvertableConstVal: Boolean,
+        val dontCreateILT: Boolean
     )
 
     override fun equals(other: Any?): Boolean
@@ -65,6 +72,7 @@ class TypedCompileTimeConstant<out T>(
         module: ModuleDescriptor,
         override val parameters: CompileTimeConstant.Parameters
 ) : CompileTimeConstant<T> {
+
     override val isError: Boolean
         get() = constantValue is ErrorValue
 
@@ -86,6 +94,9 @@ class TypedCompileTimeConstant<out T>(
         result = 31 * result + type.hashCode()
         return result
     }
+
+    override val hasIntegerLiteralType: Boolean
+        get() = false
 }
 
 fun createIntegerValueTypeConstant(
@@ -98,7 +109,7 @@ fun createIntegerValueTypeConstant(
 }
 
 fun hasUnsignedTypesInModuleDependencies(module: ModuleDescriptor): Boolean {
-    return module.findClassAcrossModuleDependencies(KotlinBuiltIns.FQ_NAMES.uInt) != null
+    return module.findClassAcrossModuleDependencies(StandardNames.FqNames.uInt) != null
 }
 
 class UnsignedErrorValueTypeConstant(
@@ -116,6 +127,9 @@ class UnsignedErrorValueTypeConstant(
     override fun equals(other: Any?) = other is UnsignedErrorValueTypeConstant && value == other.value
 
     override fun hashCode() = value.hashCode()
+
+    override val hasIntegerLiteralType: Boolean
+        get() = false
 }
 
 class IntegerValueTypeConstant(
@@ -135,7 +149,8 @@ class IntegerValueTypeConstant(
                 isUnsignedLongNumberLiteral = parameters.isUnsignedLongNumberLiteral,
                 usesVariableAsConstant = parameters.usesVariableAsConstant,
                 usesNonConstValAsConstant = parameters.usesNonConstValAsConstant,
-                isConvertableConstVal = parameters.isConvertableConstVal
+                isConvertableConstVal = parameters.isConvertableConstVal,
+                dontCreateILT = false
             )
 
             return IntegerValueTypeConstant(value, module, newParameters, newInferenceEnabled, convertedFromSigned = true)
@@ -149,7 +164,8 @@ class IntegerValueTypeConstant(
                 isUnsignedLongNumberLiteral = parameters.isUnsignedLongNumberLiteral,
                 usesVariableAsConstant = parameters.usesVariableAsConstant,
                 usesNonConstValAsConstant = parameters.usesNonConstValAsConstant,
-                isConvertableConstVal = parameters.isConvertableConstVal
+                isConvertableConstVal = parameters.isConvertableConstVal,
+                dontCreateILT = false
             )
 
             return IntegerValueTypeConstant(value, module, newParameters, newInferenceEnabled, convertedFromSigned = true)
@@ -198,4 +214,6 @@ class IntegerValueTypeConstant(
 
     override fun hashCode() = 31 * value.hashCode() + parameters.hashCode()
 
+    override val hasIntegerLiteralType: Boolean
+        get() = true
 }

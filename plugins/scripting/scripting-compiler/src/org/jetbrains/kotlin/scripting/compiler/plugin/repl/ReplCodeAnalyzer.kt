@@ -16,6 +16,7 @@ import org.jetbrains.kotlin.container.ComponentProvider
 import org.jetbrains.kotlin.container.get
 import org.jetbrains.kotlin.descriptors.ClassDescriptorWithResolutionScopes
 import org.jetbrains.kotlin.descriptors.impl.ModuleDescriptorImpl
+import org.jetbrains.kotlin.descriptors.impl.PackageViewDescriptorFactory
 import org.jetbrains.kotlin.diagnostics.Severity
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.psi.KtFile
@@ -24,13 +25,16 @@ import org.jetbrains.kotlin.resolve.LazyTopDownAnalyzer
 import org.jetbrains.kotlin.resolve.TopDownAnalysisContext
 import org.jetbrains.kotlin.resolve.TopDownAnalysisMode
 import org.jetbrains.kotlin.resolve.calls.smartcasts.DataFlowInfoFactory
+import org.jetbrains.kotlin.resolve.calls.tower.ImplicitsExtensionsResolutionFilter
 import org.jetbrains.kotlin.resolve.diagnostics.Diagnostics
+import org.jetbrains.kotlin.resolve.extensions.ExtraImportsProviderExtension
 import org.jetbrains.kotlin.resolve.lazy.*
 import org.jetbrains.kotlin.resolve.lazy.data.KtClassLikeInfo
 import org.jetbrains.kotlin.resolve.lazy.declarations.*
 import org.jetbrains.kotlin.resolve.scopes.ImportingScope
 import org.jetbrains.kotlin.resolve.scopes.utils.parentsWithSelf
 import org.jetbrains.kotlin.resolve.scopes.utils.replaceImportingScopes
+import org.jetbrains.kotlin.scripting.compiler.plugin.impl.ReplPackageViewDescriptorFactory
 import org.jetbrains.kotlin.scripting.definitions.ScriptPriorities
 import kotlin.script.experimental.api.SourceCode
 import kotlin.script.experimental.jvm.util.CompiledHistoryItem
@@ -39,13 +43,14 @@ import kotlin.script.experimental.jvm.util.SnippetsHistory
 
 open class ReplCodeAnalyzerBase(
     environment: KotlinCoreEnvironment,
-    val trace: BindingTraceContext = NoScopeRecordCliBindingTrace()
+    val trace: BindingTraceContext = NoScopeRecordCliBindingTrace(),
+    implicitsResolutionFilter: ImplicitsExtensionsResolutionFilter? = null
 ) {
     protected val scriptDeclarationFactory: ScriptMutableDeclarationProviderFactory
 
     protected val container: ComponentProvider
     protected val topDownAnalysisContext: TopDownAnalysisContext
-    protected val topDownAnalyzer: LazyTopDownAnalyzer
+    private val topDownAnalyzer: LazyTopDownAnalyzer
     protected val resolveSession: ResolveSession
     protected val replState = ResettableAnalyzerState()
 
@@ -61,7 +66,9 @@ open class ReplCodeAnalyzerBase(
             trace,
             environment.configuration,
             environment::createPackagePartProvider,
-            { _, _ -> ScriptMutableDeclarationProviderFactory() }
+            { _, _ -> ScriptMutableDeclarationProviderFactory() },
+            implicitsResolutionFilter = implicitsResolutionFilter,
+            moduleCapabilities = mapOf(PackageViewDescriptorFactory.CAPABILITY to ReplPackageViewDescriptorFactory)
         )
 
         this.module = container.get()
@@ -116,13 +123,17 @@ open class ReplCodeAnalyzerBase(
         return doAnalyze(psiFile, importedScripts, codeLine.addNo(priority))
     }
 
+    protected fun runAnalyzer(linePsi: KtFile, importedScripts: List<KtFile>): TopDownAnalysisContext {
+        return topDownAnalyzer.analyzeDeclarations(topDownAnalysisContext.topDownAnalysisMode, listOf(linePsi) + importedScripts)
+    }
+
     private fun doAnalyze(linePsi: KtFile, importedScripts: List<KtFile>, codeLine: SourceCodeByReplLine): ReplLineAnalysisResult {
         scriptDeclarationFactory.setDelegateFactory(
             FileBasedDeclarationProviderFactory(resolveSession.storageManager, listOf(linePsi) + importedScripts)
         )
         replState.submitLine(linePsi)
 
-        val context = topDownAnalyzer.analyzeDeclarations(topDownAnalysisContext.topDownAnalysisMode, listOf(linePsi) + importedScripts)
+        val context = runAnalyzer(linePsi, importedScripts)
 
         val diagnostics = trace.bindingContext.diagnostics
         val hasErrors = diagnostics.any { it.severity == Severity.ERROR }
@@ -195,7 +206,9 @@ open class ReplCodeAnalyzerBase(
     // TODO: merge with org.jetbrains.kotlin.resolve.repl.ReplState when switching to new REPL infrastructure everywhere
     // TODO: review its place in the extracted state infrastructure (now the analyzer itself is a part of the state)
     class ResettableAnalyzerState {
+        @Suppress("DEPRECATION")
         private val successfulLines = ResettableSnippetsHistory<LineInfo.SuccessfulLine>()
+
         private val submittedLines = hashMapOf<KtFile, LineInfo>()
 
         fun resetToLine(lineId: ILineId): List<SourceCodeByReplLine> {
@@ -265,11 +278,19 @@ open class ReplCodeAnalyzerBase(
         }
 
         private fun computeFileScopes(lineInfo: LineInfo, fileScopeFactory: FileScopeFactory): FileScopes? {
+            val linePsi = lineInfo.linePsi
+            val hasImports = linePsi.importDirectives.isNotEmpty() ||
+                    ExtraImportsProviderExtension.getInstance(linePsi.project).getExtraImports(linePsi).isNotEmpty()
+
             // create scope that wraps previous line lexical scope and adds imports from this line
             val lexicalScopeAfterLastLine = lineInfo.parentLine?.lineDescriptor?.scopeForInitializerResolution ?: return null
             val lastLineImports = lexicalScopeAfterLastLine.parentsWithSelf.first { it is ImportingScope } as ImportingScope
-            val scopesForThisLine = fileScopeFactory.createScopesForFile(lineInfo.linePsi, lastLineImports)
-            val combinedLexicalScopes = lexicalScopeAfterLastLine.replaceImportingScopes(scopesForThisLine.importingScope)
+            val scopesForThisLine = fileScopeFactory.createScopesForFile(linePsi, lastLineImports, false)
+            val combinedLexicalScopes = if (hasImports)
+                lexicalScopeAfterLastLine.replaceImportingScopes(scopesForThisLine.importingScope)
+            else
+                lexicalScopeAfterLastLine
+
             return FileScopes(combinedLexicalScopes, scopesForThisLine.importingScope, scopesForThisLine.importForceResolver)
         }
     }

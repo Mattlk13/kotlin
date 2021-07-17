@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 package org.jetbrains.kotlin.gradle.plugin.mpp
@@ -10,26 +10,35 @@ import org.gradle.api.DomainObjectSet
 import org.gradle.api.NamedDomainObjectContainer
 import org.gradle.api.Project
 import org.gradle.api.artifacts.ConfigurablePublishArtifact
-import org.gradle.api.artifacts.Configuration
 import org.gradle.api.artifacts.PublishArtifact
 import org.gradle.api.attributes.Attribute
 import org.gradle.api.attributes.AttributeContainer
-import org.gradle.api.attributes.Usage.JAVA_API
 import org.gradle.api.attributes.Usage.JAVA_RUNTIME_JARS
 import org.gradle.api.component.ComponentWithCoordinates
 import org.gradle.api.component.ComponentWithVariants
 import org.gradle.api.component.SoftwareComponent
+import org.gradle.api.component.SoftwareComponentFactory
 import org.gradle.api.internal.component.SoftwareComponentInternal
 import org.gradle.api.internal.component.UsageContext
 import org.gradle.api.internal.project.ProjectInternal
 import org.gradle.api.publish.maven.MavenPublication
+import org.gradle.api.tasks.TaskProvider
+import org.gradle.jvm.tasks.Jar
 import org.gradle.util.ConfigureUtil
 import org.gradle.util.WrapUtil
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
 import org.jetbrains.kotlin.gradle.dsl.kotlinExtension
 import org.jetbrains.kotlin.gradle.plugin.*
+import org.jetbrains.kotlin.gradle.targets.js.dsl.KotlinJsSubTargetContainerDsl
+import org.jetbrains.kotlin.gradle.targets.js.dsl.KotlinJsSubTargetDsl
+import org.jetbrains.kotlin.gradle.targets.js.dukat.DukatCompilationResolverPlugin
+import org.jetbrains.kotlin.gradle.targets.js.dukat.DukatCompilationResolverPlugin.Companion.shouldDependOnDukatIntegrationTask
+import org.jetbrains.kotlin.gradle.targets.js.dukat.DukatCompilationResolverPlugin.Companion.shouldLegacyUseIrTargetDukatIntegrationTask
+import org.jetbrains.kotlin.gradle.targets.js.dukat.ExternalsOutputFormat
+import org.jetbrains.kotlin.gradle.targets.js.ir.KotlinJsIrTarget
+import org.jetbrains.kotlin.gradle.targets.js.npm.npmProject
+import org.jetbrains.kotlin.gradle.tasks.dependsOn
 import org.jetbrains.kotlin.gradle.utils.dashSeparatedName
-import org.jetbrains.kotlin.gradle.utils.isGradleVersionAtLeast
 import org.jetbrains.kotlin.gradle.utils.lowerCamelCaseName
 
 internal const val PRIMARY_SINGLE_COMPONENT_NAME = "kotlin"
@@ -44,7 +53,10 @@ abstract class AbstractKotlinTarget(
     override val defaultConfigurationName: String
         get() = disambiguateName("default")
 
-    override var useDisambiguitionClassifierAsSourcesetNamePreffix: Boolean = true
+    override var useDisambiguationClassifierAsSourceSetNamePrefix: Boolean = true
+        internal set
+
+    override var overrideDisambiguationClassifierOnIdeImport: String? = null
         internal set
 
     override val apiElementsConfigurationName: String
@@ -80,41 +92,25 @@ abstract class AbstractKotlinTarget(
     }
 
     override val components: Set<SoftwareComponent> by lazy {
-        val kotlinVariants = kotlinComponents
-        if (isGradleVersionAtLeast(5, 3)) {
-            buildAdhocComponentsFromKotlinVariants(kotlinVariants)
-        } else {
-            kotlinVariants.also { project.components.addAll(it) }
-        }
+        buildAdhocComponentsFromKotlinVariants(kotlinComponents)
     }
 
-    // This API is introduced in Gradle 5.3. TODO when we build against Gradle 5.3+, rewrite this function
     private fun buildAdhocComponentsFromKotlinVariants(kotlinVariants: Set<KotlinTargetComponent>): Set<SoftwareComponent> {
-        val softwareComponentFactoryClass = Class.forName("org.gradle.api.component.SoftwareComponentFactory")
+        val softwareComponentFactoryClass = SoftwareComponentFactory::class.java
         // TODO replace internal API access with injection (not possible until we have this class on the compile classpath)
         val softwareComponentFactory = (project as ProjectInternal).services.get(softwareComponentFactoryClass)
 
-        val adhocMethod = softwareComponentFactoryClass.getMethod("adhoc", String::class.java)
-        val adhocSoftwareComponentClass = Class.forName("org.gradle.api.component.AdhocComponentWithVariants")
-        val addVariantsFromConfigurationMethod = adhocSoftwareComponentClass.getMethod(
-            "addVariantsFromConfiguration", Configuration::class.java, org.gradle.api.Action::class.java
-        )
-        val configurationVariantDetailsClass = Class.forName("org.gradle.api.component.ConfigurationVariantDetails")
-        val mapToMavenScopeMethod = configurationVariantDetailsClass.getMethod(
-            "mapToMavenScope", String::class.java
-        )
-
         return kotlinVariants.map { kotlinVariant ->
-            val adhocVariant = adhocMethod(softwareComponentFactory, kotlinVariant.name)
+            val adhocVariant = softwareComponentFactory.adhoc(kotlinVariant.name)
 
             project.whenEvaluated {
                 (kotlinVariant as SoftwareComponentInternal).usages.filterIsInstance<KotlinUsageContext>().forEach { kotlinUsageContext ->
-                    val configuration = project.configurations.findByName(kotlinUsageContext.name)
-                        ?: project.configurations.create(kotlinUsageContext.name).also { configuration ->
+                    val publishedConfigurationName = publishedConfigurationName(kotlinUsageContext.name)
+                    val configuration = project.configurations.findByName(publishedConfigurationName)
+                        ?: project.configurations.create(publishedConfigurationName).also { configuration ->
                             configuration.isCanBeConsumed = false
                             configuration.isCanBeResolved = false
-                            configuration.dependencies.addAll(kotlinUsageContext.dependencies)
-                            configuration.dependencyConstraints.addAll(kotlinUsageContext.dependencyConstraints)
+                            configuration.extendsFrom(project.configurations.getByName(kotlinUsageContext.dependencyConfigurationName))
                             configuration.artifacts.addAll(kotlinUsageContext.artifacts)
 
                             val attributes = kotlinUsageContext.attributes
@@ -127,34 +123,27 @@ abstract class AbstractKotlinTarget(
                             }
                         }
 
-                    val chooseMavenScopeAction = Action<Any> { configurationVariantDetails ->
+                    adhocVariant.addVariantsFromConfiguration(configuration) { configurationVariantDetails ->
                         val mavenScope = when (kotlinUsageContext.usage.name) {
                             "java-api-jars" -> "compile"
-                            JAVA_RUNTIME_JARS -> "runtime"
+                            "java-runtime-jars" -> "runtime"
                             else -> error("unexpected usage value '${kotlinUsageContext.usage.name}'")
                         }
-                        mapToMavenScopeMethod(configurationVariantDetails, mavenScope)
+                        configurationVariantDetails.mapToMavenScope(mavenScope)
                     }
-
-                    addVariantsFromConfigurationMethod(adhocVariant, configuration, chooseMavenScopeAction)
                 }
             }
 
             adhocVariant as SoftwareComponent
 
-            if (kotlinVariant is KotlinVariantWithMetadataVariant) {
-                object : ComponentWithVariants, ComponentWithCoordinates, SoftwareComponentInternal {
-                    override fun getCoordinates() = kotlinVariant.coordinates
-                    override fun getVariants(): Set<out SoftwareComponent> = kotlinVariant.variants
-                    override fun getName(): String = adhocVariant.name
-                    override fun getUsages(): MutableSet<out UsageContext> = (adhocVariant as SoftwareComponentInternal).usages
-                }
-            } else {
-                object : ComponentWithCoordinates, SoftwareComponentInternal {
-                    override fun getCoordinates() = (kotlinVariant as? ComponentWithCoordinates)?.coordinates
-                    override fun getName(): String = adhocVariant.name
-                    override fun getUsages(): MutableSet<out UsageContext> = (adhocVariant as SoftwareComponentInternal).usages
-                }
+            object : ComponentWithVariants, ComponentWithCoordinates, SoftwareComponentInternal {
+                override fun getCoordinates() = (kotlinVariant as? ComponentWithCoordinates)?.coordinates
+
+                override fun getVariants(): Set<SoftwareComponent> =
+                    (kotlinVariant as? KotlinVariantWithMetadataVariant)?.variants.orEmpty()
+
+                override fun getName(): String = adhocVariant.name
+                override fun getUsages(): MutableSet<out UsageContext> = (adhocVariant as SoftwareComponentInternal).usages
             }
         }.toSet()
     }
@@ -180,8 +169,7 @@ abstract class AbstractKotlinTarget(
         return result
     }
 
-    // TODO[Ilya Goncharov] fix internal on public when we remove legacy js
-    internal fun createUsageContexts(
+    internal open fun createUsageContexts(
         producingCompilation: KotlinCompilation<*>
     ): Set<DefaultKotlinUsageContext> {
         // Here, the Java Usage values are used intentionally as Gradle needs this for
@@ -206,8 +194,13 @@ abstract class AbstractKotlinTarget(
         classifierPrefix: String? = null
     ): PublishArtifact {
         val sourcesJarTask = sourcesJarTask(producingCompilation, componentName, artifactNameAppendix)
+        linkToSourcesProducedByDukatTasks(
+            producingCompilation,
+            sourcesJarTask
+        )
         val sourceArtifactConfigurationName = producingCompilation.disambiguateName("sourceArtifacts")
-        return producingCompilation.target.project.run {
+
+        return with(producingCompilation.target.project) {
             (configurations.findByName(sourceArtifactConfigurationName) ?: run {
                 val configuration = configurations.create(sourceArtifactConfigurationName) {
                     it.isCanBeResolved = false
@@ -218,6 +211,51 @@ abstract class AbstractKotlinTarget(
             }).artifacts.single().apply {
                 this as ConfigurablePublishArtifact
                 classifier = dashSeparatedName(classifierPrefix, "sources")
+            }
+        }
+    }
+
+    private fun linkToSourcesProducedByDukatTasks(
+        producingCompilation: KotlinCompilation<*>,
+        sourcesJarTask: TaskProvider<Jar>
+    ) {
+        if (producingCompilation is KotlinJsCompilation) {
+            val configAction: (KotlinJsSubTargetDsl) -> Unit = {
+                val dukatGenerateExternalsTaskName = producingCompilation.npmProject.compilation
+                    .disambiguateName(
+                        DukatCompilationResolverPlugin.GENERATE_EXTERNALS_INTEGRATED_TASK_SIMPLE_NAME
+                    )
+
+                with(producingCompilation.target.project) {
+                    val dukatTask = tasks.named(dukatGenerateExternalsTaskName)
+                    sourcesJarTask.dependsOn(dukatTask)
+
+                    plugins.withId("maven-publish") {
+                        tasks
+                            .matching { it.name == "sourcesJar" }
+                            .configureEach { it.dependsOn(dukatTask) }
+                    }
+                }
+            }
+
+            // See DukatCompilationResolverPlugin for details
+            if (producingCompilation.shouldDependOnDukatIntegrationTask()) {
+                (producingCompilation.target as KotlinJsSubTargetContainerDsl)
+                    .whenNodejsConfigured(configAction)
+                (producingCompilation.target as KotlinJsSubTargetContainerDsl)
+                    .whenBrowserConfigured(configAction)
+            } else if (producingCompilation.shouldLegacyUseIrTargetDukatIntegrationTask()) {
+                (producingCompilation.target as KotlinJsIrTarget)
+                    .legacyTarget
+                    ?.compilations
+                    ?.named(producingCompilation.name) {
+                        if (it.externalsOutputFormat == ExternalsOutputFormat.SOURCE) {
+                            (producingCompilation.target as KotlinJsSubTargetContainerDsl)
+                                .whenNodejsConfigured(configAction)
+                            (producingCompilation.target as KotlinJsSubTargetContainerDsl)
+                                .whenBrowserConfigured(configAction)
+                        }
+                    }
             }
         }
     }
@@ -237,15 +275,16 @@ abstract class AbstractKotlinTarget(
         internal set
 }
 
+private val publishedConfigurationNameSuffix = "-published"
+
+internal fun publishedConfigurationName(originalVariantName: String) = originalVariantName + publishedConfigurationNameSuffix
+internal fun originalVariantNameFromPublished(publishedConfigurationName: String): String? =
+    publishedConfigurationName.takeIf { it.endsWith(publishedConfigurationNameSuffix) }?.removeSuffix(publishedConfigurationNameSuffix)
+
 internal fun KotlinTarget.disambiguateName(simpleName: String) =
     lowerCamelCaseName(targetName, simpleName)
 
-internal fun javaApiUsageForMavenScoping() =
-    if (isGradleVersionAtLeast(5, 3)) {
-        "java-api-jars"
-    } else {
-        JAVA_API
-    }
+internal fun javaApiUsageForMavenScoping() = "java-api-jars"
 
 abstract class KotlinOnlyTarget<T : KotlinCompilation<*>>(
     project: Project,

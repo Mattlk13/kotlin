@@ -16,15 +16,15 @@ import org.jetbrains.kotlin.config.LanguageVersion
 import org.jetbrains.kotlin.idea.configuration.KotlinMigrationProjectService
 import org.jetbrains.kotlin.idea.configuration.KotlinMigrationProjectService.MigrationTestState
 import org.jetbrains.kotlin.idea.configuration.MigrationInfo
-import org.jetbrains.plugins.gradle.tooling.annotation.TargetVersions
+import org.jetbrains.plugins.gradle.tooling.annotation.PluginTargetVersions
 import org.junit.Assert
 import org.junit.Test
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 
-class GradleMigrateTest : GradleImportingTestCase() {
+class GradleMigrateTest : MultiplePluginVersionGradleImportingTestCase() {
     @Test
-    @TargetVersions("4.4+")
+    @PluginTargetVersions(gradleVersion = "5.3+", pluginVersion = "1.4.0+")
     fun testMigrateStdlib() {
         val migrateComponentState = doMigrationTest(
             beforeText = """
@@ -34,47 +34,47 @@ class GradleMigrateTest : GradleImportingTestCase() {
                     mavenCentral()
                 }
                 dependencies {
-                    classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.2.40"
+                    classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.3.40"
                 }
             }
 
             apply plugin: 'kotlin'
 
             dependencies {
-                compile "org.jetbrains.kotlin:kotlin-stdlib:1.2.40"
+                compile "org.jetbrains.kotlin:kotlin-stdlib:1.3.40"
             }
             """,
-
             afterText =
             """
             buildscript {
                 repositories {
                     jcenter()
                     mavenCentral()
+                    mavenLocal()
                 }
                 dependencies {
-                    classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.3.50"
+                    classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$gradleKotlinPluginVersion"
                 }
             }
 
             apply plugin: 'kotlin'
 
             dependencies {
-                compile "org.jetbrains.kotlin:kotlin-stdlib:1.3.50"
+                compile "org.jetbrains.kotlin:kotlin-stdlib:$gradleKotlinPluginVersion"
             }
             """
         )
 
         Assert.assertEquals(false, migrateComponentState?.hasApplicableTools)
-
+        val newLanguageVersion = LanguageVersion.fromFullVersionString(gradleKotlinPluginVersion)!!
         Assert.assertEquals(
             MigrationInfo.create(
-                oldStdlibVersion = "1.2.40",
-                oldApiVersion = ApiVersion.KOTLIN_1_2,
-                oldLanguageVersion = LanguageVersion.KOTLIN_1_2,
-                newStdlibVersion = "1.3.50",
-                newApiVersion = ApiVersion.KOTLIN_1_3,
-                newLanguageVersion = LanguageVersion.KOTLIN_1_3
+                oldStdlibVersion = "1.3.40",
+                oldApiVersion = ApiVersion.KOTLIN_1_3,
+                oldLanguageVersion = LanguageVersion.KOTLIN_1_3,
+                newStdlibVersion = gradleKotlinPluginVersion,
+                newApiVersion = ApiVersion.createByLanguageVersion(newLanguageVersion),
+                newLanguageVersion = newLanguageVersion
             ),
             migrateComponentState?.migrationInfo
         )

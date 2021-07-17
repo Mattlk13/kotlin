@@ -29,7 +29,7 @@ fun actualizeMppJpsIncTestCaseDirs(rootDir: String, dir: String) {
 }
 
 class MppJpsIncTestsGenerator(val txt: ModulesTxt, val testCaseDirProvider: (TestCase) -> File) {
-    val ModulesTxt.Module.capitalName get() = name.capitalize()
+    val ModulesTxt.Module.capitalName get() = name.replaceFirstChar(Char::uppercaseChar)
 
     val testCases: List<TestCase>
 
@@ -308,7 +308,7 @@ class MppJpsIncTestsGenerator(val txt: ModulesTxt, val testCaseDirProvider: (Tes
         protected fun serviceKtFile(module: ModulesTxt.Module, fileNameSuffix: String = ""): File {
             val suffix =
                 if (module.isCommonModule) "${module.serviceName}Header"
-                else "${module.name.capitalize()}${module.contentsSettings.serviceNameSuffix}Impl"
+                else "${module.name.replaceFirstChar(Char::uppercaseChar)}${module.contentsSettings.serviceNameSuffix}Impl"
 
             return File(dir, "${module.indexedName}_service$suffix.kt$fileNameSuffix")
         }
@@ -343,9 +343,9 @@ class MppJpsIncTestsGenerator(val txt: ModulesTxt, val testCaseDirProvider: (Tes
 
             serviceKtFile(module, fileNameSuffix).setFileContent(buildString {
                 if (settings.generatePlatformDependent)
-                    appendln("expect fun ${module.platformDependentFunName}(): String")
+                    appendLine("expect fun ${module.platformDependentFunName}(): String")
 
-                appendln("fun ${module.platformIndependentFunName}() = \"common$fileNameSuffix\"")
+                appendLine("fun ${module.platformIndependentFunName}() = \"common$fileNameSuffix\"")
 
                 appendTestFun(module, settings)
             })
@@ -364,14 +364,14 @@ class MppJpsIncTestsGenerator(val txt: ModulesTxt, val testCaseDirProvider: (Tes
                 serviceKtFile(module, fileNameSuffix).setFileContent(buildString {
                     if (settings.generatePlatformDependent) {
                         for (expectedBy in settings.generateActualDeclarationsFor) {
-                            appendln(
+                            appendLine(
                                 "actual fun ${expectedBy.platformDependentFunName}(): String" +
                                         " = \"${module.name}$fileNameSuffix\""
                             )
                         }
                     }
 
-                    appendln(
+                    appendLine(
                         "fun ${module.platformOnlyFunName}()" +
                                 " = \"${module.name}$fileNameSuffix\""
                     )
@@ -398,29 +398,29 @@ class MppJpsIncTestsGenerator(val txt: ModulesTxt, val testCaseDirProvider: (Tes
             module: ModulesTxt.Module,
             settings: ModuleContentSettings
         ) {
-            appendln()
-            appendln("fun Test${module.serviceName}() {")
+            appendLine()
+            appendLine("fun Test${module.serviceName}() {")
 
             val thisAndDependencies = mutableSetOf(module)
             module.collectDependenciesRecursivelyTo(thisAndDependencies)
             thisAndDependencies.forEach { thisOrDependent ->
                 if (thisOrDependent.isCommonModule) {
-                    appendln("  ${thisOrDependent.platformIndependentFunName}()")
+                    appendLine("  ${thisOrDependent.platformIndependentFunName}()")
 
                     if (settings.generatePlatformDependent) {
-                        appendln("  ${thisOrDependent.platformDependentFunName}()")
+                        appendLine("  ${thisOrDependent.platformDependentFunName}()")
                     }
                 } else {
                     // platform module
-                    appendln("  ${thisOrDependent.platformOnlyFunName}()")
+                    appendLine("  ${thisOrDependent.platformOnlyFunName}()")
 
                     if (thisOrDependent.isJvmModule && thisOrDependent.contentsSettings.generateJavaFile) {
-                        appendln("  ${thisOrDependent.javaClassName}().doStuff()")
+                        appendLine("  ${thisOrDependent.javaClassName}().doStuff()")
                     }
                 }
             }
 
-            appendln("}")
+            appendLine("}")
         }
 
         private fun ModulesTxt.Module.collectDependenciesRecursivelyTo(

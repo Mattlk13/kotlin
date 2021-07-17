@@ -10,12 +10,13 @@ import com.intellij.codeInsight.editorActions.moveUpDown.StatementUpDownMover
 import com.intellij.openapi.editor.Editor
 import com.intellij.psi.*
 import com.intellij.psi.util.PsiTreeUtil
-import org.jetbrains.kotlin.idea.core.util.isMultiLine
-import org.jetbrains.kotlin.idea.formatter.TrailingCommaHelper
-import org.jetbrains.kotlin.idea.formatter.isComma
+import org.jetbrains.kotlin.idea.core.util.getLineCount
+import org.jetbrains.kotlin.idea.formatter.trailingComma.TrailingCommaHelper
+import org.jetbrains.kotlin.idea.util.isComma
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.getParentOfTypesAndPredicate
+import org.jetbrains.kotlin.psi.psiUtil.getPrevSiblingIgnoringWhitespaceAndComments
 import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 import java.util.function.Predicate
 
@@ -30,10 +31,17 @@ class KotlinExpressionMover : AbstractKotlinUpDownMover() {
         sibling: PsiElement,
         down: Boolean
     ): LineRange? {
-        val next = if (sibling.node.elementType === KtTokens.COMMA) {
+        val next = if (sibling.node.elementType === KtTokens.COMMA || sibling is PsiComment) {
             firstNonWhiteSibling(sibling, down)
         } else {
             sibling
+        }
+
+        if (next != null) {
+            val afterNext = firstNonWhiteSibling(next, true)
+            if (afterNext?.node?.elementType == KtTokens.RPAR &&
+                getElementLine(afterNext, editor, true) == getElementLine(next, editor, false)
+            ) return null
         }
 
         return next?.takeIf { it is KtParameter || it is KtValueArgument }?.let { LineRange(it, it, editor.document) }?.also {
@@ -91,7 +99,7 @@ class KotlinExpressionMover : AbstractKotlinUpDownMover() {
         val psiRange = StatementUpDownMover.getElementRange(editor, file, oldRange) ?: return false
         val firstElement = getMovableElement(psiRange.getFirst(), false) ?: return false
         var lastElement = getMovableElement(psiRange.getSecond(), true) ?: return false
-        if (isForbiddenMove(firstElement, down) || isForbiddenMove(lastElement, down)) {
+        if (isForbiddenMove(editor, firstElement, down) || isForbiddenMove(editor, lastElement, down)) {
             info.toMove2 = null
             return true
         }
@@ -111,6 +119,7 @@ class KotlinExpressionMover : AbstractKotlinUpDownMover() {
     }
 
     private var parametersOrArgsToMove: Pair<PsiElement, PsiElement>? = null
+
     override fun beforeMove(
         editor: Editor,
         info: MoveInfo,
@@ -118,16 +127,18 @@ class KotlinExpressionMover : AbstractKotlinUpDownMover() {
     ) {
         if (parametersOrArgsToMove != null) {
             val (first, second) = parametersOrArgsToMove ?: return
+            parametersOrArgsToMove = null
+
             val lastElementOnFirstLine = getLastSiblingOfSameTypeInLine(first, editor)
             val lastElementOnSecondLine = getLastSiblingOfSameTypeInLine(second, editor)
             val withTrailingComma = lastElementOnFirstLine.parent
                 ?.safeAs<KtElement>()
                 ?.let {
-                    TrailingCommaHelper.needComma(it, CodeStyle.getSettings(it.project), true)
+                    TrailingCommaHelper.trailingCommaExistsOrCanExist(it, CodeStyle.getSettings(it.project))
                 } == true
 
             fixCommaIfNeeded(lastElementOnFirstLine, down && isLastOfItsKind(lastElementOnSecondLine, true), withTrailingComma)
-            fixCommaIfNeeded(lastElementOnSecondLine, !down && isLastOfItsKind(lastElementOnFirstLine, true),withTrailingComma)
+            fixCommaIfNeeded(lastElementOnSecondLine, !down && isLastOfItsKind(lastElementOnFirstLine, true), withTrailingComma)
             editor.project?.let { PsiDocumentManager.getInstance(it).doPostponedOperationsAndUnblockDocument(editor.document) }
         }
     }
@@ -491,6 +502,8 @@ class KotlinExpressionMover : AbstractKotlinUpDownMover() {
                 return element
             }
 
+            if (getParentFileAnnotationEntry(element) != null) return null
+
             val movableElement = element.getParentOfTypesAndPredicate(
                 strict = false,
                 parentClasses = *MOVABLE_ELEMENT_CLASSES,
@@ -512,11 +525,16 @@ class KotlinExpressionMover : AbstractKotlinUpDownMover() {
         private fun isLastOfItsKind(element: PsiElement, down: Boolean): Boolean =
             getSiblingOfType(element, down, element.javaClass) == null
 
-        private fun isForbiddenMove(element: PsiElement, down: Boolean): Boolean =
-            if (element is KtParameter || element is KtValueArgument)
-                isLastOfItsKind(element, down)
-            else
-                false
+        private fun isForbiddenMove(editor: Editor, element: PsiElement, down: Boolean): Boolean {
+            if (element is KtParameter || element is KtValueArgument) {
+                val next = firstNonWhiteSibling(element, true)
+                if (next?.node?.elementType == KtTokens.RPAR &&
+                    getElementLine(next, editor, true) == getElementLine(element, editor, false)
+                ) return true
+                return isLastOfItsKind(element, down)
+            }
+            return false
+        }
 
         private fun isBracelessBlock(element: PsiElement): Boolean =
             if (element !is KtBlockExpression)
@@ -531,7 +549,17 @@ class KotlinExpressionMover : AbstractKotlinUpDownMover() {
             down: Boolean
         ): PsiElement? {
             val element = if (down) sourceRange.lastElement else sourceRange.firstElement
-            var sibling = if (down) element.nextSibling else element.prevSibling
+            var sibling = if (down) {
+                val elementToCheck = sourceRange.firstElement
+                if (element is PsiComment && (elementToCheck is KtParameter || elementToCheck is KtValueArgument)) {
+                    element.getPrevSiblingIgnoringWhitespaceAndComments()
+                } else {
+                    element.nextSibling
+                }
+            } else {
+                element.prevSibling
+            }
+
             val whiteSpaceTestSubject = sibling ?: kotlin.run {
                 val parent = element.parent
                 if (parent == null || !isBracelessBlock(parent)) return@run null
@@ -540,7 +568,7 @@ class KotlinExpressionMover : AbstractKotlinUpDownMover() {
             }
 
             if (whiteSpaceTestSubject is PsiWhiteSpace) {
-                if (whiteSpaceTestSubject.isMultiLine()) {
+                if (whiteSpaceTestSubject.getLineCount() >= 3) {
                     val nearLine = if (down) sourceRange.endLine else sourceRange.startLine - 1
                     info.toMove = sourceRange
                     info.toMove2 = LineRange(nearLine, nearLine + 1)
@@ -576,8 +604,9 @@ class KotlinExpressionMover : AbstractKotlinUpDownMover() {
             if (willBeLast && comma != null && !withTrailingComma) {
                 comma.delete()
             } else if (!willBeLast && comma == null) {
-                val parent = element.parent
-                parent.addAfter(KtPsiFactory(parent.project).createComma(), element)
+                element.children.lastOrNull()?.let {
+                    element.addAfter(KtPsiFactory(element.project).createComma(), it)
+                }
             }
         }
 

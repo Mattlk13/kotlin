@@ -6,7 +6,7 @@ plugins {
 repositories {
     mavenLocal()
     maven("../repo")
-    jcenter()
+    mavenCentral()
 }
 
 group = "com.example.foo"
@@ -90,6 +90,13 @@ kotlin {
 
         linuxX64().compilations["test"].defaultSourceSet {
             dependsOn(linuxAndJsTest)
+        }
+
+        // Test KT-39304
+        val unusedSourceSet by creating {
+            dependencies {
+                implementation(kotlin("stdlib"))
+            }
         }
     }
 }

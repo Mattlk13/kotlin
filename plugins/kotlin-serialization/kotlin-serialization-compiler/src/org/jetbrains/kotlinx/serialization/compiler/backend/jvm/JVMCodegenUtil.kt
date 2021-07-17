@@ -1,33 +1,37 @@
 /*
- * Copyright 2010-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlinx.serialization.compiler.backend.jvm
 
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.codegen.*
+import org.jetbrains.kotlin.codegen.context.ClassContext
 import org.jetbrains.kotlin.descriptors.*
+import org.jetbrains.kotlin.descriptors.annotations.Annotations
+import org.jetbrains.kotlin.descriptors.impl.ClassConstructorDescriptorImpl
+import org.jetbrains.kotlin.descriptors.impl.ClassDescriptorImpl
+import org.jetbrains.kotlin.descriptors.impl.SimpleFunctionDescriptorImpl
 import org.jetbrains.kotlin.js.resolve.diagnostics.findPsi
+import org.jetbrains.kotlin.load.java.JvmAbi
 import org.jetbrains.kotlin.load.kotlin.TypeMappingMode
+import org.jetbrains.kotlin.load.kotlin.internalName
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.resolve.DescriptorFactory
+import org.jetbrains.kotlin.resolve.descriptorUtil.builtIns
 import org.jetbrains.kotlin.resolve.descriptorUtil.classId
+import org.jetbrains.kotlin.resolve.descriptorUtil.module
 import org.jetbrains.kotlin.resolve.jvm.AsmTypes
+import org.jetbrains.kotlin.resolve.jvm.diagnostics.JvmDeclarationOrigin
+import org.jetbrains.kotlin.resolve.jvm.diagnostics.JvmDeclarationOriginKind
 import org.jetbrains.kotlin.resolve.jvm.diagnostics.OtherOrigin
 import org.jetbrains.kotlin.resolve.jvm.jvmSignature.JvmMethodSignature
+import org.jetbrains.kotlin.resolve.scopes.MemberScope
+import org.jetbrains.kotlin.storage.LockBasedStorageManager
 import org.jetbrains.kotlin.types.KotlinType
+import org.jetbrains.kotlin.types.SimpleType
 import org.jetbrains.kotlin.types.typeUtil.isTypeParameter
 import org.jetbrains.kotlin.types.typeUtil.representativeUpperBound
 import org.jetbrains.kotlinx.serialization.compiler.backend.common.*
@@ -36,10 +40,12 @@ import org.jetbrains.kotlinx.serialization.compiler.resolve.SerialEntityNames.DE
 import org.jetbrains.kotlinx.serialization.compiler.resolve.SerialEntityNames.ENCODER_CLASS
 import org.jetbrains.kotlinx.serialization.compiler.resolve.SerialEntityNames.KSERIALIZER_CLASS
 import org.jetbrains.kotlinx.serialization.compiler.resolve.SerialEntityNames.MISSING_FIELD_EXC
+import org.jetbrains.kotlinx.serialization.compiler.resolve.SerialEntityNames.PLUGIN_EXCEPTIONS_FILE
 import org.jetbrains.kotlinx.serialization.compiler.resolve.SerialEntityNames.SERIAL_CTOR_MARKER_NAME
 import org.jetbrains.kotlinx.serialization.compiler.resolve.SerialEntityNames.SERIAL_DESCRIPTOR_CLASS
 import org.jetbrains.kotlinx.serialization.compiler.resolve.SerialEntityNames.SERIAL_DESCRIPTOR_CLASS_IMPL
 import org.jetbrains.kotlinx.serialization.compiler.resolve.SerialEntityNames.SERIAL_DESCRIPTOR_FOR_ENUM
+import org.jetbrains.kotlinx.serialization.compiler.resolve.SerialEntityNames.SERIAL_DESC_FIELD
 import org.jetbrains.kotlinx.serialization.compiler.resolve.SerialEntityNames.SERIAL_EXC
 import org.jetbrains.kotlinx.serialization.compiler.resolve.SerialEntityNames.SERIAL_LOADER_CLASS
 import org.jetbrains.kotlinx.serialization.compiler.resolve.SerialEntityNames.SERIAL_SAVER_CLASS
@@ -49,19 +55,25 @@ import org.jetbrains.kotlinx.serialization.compiler.resolve.SerialEntityNames.UN
 import org.jetbrains.kotlinx.serialization.compiler.resolve.SerialEntityNames.typeArgPrefix
 import org.jetbrains.kotlinx.serialization.compiler.resolve.SerializationPackages.internalPackageFqName
 import org.jetbrains.kotlinx.serialization.compiler.resolve.SerializationPackages.packageFqName
+import org.jetbrains.org.objectweb.asm.Opcodes
 import org.jetbrains.org.objectweb.asm.Type
 import org.jetbrains.org.objectweb.asm.commons.InstructionAdapter
 
 // todo: extract packages constants too?
-internal val descType = Type.getObjectType("kotlinx/serialization/$SERIAL_DESCRIPTOR_CLASS")
+internal val descType = Type.getObjectType("kotlinx/serialization/descriptors/$SERIAL_DESCRIPTOR_CLASS")
 internal val descImplType = Type.getObjectType("kotlinx/serialization/internal/$SERIAL_DESCRIPTOR_CLASS_IMPL")
 internal val descriptorForEnumsType = Type.getObjectType("kotlinx/serialization/internal/$SERIAL_DESCRIPTOR_FOR_ENUM")
 internal val generatedSerializerType = Type.getObjectType("kotlinx/serialization/internal/${SerialEntityNames.GENERATED_SERIALIZER_CLASS}")
-internal val kOutputType = Type.getObjectType("kotlinx/serialization/$STRUCTURE_ENCODER_CLASS")
-internal val encoderType = Type.getObjectType("kotlinx/serialization/$ENCODER_CLASS")
-internal val decoderType = Type.getObjectType("kotlinx/serialization/$DECODER_CLASS")
-internal val kInputType = Type.getObjectType("kotlinx/serialization/$STRUCTURE_DECODER_CLASS")
+internal val kOutputType = Type.getObjectType("kotlinx/serialization/encoding/$STRUCTURE_ENCODER_CLASS")
+internal val encoderType = Type.getObjectType("kotlinx/serialization/encoding/$ENCODER_CLASS")
+internal val decoderType = Type.getObjectType("kotlinx/serialization/encoding/$DECODER_CLASS")
+internal val kInputType = Type.getObjectType("kotlinx/serialization/encoding/$STRUCTURE_DECODER_CLASS")
+internal val pluginUtilsType = Type.getObjectType("kotlinx/serialization/internal/${PLUGIN_EXCEPTIONS_FILE}Kt")
 
+internal val jvmLambdaType = Type.getObjectType("kotlin/jvm/internal/Lambda")
+internal val kotlinLazyType = Type.getObjectType("kotlin/Lazy")
+internal val function0Type = Type.getObjectType("kotlin/jvm/functions/Function0")
+internal val threadSafeModeType = Type.getObjectType("kotlin/LazyThreadSafetyMode")
 
 internal val kSerialSaverType = Type.getObjectType("kotlinx/serialization/$SERIAL_SAVER_CLASS")
 internal val kSerialLoaderType = Type.getObjectType("kotlinx/serialization/$SERIAL_LOADER_CLASS")
@@ -71,6 +83,9 @@ internal val kSerializerArrayType = Type.getObjectType("[Lkotlinx/serialization/
 internal val serializationExceptionName = "kotlinx/serialization/$SERIAL_EXC"
 internal val serializationExceptionMissingFieldName = "kotlinx/serialization/$MISSING_FIELD_EXC"
 internal val serializationExceptionUnknownIndexName = "kotlinx/serialization/$UNKNOWN_FIELD_EXC"
+
+internal val descriptorGetterName = JvmAbi.getterName(SERIAL_DESC_FIELD)
+internal val getLazyValueName = JvmAbi.getterName("value")
 
 val OPT_MASK_TYPE: Type = Type.INT_TYPE
 val OPT_MASK_BITS = 32
@@ -137,7 +152,7 @@ internal fun InstructionAdapter.buildInternalConstructorDesc(
         load(propVar, propertyType)
         propVar += propertyType.size
     }
-    constructorDesc.append("Lkotlinx/serialization/$SERIAL_CTOR_MARKER_NAME;)V")
+    constructorDesc.append("Lkotlinx/serialization/internal/$SERIAL_CTOR_MARKER_NAME;)V")
     aconst(null)
     return constructorDesc.toString()
 }
@@ -302,6 +317,20 @@ internal fun AbstractSerialGenerator.stackValueSerializerInstance(codegen: Class
                 aconst(codegen.typeMapper.mapType(kType, null, TypeMappingMode.GENERIC_ARGUMENT))
                 AsmUtil.wrapJavaClassIntoKClass(this)
                 signature.append(AsmTypes.K_CLASS_TYPE.descriptor)
+                if (serializer.classId == contextSerializerId && serializer.constructors.any { it.valueParameters.size == 3 }) {
+                    // append new additional arguments
+                    val fallbackDefaultSerializer = findTypeSerializer(module, kType)
+                    if (fallbackDefaultSerializer != null && fallbackDefaultSerializer != serializer) {
+                        instantiate(kType to fallbackDefaultSerializer, writeSignature = false)
+                    } else {
+                        aconst(null)
+                    }
+                    signature.append(kSerializerType.descriptor)
+                    fillArray(kSerializerType, argSerializers) { _, serializer ->
+                        instantiate(serializer, writeSignature = false)
+                    }
+                    signature.append(kSerializerArrayType.descriptor)
+                }
             }
             referenceArraySerializerId -> {
                 // a special way to instantiate reference array serializer -- need an element KClass reference
@@ -370,7 +399,7 @@ internal fun AbstractSerialGenerator.stackValueSerializerInstance(codegen: Class
 
 fun InstructionAdapter.wrapStackValueIntoNullableSerializer() =
     invokestatic(
-        "kotlinx/serialization/internal/NullableSerializerKt", "makeNullable",
+        "kotlinx/serialization/builtins/BuiltinSerializersKt", "getNullable",
         "(" + kSerializerType.descriptor + ")" + kSerializerType.descriptor, false
     )
 
@@ -475,4 +504,162 @@ fun InstructionAdapter.stackValueDefault(type: Type) {
         DOUBLE -> dconst(0.0)
         else -> aconst(null)
     }
+}
+
+internal fun createSingletonLambda(
+    lambdaName: String,
+    outerClassCodegen: ImplementationBodyCodegen,
+    resultSimpleType: SimpleType,
+    block: InstructionAdapter.(ImplementationBodyCodegen) -> Unit
+): Type {
+    val lambdaType = Type.getObjectType("${outerClassCodegen.className}\$$lambdaName")
+
+    val lambdaClass = ClassDescriptorImpl(
+        outerClassCodegen.descriptor,
+        Name.identifier(lambdaName),
+        Modality.FINAL,
+        ClassKind.CLASS,
+        listOf(outerClassCodegen.descriptor.module.builtIns.anyType),
+        SourceElement.NO_SOURCE,
+        false,
+        LockBasedStorageManager.NO_LOCKS
+    )
+    lambdaClass.initialize(
+        MemberScope.Empty, emptySet(),
+        DescriptorFactory.createPrimaryConstructorForObject(lambdaClass, lambdaClass.source)
+    )
+    val lambdaClassBuilder = outerClassCodegen.state.factory.newVisitor(
+        JvmDeclarationOrigin(JvmDeclarationOriginKind.OTHER, null, lambdaClass),
+        Type.getObjectType(lambdaType.internalName),
+        outerClassCodegen.myClass.containingKtFile
+    )
+    val classContextForCreator = ClassContext(
+        outerClassCodegen.typeMapper, lambdaClass, OwnerKind.IMPLEMENTATION, outerClassCodegen.context.parentContext, null
+    )
+    val lambdaCodegen = ImplementationBodyCodegen(
+        outerClassCodegen.myClass,
+        classContextForCreator,
+        lambdaClassBuilder,
+        outerClassCodegen.state,
+        outerClassCodegen.parentCodegen,
+        false
+    )
+    lambdaCodegen.v.defineClass(
+        null,
+        outerClassCodegen.state.classFileVersion,
+        Opcodes.ACC_FINAL or Opcodes.ACC_SUPER or Opcodes.ACC_SYNTHETIC,
+        lambdaType.internalName,
+        "L${jvmLambdaType.internalName};L${function0Type.internalName}<L${kSerializerType.internalName}<*>;>;",
+        jvmLambdaType.internalName,
+        arrayOf(function0Type.internalName)
+    )
+
+    outerClassCodegen.v.visitInnerClass(
+        lambdaType.internalName,
+        null,
+        null,
+        Opcodes.ACC_FINAL or Opcodes.ACC_SUPER or Opcodes.ACC_SYNTHETIC or Opcodes.ACC_STATIC
+    )
+    lambdaCodegen.v.visitInnerClass(
+        lambdaType.internalName,
+        null,
+        null,
+        Opcodes.ACC_FINAL or Opcodes.ACC_SUPER or Opcodes.ACC_SYNTHETIC or Opcodes.ACC_STATIC
+    )
+    lambdaCodegen.v.visitOuterClass(
+        outerClassCodegen.className,
+        null,
+        null
+    )
+    lambdaCodegen.v.visitSource(
+        outerClassCodegen.myClass.containingKtFile.name,
+        null
+    )
+
+    val constr = ClassConstructorDescriptorImpl.createSynthesized(
+        lambdaClass,
+        Annotations.EMPTY,
+        false,
+        lambdaClass.source
+    )
+    constr.initialize(
+        emptyList(),
+        DescriptorVisibilities.PUBLIC
+    )
+    constr.returnType = lambdaClass.defaultType
+    lambdaCodegen.generateMethod(constr) { _, _ ->
+        load(0, lambdaType)
+        iconst(0)
+        invokespecial(jvmLambdaType.internalName, "<init>", "(I)V", false)
+        areturn(Type.VOID_TYPE)
+    }
+
+    lambdaCodegen.v.newField(
+        OtherOrigin(lambdaCodegen.myClass.psiOrParent),
+        Opcodes.ACC_PUBLIC or Opcodes.ACC_FINAL or Opcodes.ACC_STATIC or Opcodes.ACC_SYNTHETIC,
+        JvmAbi.INSTANCE_FIELD,
+        lambdaType.descriptor,
+        null,
+        null
+    )
+    val lambdaClInit = lambdaCodegen.createOrGetClInitCodegen()
+    with(lambdaClInit.v) {
+        anew(lambdaType)
+        dup()
+        invokespecial(lambdaType.internalName, "<init>", "()V", false)
+        putstatic(lambdaType.internalName, JvmAbi.INSTANCE_FIELD, lambdaType.descriptor)
+        areturn(Type.VOID_TYPE)
+        visitEnd()
+    }
+
+    val invokeFunction = SimpleFunctionDescriptorImpl.create(
+        lambdaCodegen.descriptor,
+        Annotations.EMPTY,
+        Name.identifier("invoke"),
+        CallableMemberDescriptor.Kind.SYNTHESIZED,
+        lambdaCodegen.descriptor.source
+    )
+
+    invokeFunction.initialize(
+        null,
+        lambdaCodegen.descriptor.thisAsReceiverParameter,
+        emptyList(),
+        emptyList(),
+        resultSimpleType,
+        Modality.FINAL,
+        DescriptorVisibilities.PUBLIC
+    )
+
+    lambdaCodegen.generateMethod(invokeFunction) { _, _ ->
+        block(lambdaCodegen)
+    }
+
+    val bridgeInvokeFunction = SimpleFunctionDescriptorImpl.create(
+        lambdaCodegen.descriptor,
+        Annotations.EMPTY,
+        Name.identifier("invoke"),
+        CallableMemberDescriptor.Kind.SYNTHESIZED,
+        lambdaCodegen.descriptor.source
+    )
+
+    bridgeInvokeFunction.initialize(
+        null,
+        lambdaCodegen.descriptor.thisAsReceiverParameter,
+        emptyList(),
+        emptyList(),
+        lambdaCodegen.descriptor.builtIns.anyType,
+        Modality.FINAL,
+        DescriptorVisibilities.PUBLIC
+    )
+
+    lambdaCodegen.generateMethod(bridgeInvokeFunction) { _, _ ->
+        load(0, lambdaType)
+        invokevirtual(lambdaType.internalName, "invoke", "()L${resultSimpleType.toClassDescriptor.classId!!.internalName};", false)
+        areturn(kSerializerType)
+    }
+
+    writeSyntheticClassMetadata(lambdaClassBuilder, lambdaCodegen.state)
+    lambdaClassBuilder.done()
+
+    return lambdaType
 }

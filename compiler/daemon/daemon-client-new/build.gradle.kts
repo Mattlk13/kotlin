@@ -1,5 +1,3 @@
-import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
-
 description = "Kotlin Daemon Client New"
 
 plugins {
@@ -49,6 +47,13 @@ dependencies {
     }
 }
 
+tasks.withType<org.jetbrains.kotlin.gradle.dsl.KotlinCompile<*>> {
+    kotlinOptions {
+        apiVersion = "1.3"
+        freeCompilerArgs += "-Xsuppress-version-warnings"
+    }
+}
+
 sourceSets {
     "main" { projectDefault() }
     "test" {}
@@ -61,3 +66,11 @@ runtimeJar()
 sourcesJar()
 
 javadocJar()
+
+tasks {
+    val compileKotlin by existing(org.jetbrains.kotlin.gradle.tasks.KotlinCompile::class) {
+        kotlinOptions {
+            freeCompilerArgs += "-Xopt-in=kotlinx.coroutines.DelicateCoroutinesApi"
+        }
+    }
+}

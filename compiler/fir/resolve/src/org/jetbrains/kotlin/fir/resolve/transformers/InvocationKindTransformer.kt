@@ -5,76 +5,84 @@
 
 package org.jetbrains.kotlin.fir.resolve.transformers
 
-import org.jetbrains.kotlin.contracts.description.InvocationKind
+import org.jetbrains.kotlin.contracts.description.EventOccurrencesRange
 import org.jetbrains.kotlin.fir.FirElement
 import org.jetbrains.kotlin.fir.contracts.description.ConeCallsEffectDeclaration
 import org.jetbrains.kotlin.fir.contracts.effects
 import org.jetbrains.kotlin.fir.declarations.FirAnonymousFunction
 import org.jetbrains.kotlin.fir.declarations.FirSimpleFunction
-import org.jetbrains.kotlin.fir.declarations.isInline
+import org.jetbrains.kotlin.fir.declarations.utils.isInline
 import org.jetbrains.kotlin.fir.expressions.*
 import org.jetbrains.kotlin.fir.resolve.calls.FirNamedReferenceWithCandidate
-import org.jetbrains.kotlin.fir.visitors.CompositeTransformResult
 import org.jetbrains.kotlin.fir.visitors.FirTransformer
-import org.jetbrains.kotlin.fir.visitors.compose
 
-object InvocationKindTransformer : FirTransformer<Nothing?>() {
-    private object ArgumentsTransformer : FirTransformer<Pair<Map<FirExpression, InvocationKind>, InvocationKind?>>() {
-        override fun <E : FirElement> transformElement(element: E, data: Pair<Map<FirExpression, InvocationKind>, InvocationKind?>): CompositeTransformResult<E> {
-            return element.compose()
+object InvocationKindTransformer : FirTransformer<Any?>() {
+    private object ArgumentsTransformer : FirTransformer<Pair<Map<FirExpression, EventOccurrencesRange>, EventOccurrencesRange?>>() {
+        override fun <E : FirElement> transformElement(element: E, data: Pair<Map<FirExpression, EventOccurrencesRange>, EventOccurrencesRange?>): E {
+            return element
+        }
+
+        override fun transformAnonymousFunctionExpression(
+            anonymousFunctionExpression: FirAnonymousFunctionExpression,
+            data: Pair<Map<FirExpression, EventOccurrencesRange>, EventOccurrencesRange?>
+        ): FirStatement {
+            val kind = data.second ?: data.first[anonymousFunctionExpression]
+            return anonymousFunctionExpression.transformAnonymousFunction(this, emptyMap<FirExpression, EventOccurrencesRange>() to kind)
         }
 
         override fun transformAnonymousFunction(
             anonymousFunction: FirAnonymousFunction,
-            data: Pair<Map<FirExpression, InvocationKind>, InvocationKind?>
-        ): CompositeTransformResult<FirStatement> {
-            val kind = data.second ?: data.first[anonymousFunction]
+            data: Pair<Map<FirExpression, EventOccurrencesRange>, EventOccurrencesRange?>
+        ): FirStatement {
+            val kind = data.second
             if (kind != null) {
                 anonymousFunction.replaceInvocationKind(kind)
             }
-            return anonymousFunction.compose()
+            return anonymousFunction
         }
 
         override fun transformLambdaArgumentExpression(
             lambdaArgumentExpression: FirLambdaArgumentExpression,
-            data: Pair<Map<FirExpression, InvocationKind>, InvocationKind?>
-        ): CompositeTransformResult<FirStatement> {
+            data: Pair<Map<FirExpression, EventOccurrencesRange>, EventOccurrencesRange?>
+        ): FirStatement {
             return data.first[lambdaArgumentExpression]?.let {
-                (lambdaArgumentExpression.transformChildren(this, data.first to it) as FirStatement).compose()
-            } ?: lambdaArgumentExpression.compose()
+                (lambdaArgumentExpression.transformChildren(this, data.first to it) as FirStatement)
+            } ?: lambdaArgumentExpression
         }
 
         override fun transformNamedArgumentExpression(
             namedArgumentExpression: FirNamedArgumentExpression,
-            data: Pair<Map<FirExpression, InvocationKind>, InvocationKind?>
-        ): CompositeTransformResult<FirStatement> {
+            data: Pair<Map<FirExpression, EventOccurrencesRange>, EventOccurrencesRange?>
+        ): FirStatement {
             return data.first[namedArgumentExpression]?.let {
-                (namedArgumentExpression.transformChildren(this, data.first to it) as FirStatement).compose()
-            } ?: namedArgumentExpression.compose()
+                (namedArgumentExpression.transformChildren(this, data.first to it) as FirStatement)
+            } ?: namedArgumentExpression
         }
     }
 
-    override fun <E : FirElement> transformElement(element: E, data: Nothing?): CompositeTransformResult<E> {
-        return element.compose()
+    override fun <E : FirElement> transformElement(element: E, data: Any?): E {
+        return element
     }
 
-    override fun transformFunctionCall(functionCall: FirFunctionCall, data: Nothing?): CompositeTransformResult<FirStatement> {
-        val calleeReference = functionCall.calleeReference as? FirNamedReferenceWithCandidate ?: return functionCall.compose()
-        val argumentMapping = calleeReference.candidate.argumentMapping ?: return functionCall.compose()
-        val function = calleeReference.candidateSymbol.fir as? FirSimpleFunction ?: return functionCall.compose()
+    override fun transformFunctionCall(functionCall: FirFunctionCall, data: Any?): FirStatement {
+        val calleeReference = functionCall.calleeReference as? FirNamedReferenceWithCandidate ?: return functionCall
+        val argumentMapping = calleeReference.candidate.argumentMapping ?: return functionCall
+        val function = calleeReference.candidateSymbol.fir as? FirSimpleFunction ?: return functionCall
 
-        val callsEffects = function.contractDescription.effects?.filterIsInstance<ConeCallsEffectDeclaration>() ?: emptyList()
+        val callsEffects = function.contractDescription.effects
+            ?.map { it.effect }
+            ?.filterIsInstance<ConeCallsEffectDeclaration>() ?: emptyList()
 
         val isInline = function.isInline
         if (callsEffects.isEmpty() && !isInline) {
-            return functionCall.compose()
+            return functionCall
         }
 
         val reversedArgumentMapping = argumentMapping.entries.map { (argument, parameter) ->
             parameter to argument
         }.toMap()
 
-        val invocationKindMapping = mutableMapOf<FirExpression, InvocationKind>()
+        val invocationKindMapping = mutableMapOf<FirExpression, EventOccurrencesRange>()
         for (effect in callsEffects) {
             // TODO: Support callsInPlace contracts on receivers
             val valueParameter = function.valueParameters.getOrNull(effect.valueParameterReference.parameterIndex) ?: continue
@@ -83,13 +91,13 @@ object InvocationKindTransformer : FirTransformer<Nothing?>() {
         }
         if (isInline) {
             for (argument in functionCall.arguments) {
-                invocationKindMapping.putIfAbsent(argument, InvocationKind.UNKNOWN)
+                invocationKindMapping.putIfAbsent(argument, EventOccurrencesRange.UNKNOWN)
             }
         }
         if (invocationKindMapping.isEmpty()) {
-            return functionCall.compose()
+            return functionCall
         }
         functionCall.argumentList.transformArguments(ArgumentsTransformer, invocationKindMapping to null)
-        return functionCall.compose()
+        return functionCall
     }
 }

@@ -16,6 +16,7 @@
 
 package org.jetbrains.kotlin.frontend.di
 
+import org.jetbrains.kotlin.cfg.ControlFlowInformationProvider
 import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.config.isTypeRefinementEnabled
 import org.jetbrains.kotlin.container.StorageComponentContainer
@@ -24,6 +25,7 @@ import org.jetbrains.kotlin.container.useInstance
 import org.jetbrains.kotlin.context.ModuleContext
 import org.jetbrains.kotlin.contracts.ContractDeserializerImpl
 import org.jetbrains.kotlin.extensions.StorageComponentContainerContributor
+import org.jetbrains.kotlin.idea.MainFunctionDetector
 import org.jetbrains.kotlin.incremental.components.ExpectActualTracker
 import org.jetbrains.kotlin.incremental.components.LookupTracker
 import org.jetbrains.kotlin.platform.TargetPlatform
@@ -31,6 +33,7 @@ import org.jetbrains.kotlin.platform.TargetPlatformVersion
 import org.jetbrains.kotlin.platform.isCommon
 import org.jetbrains.kotlin.resolve.*
 import org.jetbrains.kotlin.resolve.calls.components.ClassicTypeSystemContextForCS
+import org.jetbrains.kotlin.resolve.calls.inference.components.ClassicConstraintSystemUtilContext
 import org.jetbrains.kotlin.resolve.calls.smartcasts.DataFlowValueFactoryImpl
 import org.jetbrains.kotlin.resolve.calls.tower.KotlinResolutionStatelessCallbacksImpl
 import org.jetbrains.kotlin.resolve.checkers.ExpectedActualDeclarationChecker
@@ -38,6 +41,7 @@ import org.jetbrains.kotlin.resolve.checkers.ExperimentalUsageChecker
 import org.jetbrains.kotlin.resolve.lazy.*
 import org.jetbrains.kotlin.resolve.lazy.declarations.DeclarationProviderFactory
 import org.jetbrains.kotlin.types.KotlinTypeRefinerImpl
+import org.jetbrains.kotlin.types.checker.KotlinTypePreparator
 import org.jetbrains.kotlin.types.checker.KotlinTypeRefiner
 import org.jetbrains.kotlin.types.checker.NewKotlinTypeCheckerImpl
 import org.jetbrains.kotlin.types.expressions.DeclarationScopeProviderForLocalClassifierAnalyzer
@@ -50,8 +54,10 @@ fun StorageComponentContainer.configureModule(
     platform: TargetPlatform,
     analyzerServices: PlatformDependentAnalyzerServices,
     trace: BindingTrace,
-    languageVersionSettings: LanguageVersionSettings
+    languageVersionSettings: LanguageVersionSettings,
+    sealedProvider: SealedClassInheritorsProvider = CliSealedClassInheritorsProvider
 ) {
+    useInstance(sealedProvider)
     useInstance(moduleContext)
     useInstance(moduleContext.module)
     useInstance(moduleContext.project)
@@ -69,7 +75,7 @@ fun StorageComponentContainer.configureModule(
 
     useInstance(nonTrivialPlatformVersion ?: TargetPlatformVersion.NoVersion)
 
-    analyzerServices.platformConfigurator.configureModuleComponents(this)
+    analyzerServices.platformConfigurator.configureModuleComponents(this, languageVersionSettings)
     analyzerServices.platformConfigurator.configureModuleDependentCheckers(this)
 
     for (extension in StorageComponentContainerContributor.getInstances(moduleContext.project)) {
@@ -83,6 +89,8 @@ fun StorageComponentContainer.configureModule(
     } else {
         useInstance(KotlinTypeRefiner.Default)
     }
+
+    useInstance(KotlinTypePreparator.Default)
 
     configurePlatformIndependentComponents()
 }
@@ -100,6 +108,7 @@ private fun StorageComponentContainer.configurePlatformIndependentComponents() {
     useImpl<CompilerDeserializationConfiguration>()
 
     useImpl<ClassicTypeSystemContextForCS>()
+    useImpl<ClassicConstraintSystemUtilContext>()
     useInstance(ProgressManagerBasedCancellationChecker)
 }
 
@@ -129,9 +138,11 @@ fun createContainerForBodyResolve(
     statementFilter: StatementFilter,
     analyzerServices: PlatformDependentAnalyzerServices,
     languageVersionSettings: LanguageVersionSettings,
-    moduleStructureOracle: ModuleStructureOracle
+    moduleStructureOracle: ModuleStructureOracle,
+    sealedProvider: SealedClassInheritorsProvider,
+    controlFlowInformationProviderFactory: ControlFlowInformationProvider.Factory,
 ): StorageComponentContainer = createContainer("BodyResolve", analyzerServices) {
-    configureModule(moduleContext, platform, analyzerServices, bindingTrace, languageVersionSettings)
+    configureModule(moduleContext, platform, analyzerServices, bindingTrace, languageVersionSettings, sealedProvider)
 
     useInstance(statementFilter)
 
@@ -140,6 +151,7 @@ fun createContainerForBodyResolve(
 
     useImpl<BodyResolver>()
     useInstance(moduleStructureOracle)
+    useInstance(controlFlowInformationProviderFactory)
 }
 
 fun createContainerForLazyBodyResolve(
@@ -150,10 +162,13 @@ fun createContainerForLazyBodyResolve(
     bodyResolveCache: BodyResolveCache,
     analyzerServices: PlatformDependentAnalyzerServices,
     languageVersionSettings: LanguageVersionSettings,
-    moduleStructureOracle: ModuleStructureOracle
+    moduleStructureOracle: ModuleStructureOracle,
+    mainFunctionDetectorFactory: MainFunctionDetector.Factory,
+    sealedProvider: SealedClassInheritorsProvider,
+    controlFlowInformationProviderFactory: ControlFlowInformationProvider.Factory,
 ): StorageComponentContainer = createContainer("LazyBodyResolve", analyzerServices) {
-    configureModule(moduleContext, platform, analyzerServices, bindingTrace, languageVersionSettings)
-
+    configureModule(moduleContext, platform, analyzerServices, bindingTrace, languageVersionSettings, sealedProvider)
+    useInstance(mainFunctionDetectorFactory)
     useInstance(kotlinCodeAnalyzer)
     useInstance(kotlinCodeAnalyzer.fileScopeProvider)
     useInstance(bodyResolveCache)
@@ -161,6 +176,7 @@ fun createContainerForLazyBodyResolve(
     useImpl<LazyTopDownAnalyzer>()
     useImpl<BasicAbsentDescriptorHandler>()
     useInstance(moduleStructureOracle)
+    useInstance(controlFlowInformationProviderFactory)
 
     // All containers except common inject ExpectedActualDeclarationChecker, so for common we do that
     // explicitly.
@@ -177,7 +193,8 @@ fun createContainerForLazyLocalClassifierAnalyzer(
     languageVersionSettings: LanguageVersionSettings,
     statementFilter: StatementFilter,
     localClassDescriptorHolder: LocalClassDescriptorHolder,
-    analyzerServices: PlatformDependentAnalyzerServices
+    analyzerServices: PlatformDependentAnalyzerServices,
+    controlFlowInformationProviderFactory: ControlFlowInformationProvider.Factory,
 ): StorageComponentContainer = createContainer("LocalClassifierAnalyzer", analyzerServices) {
     configureModule(moduleContext, platform, analyzerServices, bindingTrace, languageVersionSettings)
 
@@ -189,13 +206,15 @@ fun createContainerForLazyLocalClassifierAnalyzer(
 
     useInstance(NoTopLevelDescriptorProvider)
 
-    CompilerEnvironment.configure(this)
+    TargetEnvironment.configureCompilerEnvironment(this)
+    useInstance(controlFlowInformationProviderFactory)
 
     useInstance(FileScopeProvider.ThrowException)
     useImpl<AnnotationResolverImpl>()
 
     useImpl<DeclarationScopeProviderForLocalClassifierAnalyzer>()
     useImpl<LocalLazyDeclarationResolver>()
+
 
     useInstance(statementFilter)
 }
@@ -214,6 +233,7 @@ fun createContainerForLazyResolve(
     configureStandardResolveComponents()
 
     useInstance(declarationProviderFactory)
+
 
     targetEnvironment.configure(this)
 

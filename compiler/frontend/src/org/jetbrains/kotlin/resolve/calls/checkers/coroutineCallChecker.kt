@@ -6,6 +6,7 @@
 package org.jetbrains.kotlin.resolve.calls.checkers
 
 import com.intellij.psi.PsiElement
+import org.jetbrains.kotlin.builtins.StandardNames
 import org.jetbrains.kotlin.config.*
 import org.jetbrains.kotlin.coroutines.hasSuspendFunctionType
 import org.jetbrains.kotlin.descriptors.*
@@ -17,7 +18,6 @@ import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtThisExpression
 import org.jetbrains.kotlin.psi.psiUtil.getParentOfType
 import org.jetbrains.kotlin.resolve.BindingContext
-import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.calls.callUtil.isCallableReference
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
@@ -34,13 +34,13 @@ import org.jetbrains.kotlin.utils.addToStdlib.cast
 import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 
 val COROUTINE_CONTEXT_1_2_20_FQ_NAME =
-    DescriptorUtils.COROUTINES_INTRINSICS_PACKAGE_FQ_NAME_EXPERIMENTAL.child(Name.identifier("coroutineContext"))
+    StandardNames.COROUTINES_INTRINSICS_PACKAGE_FQ_NAME_EXPERIMENTAL.child(Name.identifier("coroutineContext"))
 
 val COROUTINE_CONTEXT_1_2_30_FQ_NAME =
-    DescriptorUtils.COROUTINES_PACKAGE_FQ_NAME_EXPERIMENTAL.child(Name.identifier("coroutineContext"))
+    StandardNames.COROUTINES_PACKAGE_FQ_NAME_EXPERIMENTAL.child(Name.identifier("coroutineContext"))
 
 val COROUTINE_CONTEXT_1_3_FQ_NAME =
-    DescriptorUtils.COROUTINES_PACKAGE_FQ_NAME_RELEASE.child(Name.identifier("coroutineContext"))
+    StandardNames.COROUTINES_PACKAGE_FQ_NAME_RELEASE.child(Name.identifier("coroutineContext"))
 
 fun FunctionDescriptor.isBuiltInCoroutineContext(languageVersionSettings: LanguageVersionSettings) =
     (this as? PropertyGetterDescriptor)?.correspondingProperty?.fqNameSafe?.isBuiltInCoroutineContext(languageVersionSettings) == true
@@ -50,11 +50,10 @@ fun PropertyDescriptor.isBuiltInCoroutineContext(languageVersionSettings: Langua
 
 private val ALLOWED_SCOPE_KINDS = setOf(LexicalScopeKind.FUNCTION_INNER_SCOPE, LexicalScopeKind.FUNCTION_HEADER_FOR_DESTRUCTURING)
 
-fun findEnclosingSuspendFunction(context: CallCheckerContext): FunctionDescriptor? = context.scope
-    .parentsWithSelf.firstOrNull {
-    it is LexicalScope && it.kind in ALLOWED_SCOPE_KINDS &&
-            it.ownerDescriptor.safeAs<FunctionDescriptor>()?.isSuspend == true
-}?.cast<LexicalScope>()?.ownerDescriptor?.cast()
+fun findEnclosingSuspendFunction(context: CallCheckerContext): FunctionDescriptor? =
+    context.scope.parentsWithSelf.firstOrNull {
+        it is LexicalScope && it.kind in ALLOWED_SCOPE_KINDS && it.ownerDescriptor.safeAs<FunctionDescriptor>()?.isSuspend == true
+    }?.cast<LexicalScope>()?.ownerDescriptor?.cast()
 
 object CoroutineSuspendCallChecker : CallChecker {
     override fun check(resolvedCall: ResolvedCall<*>, reportOn: PsiElement, context: CallCheckerContext) {
@@ -69,12 +68,11 @@ object CoroutineSuspendCallChecker : CallChecker {
             else -> return
         }
 
+        val callElement = resolvedCall.call.callElement as KtExpression
         val enclosingSuspendFunction = findEnclosingSuspendFunction(context)
 
         when {
             enclosingSuspendFunction != null -> {
-                val callElement = resolvedCall.call.callElement as KtExpression
-
                 if (!InlineUtil.checkNonLocalReturnUsage(enclosingSuspendFunction, callElement, context.resolutionContext)) {
                     var shouldReport = true
 

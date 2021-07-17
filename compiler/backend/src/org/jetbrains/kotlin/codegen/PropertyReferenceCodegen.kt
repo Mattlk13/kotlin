@@ -92,8 +92,8 @@ class PropertyReferenceCodegen(
             element,
             state.classFileVersion,
             ACC_FINAL or ACC_SUPER or
-                    AsmUtil.getVisibilityAccessFlagForClass(classDescriptor) or
-                    AsmUtil.getSyntheticAccessFlagForLambdaClass(classDescriptor),
+                    DescriptorAsmUtil.getVisibilityAccessFlagForClass(classDescriptor) or
+                    DescriptorAsmUtil.getSyntheticAccessFlagForLambdaClass(classDescriptor),
             asmType.internalName,
             null,
             superAsmType.internalName,
@@ -108,7 +108,7 @@ class PropertyReferenceCodegen(
         if (JvmCodegenUtil.isConst(closure)) {
             generateConstInstance(asmType, wrapperMethod.returnType)
         } else {
-            AsmUtil.genClosureFields(closure, v, typeMapper, state.languageVersionSettings)
+            DescriptorAsmUtil.genClosureFields(closure, v, typeMapper, state.languageVersionSettings)
         }
 
         generateConstructor()
@@ -118,7 +118,7 @@ class PropertyReferenceCodegen(
                 aconst(target.name.asString())
             }
             generateMethod("property reference getSignature", ACC_PUBLIC, method("getSignature", JAVA_STRING_TYPE)) {
-                generateCallableReferenceSignature(this, target, state)
+                generatePropertyReferenceSignature(this, target, state)
             }
             generateMethod("property reference getOwner", ACC_PUBLIC, method("getOwner", K_DECLARATION_CONTAINER_TYPE)) {
                 generateCallableReferenceDeclarationContainer(this, target, state)
@@ -148,7 +148,7 @@ class PropertyReferenceCodegen(
             if (isOptimizedPropertyReferenceSupertype(superAsmType)) {
                 generateCallableReferenceDeclarationContainerClass(this, target, state)
                 aconst(target.name.asString())
-                generateCallableReferenceSignature(this, target, state)
+                generatePropertyReferenceSignature(this, target, state)
                 aconst(getCallableReferenceTopLevelFlag(target))
                 superCtorArgTypes.add(JAVA_CLASS_TYPE)
                 superCtorArgTypes.add(JAVA_STRING_TYPE)

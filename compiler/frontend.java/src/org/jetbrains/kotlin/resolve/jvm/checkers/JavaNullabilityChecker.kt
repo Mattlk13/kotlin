@@ -17,15 +17,15 @@
 package org.jetbrains.kotlin.resolve.jvm.checkers
 
 import org.jetbrains.kotlin.cfg.WhenChecker
+import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.descriptors.ReceiverParameterDescriptor
 import org.jetbrains.kotlin.diagnostics.Errors
 import org.jetbrains.kotlin.lexer.KtTokens
-import org.jetbrains.kotlin.psi.KtBinaryExpression
-import org.jetbrains.kotlin.psi.KtExpression
-import org.jetbrains.kotlin.psi.KtPostfixExpression
-import org.jetbrains.kotlin.psi.KtWhenExpression
+import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.resolve.BindingContext
+import org.jetbrains.kotlin.resolve.UpperBoundChecker
 import org.jetbrains.kotlin.resolve.calls.checkers.AdditionalTypeChecker
+import org.jetbrains.kotlin.resolve.calls.context.BasicCallResolutionContext
 import org.jetbrains.kotlin.resolve.calls.context.CallResolutionContext
 import org.jetbrains.kotlin.resolve.calls.context.ResolutionContext
 import org.jetbrains.kotlin.resolve.calls.smartcasts.DataFlowInfo
@@ -35,16 +35,32 @@ import org.jetbrains.kotlin.resolve.jvm.diagnostics.ErrorsJvm
 import org.jetbrains.kotlin.resolve.scopes.receivers.ExpressionReceiver
 import org.jetbrains.kotlin.resolve.scopes.receivers.ReceiverValue
 import org.jetbrains.kotlin.types.*
+import org.jetbrains.kotlin.types.checker.*
 import org.jetbrains.kotlin.types.expressions.SenselessComparisonChecker
+import org.jetbrains.kotlin.types.model.KotlinTypeMarker
+import org.jetbrains.kotlin.types.typeUtil.makeNotNullable
 
-class JavaNullabilityChecker : AdditionalTypeChecker {
+class JavaNullabilityChecker(val upperBoundChecker: UpperBoundChecker) : AdditionalTypeChecker {
+    override fun checkType(
+        expression: KtExpression,
+        expressionType: KotlinType,
+        expressionTypeWithSmartCast: KotlinType,
+        c: ResolutionContext<*>
+    ) {
+        checkTypeParameterBounds(expression, expressionType, c)
 
-    override fun checkType(expression: KtExpression, expressionType: KotlinType, expressionTypeWithSmartCast: KotlinType, c: ResolutionContext<*>) {
+        val dataFlowValue by lazy(LazyThreadSafetyMode.NONE) {
+            c.dataFlowValueFactory.createDataFlowValue(expression, expressionType, c)
+        }
+
+        if (isWrongTypeParameterNullabilityForSubtyping(expressionType, c) { dataFlowValue }) {
+            c.trace.report(ErrorsJvm.NULLABLE_TYPE_PARAMETER_AGAINST_NOT_NULL_TYPE_PARAMETER.on(expression, expressionType))
+        }
         doCheckType(
-                expressionType,
-                c.expectedType,
-                { c.dataFlowValueFactory.createDataFlowValue(expression, expressionType, c) } ,
-                c.dataFlowInfo
+            expressionType,
+            c.expectedType,
+            { dataFlowValue },
+            c.dataFlowInfo
         ) { expectedType, actualType ->
             c.trace.report(ErrorsJvm.NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS.on(expression, expectedType, actualType))
         }
@@ -59,7 +75,8 @@ class JavaNullabilityChecker : AdditionalTypeChecker {
                         val enumClassDescriptor = WhenChecker.getClassDescriptorOfTypeIfEnum(type) ?: return
                         val context = c.trace.bindingContext
                         if (WhenChecker.getEnumMissingCases(expression, context, enumClassDescriptor).isEmpty()
-                            && !WhenChecker.containsNullCase(expression, context)) {
+                            && !WhenChecker.containsNullCase(expression, context)
+                        ) {
                             val subjectDataFlowValue = c.dataFlowValueFactory.createDataFlowValue(subjectExpression, type, c)
                             val dataFlowInfo = c.trace[BindingContext.EXPRESSION_TYPE_INFO, subjectExpression]?.dataFlowInfo
                             if (dataFlowInfo != null && !dataFlowInfo.getStableNullability(subjectDataFlowValue).canBeNull()) {
@@ -75,9 +92,9 @@ class JavaNullabilityChecker : AdditionalTypeChecker {
                     val baseExpression = expression.baseExpression ?: return
                     val baseExpressionType = c.trace.getType(baseExpression) ?: return
                     doIfNotNull(
-                            baseExpressionType,
-                            { c.dataFlowValueFactory.createDataFlowValue(baseExpression, baseExpressionType, c) },
-                            c
+                        baseExpressionType,
+                        { c.dataFlowValueFactory.createDataFlowValue(baseExpression, baseExpressionType, c) },
+                        c
                     ) {
                         c.trace.report(Errors.UNNECESSARY_NOT_NULL_ASSERTION.on(expression.operationReference, baseExpressionType))
                     }
@@ -90,11 +107,11 @@ class JavaNullabilityChecker : AdditionalTypeChecker {
                     KtTokens.EXCLEQEQEQ -> {
                         if (expression.left != null && expression.right != null) {
                             SenselessComparisonChecker.checkSenselessComparisonWithNull(
-                                    expression, expression.left!!, expression.right!!, c,
-                                    { c.trace.getType(it) },
-                                    { value ->
-                                        doIfNotNull(value.type, { value }, c) { Nullability.NOT_NULL } ?: Nullability.UNKNOWN
-                                    }
+                                expression, expression.left!!, expression.right!!, c,
+                                { c.trace.getType(it) },
+                                { value ->
+                                    doIfNotNull(value.type, { value }, c) { Nullability.NOT_NULL } ?: Nullability.UNKNOWN
+                                }
                             )
                         }
                     }
@@ -102,7 +119,80 @@ class JavaNullabilityChecker : AdditionalTypeChecker {
         }
     }
 
-    override fun checkReceiver(receiverParameter: ReceiverParameterDescriptor, receiverArgument: ReceiverValue, safeAccess: Boolean, c: CallResolutionContext<*>) {
+    private fun checkTypeParameterBounds(
+        expression: KtExpression,
+        expressionType: KotlinType,
+        c: ResolutionContext<*>
+    ) {
+        if (expressionType is AbbreviatedType) {
+            upperBoundChecker.checkBoundsOfExpandedTypeAlias(expressionType.expandedType, expression, c.trace)
+        }
+
+        if (c !is BasicCallResolutionContext || upperBoundChecker !is WarningAwareUpperBoundChecker) return
+
+        val resolvedCall = c.trace.bindingContext[BindingContext.RESOLVED_CALL, c.call] ?: return
+
+        for ((typeParameter, typeArgument) in resolvedCall.typeArguments) {
+            // continue if we don't have explicit type arguments
+            val typeReference = c.call.typeArguments.getOrNull(typeParameter.index)?.typeReference ?: continue
+
+            upperBoundChecker.checkBounds(
+                typeReference, typeArgument, typeParameter, TypeSubstitutor.create(typeArgument), c.trace, withOnlyCheckForWarning = true
+            )
+        }
+    }
+
+    private fun isWrongTypeParameterNullabilityForSubtyping(
+        expressionType: KotlinType,
+        c: ResolutionContext<*>,
+        dataFlowValueForWholeExpression: () -> DataFlowValue
+    ): Boolean {
+        if (c.languageVersionSettings.supportsFeature(LanguageFeature.ProhibitUsingNullableTypeParameterAgainstNotNullAnnotated)) return false
+        if (TypeUtils.noExpectedType(c.expectedType)) return false
+
+        var metWrongNullabilityInsideArguments = false
+
+        val typeContext: AbstractTypeCheckerContext = object : ClassicTypeCheckerContext(errorTypeEqualsToAnything = true) {
+            private var expectsTypeArgument = false
+            override fun customIsSubtypeOf(subType: KotlinTypeMarker, superType: KotlinTypeMarker): Boolean {
+
+                if (isNullableTypeAgainstNotNullTypeParameter(subType as KotlinType, superType as KotlinType)) {
+                    // data flow value is only checked for top-level types
+                    if (expectsTypeArgument || c.dataFlowInfo.getStableNullability(dataFlowValueForWholeExpression()) != Nullability.NOT_NULL) {
+                        metWrongNullabilityInsideArguments = true
+                        return false
+                    }
+                }
+
+                if (!expectsTypeArgument) {
+                    expectsTypeArgument = true
+                }
+                return true
+            }
+        }
+
+        AbstractTypeChecker.isSubtypeOf(typeContext, expressionType, c.expectedType)
+
+        return metWrongNullabilityInsideArguments
+    }
+
+    private fun isNullableTypeAgainstNotNullTypeParameter(
+        subType: KotlinType,
+        superType: KotlinType
+    ): Boolean {
+        if (superType !is NotNullTypeVariable) return false
+        return !AbstractNullabilityChecker.isSubtypeOfAny(
+            ClassicTypeCheckerContext(errorTypeEqualsToAnything = true) as AbstractTypeCheckerContext,
+            subType
+        )
+    }
+
+    override fun checkReceiver(
+        receiverParameter: ReceiverParameterDescriptor,
+        receiverArgument: ReceiverValue,
+        safeAccess: Boolean,
+        c: CallResolutionContext<*>
+    ) {
         val dataFlowValue by lazy(LazyThreadSafetyMode.NONE) {
             c.dataFlowValueFactory.createDataFlowValue(receiverArgument, c)
         }
@@ -117,12 +207,11 @@ class JavaNullabilityChecker : AdditionalTypeChecker {
         }
 
         doCheckType(
-                receiverArgument.type,
-                receiverParameter.type,
-                { dataFlowValue },
-                c.dataFlowInfo
-        ) { expectedType,
-            actualType ->
+            receiverArgument.type,
+            receiverParameter.type,
+            { dataFlowValue },
+            c.dataFlowInfo
+        ) { expectedType, actualType ->
             val receiverExpression = (receiverArgument as? ExpressionReceiver)?.expression
             if (receiverExpression != null) {
                 c.trace.report(ErrorsJvm.RECEIVER_NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS.on(receiverExpression, actualType))
@@ -134,44 +223,57 @@ class JavaNullabilityChecker : AdditionalTypeChecker {
     }
 
     private fun doCheckType(
-            expressionType: KotlinType,
-            expectedType: KotlinType,
-            dataFlowValue: () -> DataFlowValue,
-            dataFlowInfo: DataFlowInfo,
-            reportWarning: (expectedType: KotlinType, actualType: KotlinType) -> Unit
+        expressionType: KotlinType,
+        expectedType: KotlinType,
+        expressionTypeDataFlowValue: () -> DataFlowValue,
+        dataFlowInfo: DataFlowInfo,
+        reportWarning: (expectedType: KotlinType, actualType: KotlinType) -> Unit
     ) {
-        if (TypeUtils.noExpectedType(expectedType)) {
-            return
-        }
+        if (TypeUtils.noExpectedType(expectedType)) return
 
-        val expectedMustNotBeNull = expectedType.mustNotBeNull() ?: return
-        val actualMayBeNull = expressionType.mayBeNull() ?: return
-        if (expectedMustNotBeNull.isFromKotlin && actualMayBeNull.isFromKotlin) {
-            // a type mismatch error will be reported elsewhere
-            return
-        }
+        @Suppress("NAME_SHADOWING")
+        val expressionType = exactedExpressionTypeByDataFlowNullability(expressionType, expressionTypeDataFlowValue, dataFlowInfo)
 
-        if (dataFlowInfo.getStableNullability(dataFlowValue()) != Nullability.NOT_NULL) {
-            reportWarning(expectedMustNotBeNull.enhancedType, actualMayBeNull.enhancedType)
+        val isEnhancedExpectedTypeSubtypeOfExpressionType = typeCheckerForEnhancedTypes.isSubtypeOf(expressionType, expectedType)
+
+        if (isEnhancedExpectedTypeSubtypeOfExpressionType) return
+
+        val isExpectedTypeSubtypeOfExpressionType = typeCheckerForBaseTypes.isSubtypeOf(expressionType, expectedType)
+
+        if (!isEnhancedExpectedTypeSubtypeOfExpressionType && isExpectedTypeSubtypeOfExpressionType) {
+            reportWarning(expectedType.unwrapEnhancementDeeply(), expressionType.unwrapEnhancementDeeply())
         }
     }
 
-    private fun <T : Any> doIfNotNull(
-            type: KotlinType,
-            dataFlowValue: () -> DataFlowValue,
-            c: ResolutionContext<*>,
-            body: () -> T
-    ) = if (type.mustNotBeNull()?.isFromJava == true &&
-            c.dataFlowInfo.getStableNullability(dataFlowValue()).canBeNull())
-            body()
-        else
-            null
+    private fun exactedExpressionTypeByDataFlowNullability(
+        expressionType: KotlinType,
+        expressionTypeDataFlowValue: () -> DataFlowValue,
+        dataFlowInfo: DataFlowInfo,
+    ): KotlinType {
+        val isNotNullByDataFlowInfo = dataFlowInfo.getStableNullability(expressionTypeDataFlowValue()) == Nullability.NOT_NULL
+        return if (expressionType.isNullable() && isNotNullByDataFlowInfo) expressionType.makeNotNullable() else expressionType
+    }
 
-    private fun KotlinType.mayBeNull(): EnhancedNullabilityInfo? = when {
-        !isError && !isFlexible() && TypeUtils.acceptsNullable(this) -> enhancementFromKotlin()
-        isFlexible() && TypeUtils.acceptsNullable(asFlexibleType().lowerBound) -> enhancementFromKotlin()
-        this is TypeWithEnhancement && enhancement.mayBeNull() != null -> enhancementFromJava()
-        else -> null
+    private fun <T : Any> doIfNotNull(
+        type: KotlinType,
+        dataFlowValue: () -> DataFlowValue,
+        c: ResolutionContext<*>,
+        body: () -> T
+    ) = if (type.mustNotBeNull()?.isFromJava == true && c.dataFlowInfo.getStableNullability(dataFlowValue()).canBeNull()) {
+        body()
+    } else {
+        null
+    }
+
+    companion object {
+        val typeCheckerForEnhancedTypes = NewKotlinTypeCheckerImpl(
+            kotlinTypeRefiner = KotlinTypeRefiner.Default,
+            kotlinTypePreparator = object : KotlinTypePreparator() {
+                override fun prepareType(type: KotlinTypeMarker): UnwrappedType =
+                    super.prepareType(type).let { it.getEnhancementDeeply() ?: it }.unwrap()
+            }
+        )
+        val typeCheckerForBaseTypes = NewKotlinTypeCheckerImpl(KotlinTypeRefiner.Default)
     }
 }
 

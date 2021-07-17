@@ -224,7 +224,7 @@ public class LazySubstitutingClassDescriptor extends ModuleAwareClassDescriptor 
 
     @NotNull
     @Override
-    public Visibility getVisibility() {
+    public DescriptorVisibility getVisibility() {
         return original.getVisibility();
     }
 
@@ -246,6 +246,11 @@ public class LazySubstitutingClassDescriptor extends ModuleAwareClassDescriptor 
     @Override
     public boolean isFun() {
         return original.isFun();
+    }
+
+    @Override
+    public boolean isValue() {
+        return original.isValue();
     }
 
     @Override
@@ -311,8 +316,23 @@ public class LazySubstitutingClassDescriptor extends ModuleAwareClassDescriptor 
 
     @Nullable
     @Override
+    public InlineClassRepresentation<SimpleType> getInlineClassRepresentation() {
+        InlineClassRepresentation<SimpleType> representation = original.getInlineClassRepresentation();
+        //noinspection ConstantConditions
+        return representation == null ? null : new InlineClassRepresentation<SimpleType>(
+                representation.getUnderlyingPropertyName(),
+                substituteSimpleType(getInlineClassRepresentation().getUnderlyingType())
+        );
+    }
+
+    @Nullable
+    @Override
     public SimpleType getDefaultFunctionTypeForSamInterface() {
-        SimpleType type = original.getDefaultFunctionTypeForSamInterface();
+        return substituteSimpleType(original.getDefaultFunctionTypeForSamInterface());
+    }
+
+    @Nullable
+    private SimpleType substituteSimpleType(@Nullable SimpleType type) {
         if (type == null || originalSubstitutor.isEmpty()) return type;
 
         TypeSubstitutor substitutor = getSubstitutor();

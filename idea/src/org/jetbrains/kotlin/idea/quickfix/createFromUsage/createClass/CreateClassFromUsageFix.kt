@@ -16,6 +16,7 @@ import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.psi.*
 import org.jetbrains.annotations.Nls
 import org.jetbrains.annotations.NonNls
+import org.jetbrains.kotlin.descriptors.DescriptorVisibility
 import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.idea.KotlinFileType
 import org.jetbrains.kotlin.idea.core.getFqNameWithImplicitPrefix
@@ -45,7 +46,7 @@ import java.util.*
 import com.intellij.codeInsight.daemon.impl.quickfix.ClassKind as IdeaClassKind
 
 enum class ClassKind(@NonNls val keyword: String, @Nls val description: String) {
-    PLAIN_CLASS("class", KotlinBundle.message("find.usages.class")),
+    PLAIN_CLASS("class", KotlinBundle.message("text.class")),
     ENUM_CLASS("enum class", KotlinBundle.message("text.enum")),
     ENUM_ENTRY("", KotlinBundle.message("text.enum.constant")),
     ANNOTATION_CLASS("annotation class", KotlinBundle.message("text.annotation")),
@@ -54,7 +55,7 @@ enum class ClassKind(@NonNls val keyword: String, @Nls val description: String) 
     DEFAULT("", "") // Used as a placeholder and must be replaced with one of the kinds above
 }
 
-fun ClassKind.toIdeaClassKind() = IdeaClassKind { this@toIdeaClassKind.description.capitalize() }
+fun ClassKind.toIdeaClassKind() = IdeaClassKind { this@toIdeaClassKind.description.replaceFirstChar(Char::uppercaseChar) }
 
 val ClassKind.actionPriority: IntentionActionPriority
     get() = if (this == ANNOTATION_CLASS) IntentionActionPriority.LOW else IntentionActionPriority.NORMAL
@@ -67,7 +68,8 @@ data class ClassInfo(
     val inner: Boolean = false,
     val open: Boolean = false,
     val typeArguments: List<TypeInfo> = Collections.emptyList(),
-    val parameterInfos: List<ParameterInfo> = Collections.emptyList()
+    val parameterInfos: List<ParameterInfo> = Collections.emptyList(),
+    val primaryConstructorVisibility: DescriptorVisibility? = null
 ) {
     val applicableParents by lazy {
         targetParents.filter {
@@ -183,7 +185,7 @@ open class CreateClassFromUsageFix<E : KtElement> protected constructor(
             val defaultPackageFqName = file.packageFqName
             val dialog = object : CreateKotlinClassDialog(
                 file.project,
-                KotlinBundle.message("create.0", ideaClassKind.description.capitalize()),
+                KotlinBundle.message("create.0", ideaClassKind.description.replaceFirstChar(Char::uppercaseChar)),
                 className,
                 defaultPackageFqName.asString(),
                 ideaClassKind,
@@ -221,7 +223,8 @@ open class CreateClassFromUsageFix<E : KtElement> protected constructor(
                 val constructorInfo = ClassWithPrimaryConstructorInfo(
                     classInfo,
                     // Need for #KT-22137
-                    if (expectedTypeInfo.isUnit) TypeInfo.Empty else expectedTypeInfo
+                    if (expectedTypeInfo.isUnit) TypeInfo.Empty else expectedTypeInfo,
+                    primaryConstructorVisibility = classInfo.primaryConstructorVisibility
                 )
                 val builder = CallableBuilderConfiguration(
                     Collections.singletonList(constructorInfo),

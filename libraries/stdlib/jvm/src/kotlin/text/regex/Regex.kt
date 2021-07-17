@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2021 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 package kotlin.text
@@ -114,6 +114,8 @@ internal constructor(private val nativePattern: Pattern) : Serializable {
      *
      * @param startIndex An index to start search with, by default 0. Must be not less than zero and not greater than `input.length()`
      * @return An instance of [MatchResult] if match was found or `null` otherwise.
+     * @throws IndexOutOfBoundsException if [startIndex] is less than zero or greater than the length of the [input] char sequence.
+     * @sample samples.text.Regexps.find
      */
     @Suppress("ACTUAL_FUNCTION_WITH_DEFAULT_ARGUMENTS")
     public actual fun find(input: CharSequence, startIndex: Int = 0): MatchResult? =
@@ -140,6 +142,18 @@ internal constructor(private val nativePattern: Pattern) : Serializable {
      * @return An instance of [MatchResult] if the entire input matches or `null` otherwise.
      */
     public actual fun matchEntire(input: CharSequence): MatchResult? = nativePattern.matcher(input).matchEntire(input)
+
+    @SinceKotlin("1.5")
+    @ExperimentalStdlibApi
+    public actual fun matchAt(input: CharSequence, index: Int): MatchResult? =
+        nativePattern.matcher(input).useAnchoringBounds(false).useTransparentBounds(true).region(index, input.length).run {
+            if (lookingAt()) MatcherMatchResult(this, input) else null
+        }
+
+    @SinceKotlin("1.5")
+    @ExperimentalStdlibApi
+    public actual fun matchesAt(input: CharSequence, index: Int): Boolean =
+        nativePattern.matcher(input).useAnchoringBounds(false).useTransparentBounds(true).region(index, input.length).lookingAt()
 
     /**
      * Replaces all occurrences of this regular expression in the specified [input] string with specified [replacement] expression.

@@ -1,44 +1,33 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.test.testFramework;
 
-import com.intellij.diagnostic.PerformanceWatcher;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.Application;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.PathManager;
 import com.intellij.openapi.application.impl.ApplicationInfoImpl;
 import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.JDOMUtil;
 import com.intellij.openapi.util.io.FileUtil;
+import com.intellij.openapi.util.registry.Registry;
 import com.intellij.openapi.util.text.StringUtil;
-import com.intellij.openapi.vfs.*;
-import com.intellij.psi.codeStyle.CodeStyleSettings;
+import com.intellij.openapi.vfs.VfsUtilCore;
+import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.openapi.vfs.VirtualFileVisitor;
 import com.intellij.rt.execution.junit.FileComparisonFailure;
-import com.intellij.testFramework.*;
-import com.intellij.testFramework.exceptionCases.AbstractExceptionCase;
 import com.intellij.util.Consumer;
+import com.intellij.util.ObjectUtils;
 import com.intellij.util.ReflectionUtil;
+import com.intellij.util.SmartList;
 import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.containers.hash.HashMap;
+import com.intellij.util.containers.PeekableIterator;
+import com.intellij.util.containers.PeekableIteratorWrapper;
 import com.intellij.util.lang.CompoundRuntimeException;
-import com.intellij.util.ui.UIUtil;
 import gnu.trove.Equality;
 import gnu.trove.THashSet;
 import junit.framework.AssertionFailedError;
@@ -47,11 +36,11 @@ import org.jdom.Element;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.jetbrains.kotlin.test.IdeaSystemPropertiesForParallelRunConfigurator;
 import org.jetbrains.kotlin.testFramework.MockComponentManagerCreationTracer;
 import org.jetbrains.kotlin.types.AbstractTypeChecker;
 import org.jetbrains.kotlin.types.FlexibleTypeImpl;
 import org.junit.Assert;
+import org.junit.ComparisonFailure;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -61,14 +50,15 @@ import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
-@SuppressWarnings("UseOfSystemOutOrSystemErr")
+@SuppressWarnings("ALL")
 public abstract class KtUsefulTestCase extends TestCase {
     public static final boolean IS_UNDER_TEAMCITY = System.getenv("TEAMCITY_VERSION") != null;
-    private static final String TEMP_DIR_MARKER = "unitTest_";
+    public static final String TEMP_DIR_MARKER = "unitTest_";
     public static final boolean OVERWRITE_TESTDATA = Boolean.getBoolean("idea.tests.overwrite.data");
 
     private static final String ORIGINAL_TEMP_DIR = FileUtil.getTempDirectory();
@@ -78,24 +68,28 @@ public abstract class KtUsefulTestCase extends TestCase {
 
     private Application application;
 
-    static {
-        IdeaSystemPropertiesForParallelRunConfigurator.setProperties();
-        //TODO: investigate and enable
-        //IdeaForkJoinWorkerThreadFactory.setupPoisonFactory();
-        Logger.setFactory(TestLoggerFactory.class);
-    }
+    protected static final Logger LOG = Logger.getInstance(KtUsefulTestCase.class);
 
     @NotNull
-    protected final Disposable myTestRootDisposable = new TestDisposable();
+    private final Disposable myTestRootDisposable = new TestDisposable();
 
-    private static final String ourPathToKeep = null;
+    static Path ourPathToKeep;
     private final List<String> myPathsToKeep = new ArrayList<>();
 
-    private File myTempDir;
+    private String myTempDir;
 
+    private static final String DEFAULT_SETTINGS_EXTERNALIZED;
     static {
         // Radar #5755208: Command line Java applications need a way to launch without a Dock icon.
         System.setProperty("apple.awt.UIElement", "true");
+
+        try {
+            Element oldS = new Element("temp");
+            DEFAULT_SETTINGS_EXTERNALIZED = JDOMUtil.writeElement(oldS);
+        }
+        catch (Exception e) {
+            throw new RuntimeException(e);
+        }
 
         // -- KOTLIN ADDITIONAL START --
 
@@ -103,6 +97,42 @@ public abstract class KtUsefulTestCase extends TestCase {
         AbstractTypeChecker.RUN_SLOW_ASSERTIONS = true;
 
         // -- KOTLIN ADDITIONAL END --
+    }
+
+    /**
+     * Pass here the exception you want to be thrown first
+     * E.g.<pre>
+     * {@code
+     *   void tearDown() {
+     *     try {
+     *       doTearDowns();
+     *     }
+     *     catch(Exception e) {
+     *       addSuppressedException(e);
+     *     }
+     *     finally {
+     *       super.tearDown();
+     *     }
+     *   }
+     * }
+     * </pre>
+     *
+     */
+    protected void addSuppressedException(@NotNull Throwable e) {
+        List<Throwable> list = mySuppressedExceptions;
+        if (list == null) {
+            mySuppressedExceptions = list = new SmartList<>();
+        }
+        list.add(e);
+    }
+    private List<Throwable> mySuppressedExceptions;
+
+
+    public KtUsefulTestCase() {
+    }
+
+    public KtUsefulTestCase(@NotNull String name) {
+        super(name);
     }
 
     protected boolean shouldContainTempFiles() {
@@ -122,21 +152,21 @@ public abstract class KtUsefulTestCase extends TestCase {
         super.setUp();
 
         if (shouldContainTempFiles()) {
-            String testName =  FileUtil.sanitizeFileName(getTestName(true));
-            if (StringUtil.isEmptyOrSpaces(testName)) testName = "";
+            String testName = FileUtil.sanitizeFileName(getTestName(true));
             testName = new File(testName).getName(); // in case the test name contains file separators
-            myTempDir = FileUtil.createTempDirectory(TEMP_DIR_MARKER, testName, false);
-            FileUtil.resetCanonicalTempPathCache(myTempDir.getPath());
+            myTempDir = FileUtil.createTempDirectory(TEMP_DIR_MARKER + testName, "", false).getPath();
+            FileUtil.resetCanonicalTempPathCache(myTempDir);
         }
 
         boolean isStressTest = isStressTest();
         ApplicationInfoImpl.setInStressTest(isStressTest);
-        if (isPerformanceTest()) {
-            Timings.getStatistics();
-        }
-
+        Registry.getInstance().markAsLoaded();
         // turn off Disposer debugging for performance tests
         Disposer.setDebugMode(!isStressTest);
+    }
+
+    protected boolean isIconRequired() {
+        return false;
     }
 
     @Override
@@ -153,7 +183,7 @@ public abstract class KtUsefulTestCase extends TestCase {
                         if (shouldContainTempFiles()) {
                             FileUtil.resetCanonicalTempPathCache(ORIGINAL_TEMP_DIR);
                             if (hasTmpFilesToKeep()) {
-                                File[] files = myTempDir.listFiles();
+                                File[] files = new File(myTempDir).listFiles();
                                 if (files != null) {
                                     for (File file : files) {
                                         if (!shouldKeepTmpFile(file)) {
@@ -163,15 +193,13 @@ public abstract class KtUsefulTestCase extends TestCase {
                                 }
                             }
                             else {
-                                FileUtil.delete(myTempDir);
+                                FileUtil.delete(new File(myTempDir));
                             }
                         }
-                    },
-                    () -> UIUtil.removeLeakingAppleListeners()
-            ).run();
+                    }
+            ).run(ObjectUtils.notNull(mySuppressedExceptions, Collections.emptyList()));
         }
         finally {
-            super.tearDown();
             // -- KOTLIN ADDITIONAL START --
             TestApplicationUtilKt.resetApplicationToNull(application);
             application = null;
@@ -188,12 +216,12 @@ public abstract class KtUsefulTestCase extends TestCase {
     }
 
     private boolean hasTmpFilesToKeep() {
-        return ourPathToKeep != null && FileUtil.isAncestor(myTempDir.getPath(), ourPathToKeep, false) || !myPathsToKeep.isEmpty();
+        return ourPathToKeep != null && FileUtil.isAncestor(myTempDir, ourPathToKeep.toString(), false) || !myPathsToKeep.isEmpty();
     }
 
     private boolean shouldKeepTmpFile(@NotNull File file) {
         String path = file.getPath();
-        if (FileUtil.pathsEqual(path, ourPathToKeep)) return true;
+        if (FileUtil.pathsEqual(path, ourPathToKeep.toString())) return true;
         for (String pathToKeep : myPathsToKeep) {
             if (FileUtil.pathsEqual(path, pathToKeep)) return true;
         }
@@ -201,7 +229,7 @@ public abstract class KtUsefulTestCase extends TestCase {
     }
 
     private static final Set<String> DELETE_ON_EXIT_HOOK_DOT_FILES;
-    private static final Class DELETE_ON_EXIT_HOOK_CLASS;
+    private static final Class<?> DELETE_ON_EXIT_HOOK_CLASS;
     static {
         Class<?> aClass;
         try {
@@ -237,9 +265,9 @@ public abstract class KtUsefulTestCase extends TestCase {
     @SuppressWarnings("ConstantConditions")
     private static void cleanupSwingDataStructures() throws Exception {
         Object manager = ReflectionUtil.getDeclaredMethod(Class.forName("javax.swing.KeyboardManager"), "getCurrentManager").invoke(null);
-        Map componentKeyStrokeMap = ReflectionUtil.getField(manager.getClass(), manager, Hashtable.class, "componentKeyStrokeMap");
+        Map<?, ?> componentKeyStrokeMap = ReflectionUtil.getField(manager.getClass(), manager, Hashtable.class, "componentKeyStrokeMap");
         componentKeyStrokeMap.clear();
-        Map containerMap = ReflectionUtil.getField(manager.getClass(), manager, Hashtable.class, "containerMap");
+        Map<?, ?> containerMap = ReflectionUtil.getField(manager.getClass(), manager, Hashtable.class, "containerMap");
         containerMap.clear();
     }
 
@@ -252,26 +280,19 @@ public abstract class KtUsefulTestCase extends TestCase {
     protected void runTest() throws Throwable {
         final Throwable[] throwables = new Throwable[1];
 
-        AtomicBoolean completed = new AtomicBoolean(false);
         Runnable runnable = () -> {
             try {
-                //TestLoggerFactory.onTestStarted();
                 super.runTest();
-                TestLoggerFactory.onTestFinished(true);
-                completed.set(true);
             }
             catch (InvocationTargetException e) {
-                TestLoggerFactory.onTestFinished(false);
                 e.fillInStackTrace();
                 throwables[0] = e.getTargetException();
             }
             catch (IllegalAccessException e) {
-                TestLoggerFactory.onTestFinished(false);
                 e.fillInStackTrace();
                 throwables[0] = e;
             }
             catch (Throwable e) {
-                TestLoggerFactory.onTestFinished(false);
                 throwables[0] = e;
             }
         };
@@ -281,29 +302,17 @@ public abstract class KtUsefulTestCase extends TestCase {
         if (throwables[0] != null) {
             throw throwables[0];
         }
-        if (!completed.get()) {
-            throw new IllegalStateException("test didn't start");
-        }
     }
 
     protected boolean shouldRunTest() {
-        return TestFrameworkUtil.canRunTest(getClass());
+        return true;
     }
 
     protected void invokeTestRunnable(@NotNull Runnable runnable) throws Exception {
-        //IdeaTestExecutionPolicy policy = IdeaTestExecutionPolicy.current();
-        //if (policy != null && !policy.runInDispatchThread()) {
-        //    runnable.run();
-        //}
-        //else {
-            EdtTestUtilKt.runInEdtAndWait(() -> {
-                runnable.run();
-                return null;
-            });
-        //}
+        runnable.run();
     }
 
-    private void defaultRunBare() throws Throwable {
+    protected void defaultRunBare() throws Throwable {
         Throwable exception = null;
         try {
             long setupStart = System.nanoTime();
@@ -324,11 +333,17 @@ public abstract class KtUsefulTestCase extends TestCase {
                 logPerClassCost(teardownCost, TOTAL_TEARDOWN_COST_MILLIS);
             }
             catch (Throwable tearingDown) {
-                if (exception == null) exception = tearingDown;
-                else exception = new CompoundRuntimeException(Arrays.asList(exception, tearingDown));
+                if (exception == null) {
+                    exception = tearingDown;
+                }
+                else {
+                    exception = new CompoundRuntimeException(Arrays.asList(exception, tearingDown));
+                }
             }
         }
-        if (exception != null) throw exception;
+        if (exception != null) {
+            throw exception;
+        }
     }
 
     /**
@@ -366,20 +381,10 @@ public abstract class KtUsefulTestCase extends TestCase {
     public void runBare() throws Throwable {
         if (!shouldRunTest()) return;
 
-        if (runInDispatchThread()) {
-            TestRunnerUtil.replaceIdeEventQueueSafely();
-            com.intellij.testFramework.EdtTestUtil.runInEdtAndWait(this::defaultRunBare);
-        }
-        else {
-            defaultRunBare();
-        }
+        defaultRunBare();
     }
 
     protected boolean runInDispatchThread() {
-        //IdeaTestExecutionPolicy policy = IdeaTestExecutionPolicy.current();
-        //if (policy != null) {
-        //    return policy.runInDispatchThread();
-        //}
         return true;
     }
 
@@ -441,10 +446,10 @@ public abstract class KtUsefulTestCase extends TestCase {
         assertOrderedEquals("", actual, expected);
     }
 
+    @SuppressWarnings("unchecked")
     public static <T> void assertOrderedEquals(@NotNull String errorMsg,
             @NotNull Iterable<? extends T> actual,
             @NotNull Iterable<? extends T> expected) {
-        //noinspection unchecked
         assertOrderedEquals(errorMsg, actual, expected, Equality.CANONICAL);
     }
 
@@ -515,9 +520,20 @@ public abstract class KtUsefulTestCase extends TestCase {
     }
 
     public static <T> void assertContainsOrdered(@NotNull Collection<? extends T> collection, @NotNull Collection<? extends T> expected) {
-        ArrayList<T> copy = new ArrayList<>(collection);
-        copy.retainAll(expected);
-        assertOrderedEquals(toString(collection), copy, expected);
+        PeekableIterator<T> expectedIt = new PeekableIteratorWrapper<>(expected.iterator());
+        PeekableIterator<T> actualIt = new PeekableIteratorWrapper<>(collection.iterator());
+
+        while (actualIt.hasNext() && expectedIt.hasNext()) {
+            T expectedElem = expectedIt.peek();
+            T actualElem = actualIt.peek();
+            if (expectedElem.equals(actualElem)) {
+                expectedIt.next();
+            }
+            actualIt.next();
+        }
+        if (expectedIt.hasNext()) {
+            throw new ComparisonFailure("", toString(expected), toString(collection));
+        }
     }
 
     @SafeVarargs
@@ -592,7 +608,7 @@ public abstract class KtUsefulTestCase extends TestCase {
         if (collection.size() != checkers.length) {
             Assert.fail(toString(collection));
         }
-        Set<Consumer<T>> checkerSet = new HashSet<>(Arrays.asList(checkers));
+        Set<Consumer<T>> checkerSet = ContainerUtil.set(checkers);
         int i = 0;
         Throwable lastError = null;
         for (final T actual : collection) {
@@ -658,10 +674,6 @@ public abstract class KtUsefulTestCase extends TestCase {
             }
         }
         Assert.fail(value + " should be equal to one of " + Arrays.toString(values));
-    }
-
-    public static void printThreadDump() {
-        PerformanceWatcher.dumpThreadsToConsole("Thread dump:");
     }
 
     public static void assertEmpty(@NotNull Object[] array) {
@@ -733,7 +745,29 @@ public abstract class KtUsefulTestCase extends TestCase {
 
     @NotNull
     public static String getTestName(@Nullable String name, boolean lowercaseFirstLetter) {
-        return name == null ? "" : PlatformTestUtil.getTestName(name, lowercaseFirstLetter);
+        if (name == null) return "";
+        name = StringUtil.trimStart(name, "test");
+        return StringUtil.isEmpty(name) ? "" : lowercaseFirstLetter(name, lowercaseFirstLetter);
+    }
+
+    public static @NotNull String lowercaseFirstLetter(@NotNull String name, boolean lowercaseFirstLetter) {
+        if (lowercaseFirstLetter && !isAllUppercaseName(name)) {
+            name = Character.toLowerCase(name.charAt(0)) + name.substring(1);
+        }
+        return name;
+    }
+
+    public static boolean isAllUppercaseName(@NotNull String name) {
+        int uppercaseChars = 0;
+        for (int i = 0; i < name.length(); i++) {
+            if (Character.isLowerCase(name.charAt(i))) {
+                return false;
+            }
+            if (Character.isUpperCase(name.charAt(i))) {
+                uppercaseChars++;
+            }
+        }
+        return uppercaseChars >= 3;
     }
 
     @NotNull
@@ -762,15 +796,9 @@ public abstract class KtUsefulTestCase extends TestCase {
             @Nullable Supplier<String> messageProducer) {
         String fileText;
         try {
-            if (OVERWRITE_TESTDATA) {
-                VfsTestUtil.overwriteTestData(filePath, actualText);
-                //noinspection UseOfSystemOutOrSystemErr
-                System.out.println("File " + filePath + " created.");
-            }
-            fileText = FileUtil.loadFile(new File(filePath), CharsetToolkit.UTF8_CHARSET);
+            fileText = FileUtil.loadFile(new File(filePath), StandardCharsets.UTF_8);
         }
         catch (FileNotFoundException e) {
-            VfsTestUtil.overwriteTestData(filePath, actualText);
             throw new AssertionFailedError("No output text found. File " + filePath + " created.");
         }
         catch (IOException e) {
@@ -778,20 +806,20 @@ public abstract class KtUsefulTestCase extends TestCase {
         }
         String expected = StringUtil.convertLineSeparators(trimBeforeComparing ? fileText.trim() : fileText);
         String actual = StringUtil.convertLineSeparators(trimBeforeComparing ? actualText.trim() : actualText);
-        if (!Comparing.equal(expected, actual)) {
+        if (!Objects.equals(expected, actual)) {
             throw new FileComparisonFailure(messageProducer == null ? null : messageProducer.get(), expected, actual, filePath);
         }
     }
 
     protected static void clearFields(@NotNull Object test) throws IllegalAccessException {
-        Class aClass = test.getClass();
+        Class<?> aClass = test.getClass();
         while (aClass != null) {
             clearDeclaredFields(test, aClass);
             aClass = aClass.getSuperclass();
         }
     }
 
-    public static void clearDeclaredFields(@NotNull Object test, @NotNull Class aClass) throws IllegalAccessException {
+    public static void clearDeclaredFields(@NotNull Object test, @NotNull Class<?> aClass) throws IllegalAccessException {
         for (final Field field : aClass.getDeclaredFields()) {
             final String name = field.getDeclaringClass().getName();
             if (!name.startsWith("junit.framework.") && !name.startsWith("com.intellij.testFramework.")) {
@@ -802,25 +830,6 @@ public abstract class KtUsefulTestCase extends TestCase {
                 }
             }
         }
-    }
-
-    private static void checkCodeStyleSettingsEqual(@NotNull CodeStyleSettings expected, @NotNull CodeStyleSettings settings) {
-        if (!expected.equals(settings)) {
-            Element oldS = new Element("temp");
-            expected.writeExternal(oldS);
-            Element newS = new Element("temp");
-            settings.writeExternal(newS);
-
-            String newString = JDOMUtil.writeElement(newS);
-            String oldString = JDOMUtil.writeElement(oldS);
-            Assert.assertEquals("Code style settings damaged", oldString, newString);
-        }
-    }
-
-    public boolean isPerformanceTest() {
-        String testName = getName();
-        String className = getClass().getSimpleName();
-        return TestFrameworkUtil.isPerformanceTest(testName, className);
     }
 
     /**
@@ -834,35 +843,12 @@ public abstract class KtUsefulTestCase extends TestCase {
     }
 
     private static boolean isStressTest(String testName, String className) {
-        return TestFrameworkUtil.isPerformanceTest(testName, className) ||
-               containsStressWords(testName) ||
+        return containsStressWords(testName) ||
                containsStressWords(className);
     }
 
     private static boolean containsStressWords(@Nullable String name) {
         return name != null && (name.contains("Stress") || name.contains("Slow"));
-    }
-
-
-    /**
-     * Checks that code block throw corresponding exception with expected error msg.
-     * If expected error message is null it will not be checked.
-     *
-     * @param exceptionCase    Block annotated with some exception type
-     * @param expectedErrorMsg expected error message
-     */
-    protected void assertException(@NotNull AbstractExceptionCase exceptionCase, @Nullable String expectedErrorMsg) {
-        //noinspection unchecked
-        assertExceptionOccurred(true, exceptionCase, expectedErrorMsg);
-    }
-
-    /**
-     * Checks that code block doesn't throw corresponding exception.
-     *
-     * @param exceptionCase Block annotated with some exception type
-     */
-    protected <T extends Throwable> void assertNoException(@NotNull AbstractExceptionCase<T> exceptionCase) throws T {
-        assertExceptionOccurred(false, exceptionCase, null);
     }
 
     protected void assertNoThrowable(@NotNull Runnable closure) {
@@ -874,43 +860,6 @@ public abstract class KtUsefulTestCase extends TestCase {
             throwableName = thr.getClass().getName();
         }
         assertNull(throwableName);
-    }
-
-    private static <T extends Throwable> void assertExceptionOccurred(boolean shouldOccur,
-            @NotNull AbstractExceptionCase<T> exceptionCase,
-            String expectedErrorMsg) throws T {
-        boolean wasThrown = false;
-        try {
-            exceptionCase.tryClosure();
-        }
-        catch (Throwable e) {
-            if (shouldOccur) {
-                wasThrown = true;
-                final String errorMessage = exceptionCase.getAssertionErrorMessage();
-                assertEquals(errorMessage, exceptionCase.getExpectedExceptionClass(), e.getClass());
-                if (expectedErrorMsg != null) {
-                    assertEquals("Compare error messages", expectedErrorMsg, e.getMessage());
-                }
-            }
-            else if (exceptionCase.getExpectedExceptionClass().equals(e.getClass())) {
-                wasThrown = true;
-
-                //noinspection UseOfSystemOutOrSystemErr
-                System.out.println();
-                //noinspection UseOfSystemOutOrSystemErr
-                e.printStackTrace(System.out);
-
-                fail("Exception isn't expected here. Exception message: " + e.getMessage());
-            }
-            else {
-                throw e;
-            }
-        }
-        finally {
-            if (shouldOccur && !wasThrown) {
-                fail(exceptionCase.getAssertionErrorMessage());
-            }
-        }
     }
 
     protected boolean annotatedWith(@NotNull Class<? extends Annotation> annotationClass) {
@@ -937,7 +886,7 @@ public abstract class KtUsefulTestCase extends TestCase {
     }
 
     public static void refreshRecursively(@NotNull VirtualFile file) {
-        VfsUtilCore.visitChildrenRecursively(file, new VirtualFileVisitor() {
+        VfsUtilCore.visitChildrenRecursively(file, new VirtualFileVisitor<Void>() {
             @Override
             public boolean visitFile(@NotNull VirtualFile file) {
                 file.getChildren();
@@ -945,11 +894,6 @@ public abstract class KtUsefulTestCase extends TestCase {
             }
         });
         file.refresh(false, true);
-    }
-
-    @Nullable
-    public static VirtualFile refreshAndFindFile(@NotNull final File file) {
-        return UIUtil.invokeAndWaitIfNeeded(() -> LocalFileSystem.getInstance().refreshAndFindFileByIoFile(file));
     }
 
     protected class TestDisposable implements Disposable {
@@ -972,5 +916,5 @@ public abstract class KtUsefulTestCase extends TestCase {
             String testName = getTestName(false);
             return KtUsefulTestCase.this.getClass() + (StringUtil.isEmpty(testName) ? "" : ".test" + testName);
         }
-    };
+    }
 }

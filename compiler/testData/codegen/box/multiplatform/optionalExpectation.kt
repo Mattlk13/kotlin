@@ -1,7 +1,7 @@
+// IGNORE_BACKEND_FIR: JVM_IR
 // !LANGUAGE: +MultiPlatformProjects
 // !USE_EXPERIMENTAL: kotlin.ExperimentalMultiplatform
 // IGNORE_BACKEND: NATIVE
-// IGNORE_BACKEND_FIR: JVM_IR
 // WITH_RUNTIME
 // MODULE: library
 // FILE: expected.kt

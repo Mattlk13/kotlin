@@ -5,8 +5,7 @@
 
 package org.jetbrains.kotlin.fir.serialization
 
-import org.jetbrains.kotlin.contracts.description.*
-import org.jetbrains.kotlin.contracts.description.expressions.*
+import org.jetbrains.kotlin.contracts.description.EventOccurrencesRange
 import org.jetbrains.kotlin.fir.contracts.FirContractDescription
 import org.jetbrains.kotlin.fir.contracts.description.*
 import org.jetbrains.kotlin.fir.contracts.effects
@@ -18,7 +17,7 @@ import org.jetbrains.kotlin.metadata.deserialization.Flags
 
 class FirContractSerializer {
     fun serializeContractOfFunctionIfAny(
-        function: FirFunction<*>,
+        function: FirFunction,
         proto: ProtoBuf.Function.Builder,
         parentSerializer: FirElementSerializer
     ) {
@@ -33,7 +32,7 @@ class FirContractSerializer {
     private class ContractSerializerWorker(private val parentSerializer: FirElementSerializer) {
         fun contractProto(contractDescription: FirContractDescription): ProtoBuf.Contract.Builder {
             return ProtoBuf.Contract.newBuilder().apply {
-                contractDescription.effects?.forEach { addEffect(effectProto(it, contractDescription)) }
+                contractDescription.effects?.forEach { addEffect(effectProto(it.effect, contractDescription)) }
             }
         }
 
@@ -58,9 +57,9 @@ class FirContractSerializer {
 
                 is ConeReturnsEffectDeclaration -> {
                     when (effectDeclaration.value) {
-                        ConstantReference.NOT_NULL ->
+                        ConeConstantReference.NOT_NULL ->
                             builder.effectType = ProtoBuf.Effect.EffectType.RETURNS_NOT_NULL
-                        ConstantReference.WILDCARD ->
+                        ConeConstantReference.WILDCARD ->
                             builder.effectType = ProtoBuf.Effect.EffectType.RETURNS_CONSTANT
                         else -> {
                             builder.effectType = ProtoBuf.Effect.EffectType.RETURNS_CONSTANT
@@ -179,7 +178,7 @@ class FirContractSerializer {
                 ): ProtoBuf.Expression.Builder {
                     val builder = ProtoBuf.Expression.newBuilder()
 
-                    val indexOfParameter = valueParameterReference.parameterIndex
+                    val indexOfParameter = valueParameterReference.parameterIndex + 1
                     builder.valueParameterReference = indexOfParameter
 
                     return builder
@@ -193,11 +192,11 @@ class FirContractSerializer {
             }
         }
 
-        private fun invocationKindProtobufEnum(kind: InvocationKind): ProtoBuf.Effect.InvocationKind? = when (kind) {
-            InvocationKind.AT_MOST_ONCE -> ProtoBuf.Effect.InvocationKind.AT_MOST_ONCE
-            InvocationKind.EXACTLY_ONCE -> ProtoBuf.Effect.InvocationKind.EXACTLY_ONCE
-            InvocationKind.AT_LEAST_ONCE -> ProtoBuf.Effect.InvocationKind.AT_LEAST_ONCE
-            InvocationKind.UNKNOWN -> null
+        private fun invocationKindProtobufEnum(kind: EventOccurrencesRange): ProtoBuf.Effect.InvocationKind? = when (kind) {
+            EventOccurrencesRange.AT_MOST_ONCE -> ProtoBuf.Effect.InvocationKind.AT_MOST_ONCE
+            EventOccurrencesRange.EXACTLY_ONCE -> ProtoBuf.Effect.InvocationKind.EXACTLY_ONCE
+            EventOccurrencesRange.AT_LEAST_ONCE -> ProtoBuf.Effect.InvocationKind.AT_LEAST_ONCE
+            else -> null
         }
 
         private fun constantValueProtobufEnum(constantReference: ConeConstantReference): ProtoBuf.Expression.ConstantValue? =

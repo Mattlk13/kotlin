@@ -13,7 +13,6 @@
 -dontwarn com.intellij.ui.**
 -dontwarn com.intellij.util.IconUtil
 -dontwarn com.intellij.util.ImageLoader
--dontwarn kotlinx.coroutines.flow.FlowKt__MergeKt
 -dontwarn net.sf.cglib.**
 -dontwarn org.objectweb.asm.** # this is ASM3, the old version that we do not use
 -dontwarn com.sun.jna.NativeString
@@ -64,7 +63,6 @@
 -dontwarn org.w3c.dom.Window
 -dontwarn org.slf4j.**
 
-
 #-libraryjars '<rtjar>'
 #-libraryjars '<jssejar>'
 #-libraryjars '<bootstrap.runtime>'
@@ -101,6 +99,9 @@
 -keep class org.jetbrains.kotlin.protobuf.** {
     public protected *;
 }
+
+# temporary workaround for KTI-298
+-keepclassmembers class com.google.common.** { *; }
 
 -keep class org.jetbrains.kotlin.container.** { *; }
 
@@ -165,6 +166,7 @@
 -keep class com.intellij.util.containers.hash.EqualityPolicy { *; }
 -keep class com.intellij.util.containers.hash.EqualityPolicy.* { *; }
 -keep class com.intellij.util.containers.Interner { *; }
+-keep class com.intellij.util.containers.OpenTHashSet { *; }
 -keep class gnu.trove.TIntHashSet { *; }
 -keep class gnu.trove.TIntIterator { *; }
 -keep class org.iq80.snappy.SlowMemory { *; }
@@ -219,9 +221,6 @@
 -keep class com.sun.tools.javac.** { *; }
 -keep class com.sun.source.** { *; }
 
-# for coroutines
--keep class kotlinx.coroutines.** { *; }
-
 # for webdemo
 -keep class com.intellij.openapi.progress.ProgressManager { *; }
 
@@ -245,6 +244,17 @@
 
 -keep class com.intellij.openapi.vfs.impl.jar.CoreJarFileSystem { *; }
 
+# For Anvil https://youtrack.jetbrains.com/issue/KT-42103
+-keepclassmembers class com.intellij.openapi.extensions.ExtensionPoint {
+    public void registerExtension(...);
+}
+
+# Serialization plugin
+
+-keep class com.intellij.openapi.util.io.JarUtil {
+    public static java.lang.String getJarAttribute(java.io.File, java.util.jar.Attributes$Name);
+}
+
 # used in REPL
 # TODO: pack jline directly to scripting-compiler jars instead
 -keep class org.jline.reader.LineReaderBuilder { *; }
@@ -257,4 +267,13 @@
 
 -keepclassmembers class * implements java.io.Serializable {
     static final long serialVersionUID;
+}
+
+-dontwarn org.jetbrains.kotlin.fir.**
+
+# used in commonizer
+-keep class com.intellij.util.SmartFMap {
+    public static ** emptyMap();
+    public ** plus(java.lang.Object, java.lang.Object);
+    public ** plusAll(java.util.Map);
 }

@@ -6,7 +6,7 @@
  * KOTLIN DIAGNOSTICS SPEC TEST (NEGATIVE)
  *
  * SPEC VERSION: 0.1-296
- * PLACE: control--and-data-flow-analysis, control-flow-graph, expressions-1, conditional-expressions -> paragraph 1 -> sentence 2
+ * MAIN LINK: control--and-data-flow-analysis, control-flow-graph, expressions-1, conditional-expressions -> paragraph 1 -> sentence 2
  * NUMBER: 1
  * DESCRIPTION: check any if-statement in kotlin may be trivially turned into such an expression by replacing the missing branch with a kotlin.Unit object expression.
  * HELPERS: checkType
@@ -19,7 +19,7 @@ fun case1() {
     if (!b) {
         println("this is statement")
     }
-    val statement = if (!b) { println("statement could not be assigned") }
+    val statement = <!INVALID_IF_AS_EXPRESSION!>if<!> (!b) { println("statement could not be assigned") }
 }
 
 // TESTCASE NUMBER: 2

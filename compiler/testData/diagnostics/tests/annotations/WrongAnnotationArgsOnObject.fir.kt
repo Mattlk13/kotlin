@@ -1,6 +1,6 @@
 package test
 
-@BadAnnotation(1)
+@BadAnnotation(<!ARGUMENT_TYPE_MISMATCH!>1<!>)
 object SomeObject
 
 val some = SomeObject

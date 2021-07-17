@@ -1,9 +1,6 @@
 package org.jetbrains.uast.test.kotlin
 
-import com.intellij.psi.PsiAnnotation
-import com.intellij.psi.PsiClass
-import com.intellij.psi.PsiClassType
-import com.intellij.psi.PsiModifier
+import com.intellij.psi.*
 import com.intellij.testFramework.RunAll
 import com.intellij.testFramework.UsefulTestCase
 import com.intellij.util.ThrowableRunnable
@@ -318,8 +315,8 @@ class KotlinUastApiTest : AbstractKotlinUastTest() {
     @Test
     fun testSuperTypes() {
         doTest("SuperCalls") { _, file ->
-            file.checkUastSuperTypes("B", listOf("A"))
-            file.checkUastSuperTypes("O", listOf("A"))
+            file.checkUastSuperTypes("class B", listOf("A"))
+            file.checkUastSuperTypes("object O", listOf("A"))
             file.checkUastSuperTypes("InnerClass", listOf("A"))
             file.checkUastSuperTypes("object : A(\"textForAnon\")", listOf("A"))
         }
@@ -600,13 +597,12 @@ class KotlinUastApiTest : AbstractKotlinUastTest() {
             val localFunctionResolved = localFunction.resolve()
             assertNotNull(localFunctionResolved)
             val classReference = localFunction.classReference ?: kfail("classReference expected")
-            assertEquals("USimpleNameReferenceExpression (identifier = <init>, resolvesTo = Local)", classReference.asLogString())
+            assertEquals("USimpleNameReferenceExpression (identifier = <init>, resolvesTo = PsiClass: Local)", classReference.asLogString())
             val localClass = classReference.resolve().toUElement() ?: kfail("uelement expected")
             assertEquals("UClass (name = Local)", localClass.asLogString())
-            assertEquals(localClass, localFunctionResolved.toUElement())
             val localPrimaryConstructor = localFunctionResolved.toUElementOfType<UMethod>() ?: kfail("constructor expected")
             assertTrue(localPrimaryConstructor.isConstructor)
-            assertEquals(localClass, localPrimaryConstructor.uastParent)
+            assertEquals(localClass.javaPsi, localPrimaryConstructor.javaPsi.cast<PsiMethod>().containingClass)
         }
     }
 
@@ -663,6 +659,7 @@ class KotlinUastApiTest : AbstractKotlinUastTest() {
                 function1 -> PsiType:void
                 function2 -> PsiType:T
                 function2CharSequence -> PsiType:T extends PsiType:CharSequence
+                copyWhenGreater -> PsiType:B extends PsiType:T extends PsiType:CharSequence, PsiType:Comparable<? super T>
                 function3 -> PsiType:void
                 function4 -> PsiType:T
                 function5 -> PsiType:int
@@ -673,15 +670,21 @@ class KotlinUastApiTest : AbstractKotlinUastTest() {
                 function10 -> PsiType:T
                 function11 -> PsiType:T
                 function11CharSequence -> PsiType:T extends PsiType:CharSequence
+                function12CharSequence -> PsiType:B extends PsiType:T extends PsiType:CharSequence
+                Foo -> null
+                foo -> PsiType:Z extends PsiType:T
             """.trimIndent(), methods.joinToString("\n") { m ->
                 buildString {
                     append(m.name).append(" -> ")
-                    append(m.returnType)
-                    m.returnType.safeAs<PsiClassType>()?.resolve()?.extendsList?.referencedTypes?.takeIf { it.isNotEmpty() }?.let { e ->
-                        append(" extends ")
-                        append(e.joinToString { it.toString() })
+                    fun PsiType.typeWithExtends(): String = buildString {
+                        append(this@typeWithExtends)
+                        this@typeWithExtends.safeAs<PsiClassType>()?.resolve()?.extendsList?.referencedTypes?.takeIf { it.isNotEmpty() }
+                            ?.let { e ->
+                                append(" extends ")
+                                append(e.joinToString(", ") { it.typeWithExtends() })
+                            }
                     }
-
+                    append(m.returnType?.typeWithExtends())
                 }
             })
             for (method in methods.drop(3)) {

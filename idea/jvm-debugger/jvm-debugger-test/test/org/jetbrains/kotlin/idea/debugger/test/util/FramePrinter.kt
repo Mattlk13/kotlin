@@ -21,6 +21,7 @@ import com.intellij.openapi.roots.JdkOrderEntry
 import com.intellij.openapi.roots.libraries.LibraryUtil
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.io.FileUtil
+import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiExpression
 import com.intellij.xdebugger.impl.XDebugSessionImpl
 import com.intellij.xdebugger.impl.breakpoints.XExpressionImpl
@@ -31,7 +32,7 @@ import com.intellij.xdebugger.impl.ui.XDebuggerUIConstants
 import com.intellij.xdebugger.impl.ui.tree.XDebuggerTree
 import com.intellij.xdebugger.impl.ui.tree.nodes.*
 import org.jetbrains.kotlin.idea.debugger.KotlinFrameExtraVariablesProvider
-import org.jetbrains.kotlin.idea.debugger.coroutine.data.ContinuationValueDescriptorImpl
+import org.jetbrains.kotlin.idea.debugger.coroutine.data.ContinuationVariableValueDescriptorImpl
 import org.jetbrains.kotlin.idea.debugger.evaluate.KotlinCodeFragmentFactory
 import org.jetbrains.kotlin.idea.debugger.invokeInManagerThread
 import org.jetbrains.kotlin.idea.debugger.test.KOTLIN_LIBRARY_NAME
@@ -40,6 +41,7 @@ import org.jetbrains.kotlin.idea.debugger.test.preference.DebuggerPreferences
 import org.jetbrains.kotlin.idea.debugger.test.util.PrinterConfig.DescriptorViewOptions
 import org.jetbrains.kotlin.psi.KtFile
 import java.io.Closeable
+import java.util.concurrent.CompletableFuture
 import javax.swing.tree.TreeNode
 
 class FramePrinter(
@@ -218,8 +220,8 @@ private class Printer(private val delegate: FramePrinterDelegate, private val co
             }
 
             if (config.shouldRenderExpression() && descriptor is ValueDescriptorImpl) {
-                val expression = debugProcess.invokeInManagerThread {
-                    descriptor.getTreeEvaluation((node as XValueNodeImpl).valueContainer as JavaValue, it) as? PsiExpression
+                val expression = debugProcess.invokeInManagerThread { debuggerContextImpl ->
+                    descriptor.getTreeEvaluation((node as XValueNodeImpl).valueContainer as JavaValue, debuggerContextImpl).get()
                 }
 
                 if (expression != null) {
@@ -275,7 +277,7 @@ private class Printer(private val delegate: FramePrinterDelegate, private val co
             is ThisDescriptorImpl -> "this"
             is FieldDescriptor -> "field"
             is ArrayElementDescriptor -> "element"
-            is ContinuationValueDescriptorImpl -> "cont"
+            is ContinuationVariableValueDescriptorImpl -> "cont"
             is MessageDescriptor -> ""
             else -> "unknown"
         }

@@ -1,8 +1,8 @@
-@JvmName()
+@JvmName(<!NO_VALUE_FOR_PARAMETER!>)<!>
 fun foo() {}
 
-@JvmName(42)
+@JvmName(<!ARGUMENT_TYPE_MISMATCH!>42<!>)
 fun bar() {}
 
-@JvmName("a", "b")
+@JvmName("a", <!TOO_MANY_ARGUMENTS!>"b"<!>)
 fun baz() {}

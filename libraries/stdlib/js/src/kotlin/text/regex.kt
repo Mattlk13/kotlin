@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2021 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -19,6 +19,8 @@ public actual enum class RegexOption(val value: String) {
      * respectively, a line terminator or the end of the input sequence. */
     MULTILINE("m")
 }
+
+private fun Iterable<RegexOption>.toFlags(prepend: String): String = joinToString("", prefix = prepend) { it.value }
 
 
 /**
@@ -51,7 +53,20 @@ public actual class Regex actual constructor(pattern: String, options: Set<Regex
     public actual val pattern: String = pattern
     /** The set of options that were used to create this regular expression. */
     public actual val options: Set<RegexOption> = options.toSet()
-    private val nativePattern: RegExp = RegExp(pattern, options.map { it.value }.joinToString(separator = "") + "g")
+    private val nativePattern: RegExp = RegExp(pattern, options.toFlags("gu"))
+    private var nativeStickyPattern: RegExp? = null
+    private fun initStickyPattern(): RegExp =
+        nativeStickyPattern ?: RegExp(pattern, options.toFlags("yu")).also { nativeStickyPattern = it }
+
+    private var nativeMatchesEntirePattern: RegExp? = null
+    private fun initMatchesEntirePattern(): RegExp =
+        nativeMatchesEntirePattern ?: run {
+            if (pattern.startsWith('^') && pattern.endsWith('$'))
+                nativePattern
+            else
+                return RegExp("^${pattern.trimStart('^').trimEnd('$')}$", options.toFlags("gu"))
+        }.also { nativeMatchesEntirePattern = it }
+
 
     /** Indicates whether the regular expression matches the entire [input]. */
     public actual infix fun matches(input: CharSequence): Boolean {
@@ -66,18 +81,31 @@ public actual class Regex actual constructor(pattern: String, options: Set<Regex
         return nativePattern.test(input.toString())
     }
 
-    /** Returns the first match of a regular expression in the [input], beginning at the specified [startIndex].
+    @SinceKotlin("1.5")
+    @ExperimentalStdlibApi
+    public actual fun matchesAt(input: CharSequence, index: Int): Boolean {
+        if (index < 0 || index > input.length) {
+            throw IndexOutOfBoundsException("index out of bounds: $index, input length: ${input.length}")
+        }
+        val pattern = initStickyPattern()
+        pattern.lastIndex = index
+        return pattern.test(input.toString())
+    }
+
+    /**
+     * Returns the first match of a regular expression in the [input], beginning at the specified [startIndex].
      *
      * @param startIndex An index to start search with, by default 0. Must be not less than zero and not greater than `input.length()`
      * @return An instance of [MatchResult] if match was found or `null` otherwise.
      * @throws IndexOutOfBoundsException if [startIndex] is less than zero or greater than the length of the [input] char sequence.
+     * @sample samples.text.Regexps.find
      */
     @Suppress("ACTUAL_FUNCTION_WITH_DEFAULT_ARGUMENTS")
     public actual fun find(input: CharSequence, startIndex: Int = 0): MatchResult? {
         if (startIndex < 0 || startIndex > input.length) {
             throw IndexOutOfBoundsException("Start index out of bounds: $startIndex, input length: ${input.length}")
         }
-        return nativePattern.findNext(input.toString(), startIndex)
+        return nativePattern.findNext(input.toString(), startIndex, nativePattern)
     }
 
     /**
@@ -100,12 +128,18 @@ public actual class Regex actual constructor(pattern: String, options: Set<Regex
      *
      * @return An instance of [MatchResult] if the entire input matches or `null` otherwise.
      */
-    public actual fun matchEntire(input: CharSequence): MatchResult? {
-        if (pattern.startsWith('^') && pattern.endsWith('$'))
-            return find(input)
-        else
-            return Regex("^${pattern.trimStart('^').trimEnd('$')}$", options).find(input)
+    public actual fun matchEntire(input: CharSequence): MatchResult? =
+        initMatchesEntirePattern().findNext(input.toString(), 0, nativePattern)
+
+    @SinceKotlin("1.5")
+    @ExperimentalStdlibApi
+    public actual fun matchAt(input: CharSequence, index: Int): MatchResult? {
+        if (index < 0 || index > input.length) {
+            throw IndexOutOfBoundsException("index out of bounds: $index, input length: ${input.length}")
+        }
+        return initStickyPattern().findNext(input.toString(), index, nativePattern)
     }
+
 
     /**
      * Replaces all occurrences of this regular expression in the specified [input] string with specified [replacement] expression.
@@ -200,7 +234,7 @@ public actual class Regex actual constructor(pattern: String, options: Set<Regex
          */
         public actual fun escapeReplacement(literal: String): String = literal.nativeReplace(replacementEscape, "$$$$")
 
-        private val patternEscape = RegExp("""[-\\^$*+?.()|[\]{}]""", "g")
+        private val patternEscape = RegExp("""[\\^$*+?.()|[\]{}]""", "g")
         private val replacementEscape = RegExp("""\$""", "g")
     }
 }
@@ -218,7 +252,7 @@ public fun Regex_1(pattern: String): Regex = Regex(pattern, emptySet())
 
 
 
-private fun RegExp.findNext(input: String, from: Int): MatchResult? {
+private fun RegExp.findNext(input: String, from: Int, nextPattern: RegExp): MatchResult? {
     this.lastIndex = from
     val match = exec(input)
     if (match == null) return null
@@ -249,6 +283,7 @@ private fun RegExp.findNext(input: String, from: Int): MatchResult? {
                 return groupValues_!!
             }
 
-        override fun next(): MatchResult? = this@findNext.findNext(input, if (range.isEmpty()) range.start + 1 else range.endInclusive + 1)
+        override fun next(): MatchResult? =
+            nextPattern.findNext(input, if (range.isEmpty()) range.start + 1 else range.endInclusive + 1, nextPattern)
     }
 }

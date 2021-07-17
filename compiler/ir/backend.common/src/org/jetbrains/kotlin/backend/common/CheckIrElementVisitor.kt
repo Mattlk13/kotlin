@@ -1,33 +1,23 @@
 /*
- * Copyright 2010-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.backend.common
 
 import org.jetbrains.kotlin.descriptors.CallableMemberDescriptor
-import org.jetbrains.kotlin.descriptors.Visibilities
+import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
+import org.jetbrains.kotlin.ir.IrBuiltIns
 import org.jetbrains.kotlin.ir.IrElement
+import org.jetbrains.kotlin.ir.ObsoleteDescriptorBasedAPI
 import org.jetbrains.kotlin.ir.declarations.*
-import org.jetbrains.kotlin.ir.descriptors.IrBuiltIns
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
 import org.jetbrains.kotlin.ir.symbols.IrSymbol
 import org.jetbrains.kotlin.ir.types.*
-import org.jetbrains.kotlin.ir.util.*
+import org.jetbrains.kotlin.ir.util.isAnnotationClass
+import org.jetbrains.kotlin.ir.util.render
 import org.jetbrains.kotlin.ir.visitors.IrElementVisitorVoid
-import org.jetbrains.kotlin.resolve.descriptorUtil.isEffectivelyExternal
 
 typealias ReportError = (element: IrElement, message: String) -> Unit
 
@@ -36,17 +26,13 @@ class CheckIrElementVisitor(
     val reportError: ReportError,
     val config: IrValidatorConfig
 ) : IrElementVisitorVoid {
-
-    val set = mutableSetOf<IrElement>()
-    val checkedTypes = mutableSetOf<IrType>()
+    private val visitedElements = hashSetOf<IrElement>()
 
     override fun visitElement(element: IrElement) {
-        if (config.ensureAllNodesAreDifferent) {
-            if (set.contains(element))
-                reportError(element, "Duplicate IR node")
-            set.add(element)
+        if (config.ensureAllNodesAreDifferent && !visitedElements.add(element)) {
+            val renderString = if (element is IrTypeParameter) element.render() + " of " + element.parent.render() else element.render()
+            reportError(element, "Duplicate IR node: $renderString")
         }
-        // Nothing to do.
     }
 
     private fun IrExpression.ensureTypesEqual(actualType: IrType, expectedType: IrType) {
@@ -72,7 +58,7 @@ class CheckIrElementVisitor(
 
     private fun IrSymbol.ensureBound(expression: IrExpression) {
         if (!this.isBound && expression.type !is IrDynamicType) {
-            reportError(expression, "Unbound symbol ${this}")
+            reportError(expression, "Unbound symbol $this")
         }
     }
 
@@ -92,6 +78,7 @@ class CheckIrElementVisitor(
     override fun <T> visitConst(expression: IrConst<T>) {
         super.visitConst(expression)
 
+        @Suppress("UNUSED_VARIABLE")
         val naturalType = when (expression.kind) {
             IrConstKind.Null -> {
                 expression.ensureNullable()
@@ -108,12 +95,17 @@ class CheckIrElementVisitor(
             IrConstKind.Double -> irBuiltIns.doubleType
         }
 
+        /*
+        TODO: This check used to have JS inline class helpers. Rewrite it in a common way.
         var type = expression.type
         while (true) {
             val inlinedClass = type.getInlinedClass() ?: break
+            if (getInlineClassUnderlyingType(inlinedClass) == type)
+                break
             type = getInlineClassUnderlyingType(inlinedClass)
         }
         expression.ensureTypesEqual(type, naturalType)
+        */
     }
 
     override fun visitStringConcatenation(expression: IrStringConcatenation) {
@@ -136,9 +128,12 @@ class CheckIrElementVisitor(
         expression.ensureTypeIs(expression.symbol.owner.type)
     }
 
-    override fun visitSetVariable(expression: IrSetVariable) {
-        super.visitSetVariable(expression)
-
+    override fun visitSetValue(expression: IrSetValue) {
+        super.visitSetValue(expression)
+        val declaration = expression.symbol.owner
+        if (declaration is IrValueParameter && !declaration.isAssignable) {
+            reportError(expression, "Assignment to value parameters not marked assignable")
+        }
         expression.ensureTypeIs(irBuiltIns.unitType)
     }
 
@@ -148,8 +143,8 @@ class CheckIrElementVisitor(
         val fieldType = expression.symbol.owner.type
         // TODO: We don't have the proper type substitution yet, so skip generics for now.
         if (fieldType is IrSimpleType &&
-                fieldType.classifier is IrClassSymbol &&
-                fieldType.arguments.isEmpty()
+            fieldType.classifier is IrClassSymbol &&
+            fieldType.arguments.isEmpty()
         ) {
             expression.ensureTypeIs(fieldType)
         }
@@ -253,6 +248,7 @@ class CheckIrElementVisitor(
         expression.ensureTypeIs(irBuiltIns.nothingType)
     }
 
+    @OptIn(ObsoleteDescriptorBasedAPI::class)
     override fun visitClass(declaration: IrClass) {
         super.visitClass(declaration)
 
@@ -296,10 +292,6 @@ class CheckIrElementVisitor(
     override fun visitDeclarationReference(expression: IrDeclarationReference) {
         super.visitDeclarationReference(expression)
 
-        // TODO: Fix unbound external declarations
-        if (expression.symbol.descriptor.isEffectivelyExternal())
-            return
-
         // TODO: Fix unbound dynamic filed declarations
         if (expression is IrFieldAccessExpression) {
             val receiverType = expression.receiver?.type
@@ -310,13 +302,13 @@ class CheckIrElementVisitor(
         expression.symbol.ensureBound(expression)
     }
 
-    override fun visitDeclaration(declaration: IrDeclaration) {
+    override fun visitDeclaration(declaration: IrDeclarationBase) {
         super.visitDeclaration(declaration)
 
         if (declaration is IrOverridableDeclaration<*>) {
             for (overriddenSymbol in declaration.overriddenSymbols) {
                 val overriddenDeclaration = overriddenSymbol.owner as? IrDeclarationWithVisibility ?: continue
-                if (overriddenDeclaration.visibility == Visibilities.PRIVATE) {
+                if (overriddenDeclaration.visibility == DescriptorVisibilities.PRIVATE) {
                     reportError(declaration, "Overrides private declaration $overriddenDeclaration")
                 }
             }
@@ -357,9 +349,6 @@ class CheckIrElementVisitor(
     }
 
     private fun checkType(type: IrType, element: IrElement) {
-        if (type in checkedTypes)
-            return
-
         when (type) {
             is IrSimpleType -> {
                 if (!type.classifier.isBound) {
@@ -367,7 +356,5 @@ class CheckIrElementVisitor(
                 }
             }
         }
-
-        checkedTypes.add(type)
     }
 }

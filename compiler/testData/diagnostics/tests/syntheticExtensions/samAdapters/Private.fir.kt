@@ -1,7 +1,6 @@
-// !WITH_NEW_INFERENCE
 // FILE: KotlinFile.kt
 fun foo(javaClass: JavaClass) {
-    javaClass.<!INAPPLICABLE_CANDIDATE!>doSomething<!> { }
+    javaClass.<!INVISIBLE_REFERENCE!>doSomething<!> { }
 }
 
 // FILE: JavaClass.java

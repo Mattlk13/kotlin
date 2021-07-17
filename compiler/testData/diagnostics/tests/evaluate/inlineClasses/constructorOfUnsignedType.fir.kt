@@ -1,5 +1,6 @@
-// !LANGUAGE: +InlineClasses
-// JAVAC_SKIP
+// !LANGUAGE: +InlineClasses, -JvmInlineValueClasses
+// SKIP_JAVAC
+// ALLOW_KOTLIN_PACKAGE
 
 // FILE: uint.kt
 
@@ -17,28 +18,28 @@ annotation class AnnoUS(val us0: UShort, val us1: UShort)
 annotation class AnnoUI(val ui0: UInt, val ui1: UInt, val ui2: UInt, val ui3: UInt)
 annotation class AnnoUL(val ul0: ULong, val ul1: ULong)
 
-const val ub0 = <!UNRESOLVED_REFERENCE!>UByte<!>(1)
-const val us0 = <!UNRESOLVED_REFERENCE!>UShort<!>(2)
-const val ul0 = <!UNRESOLVED_REFERENCE!>ULong<!>(3)
+const val ub0 = UByte(1)
+const val us0 = UShort(2)
+const val ul0 = ULong(3)
 
-const val ui0 = <!UNRESOLVED_REFERENCE!>UInt<!>(-1)
-const val ui1 = <!UNRESOLVED_REFERENCE!>UInt<!>(0)
-const val ui2 = <!UNRESOLVED_REFERENCE!>UInt<!>(40 + 2)
+const val ui0 = UInt(-1)
+const val ui1 = UInt(0)
+const val ui2 = UInt(40 + 2)
 
-@AnnoUB(<!UNRESOLVED_REFERENCE!>UByte<!>(1), ub0)
+@AnnoUB(UByte(1), ub0)
 fun f0() {}
 
-@AnnoUS(<!UNRESOLVED_REFERENCE!>UShort<!>(2 + 5), us0)
+@AnnoUS(UShort(<!ARGUMENT_TYPE_MISMATCH!>2 + 5<!>), us0)
 fun f1() {}
 
-@AnnoUI(ui0, ui1, ui2, <!UNRESOLVED_REFERENCE!>UInt<!>(100))
+@AnnoUI(ui0, ui1, ui2, UInt(100))
 fun f2() {}
 
-@AnnoUL(ul0, <!UNRESOLVED_REFERENCE!>ULong<!>(5))
+@AnnoUL(ul0, ULong(5))
 fun f3() {}
 
-const val explicit: UInt = <!UNRESOLVED_REFERENCE!>UInt<!>(2)
+const val explicit: UInt = UInt(2)
 
-const val nullable: UInt? = <!UNRESOLVED_REFERENCE!>UInt<!>(3)
+<!TYPE_CANT_BE_USED_FOR_CONST_VAL!>const<!> val nullable: UInt? = UInt(3)
 
-annotation class NullableAnno(val u: UInt?)
+annotation class NullableAnno(val u: <!NULLABLE_TYPE_OF_ANNOTATION_MEMBER!>UInt?<!>)

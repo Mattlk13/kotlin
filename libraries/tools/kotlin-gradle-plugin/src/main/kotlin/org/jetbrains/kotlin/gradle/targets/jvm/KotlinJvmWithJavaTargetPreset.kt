@@ -9,14 +9,14 @@ package org.jetbrains.kotlin.gradle.plugin.mpp
 import org.gradle.api.Project
 import org.gradle.api.plugins.JavaPlugin
 import org.jetbrains.kotlin.gradle.dsl.KotlinJvmOptions
+import org.jetbrains.kotlin.gradle.dsl.KotlinJvmOptionsImpl
 import org.jetbrains.kotlin.gradle.plugin.*
 import org.jetbrains.kotlin.gradle.targets.jvm.KotlinJvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinTasksProvider
 import org.jetbrains.kotlin.gradle.utils.SingleWarningPerBuild
 
 class KotlinJvmWithJavaTargetPreset(
-    private val project: Project,
-    private val kotlinPluginVersion: String
+    private val project: Project
 ) : KotlinTargetPreset<KotlinWithJavaTarget<KotlinJvmOptions>> {
 
     override fun getName(): String = PRESET_NAME
@@ -29,13 +29,13 @@ class KotlinJvmWithJavaTargetPreset(
 
         project.plugins.apply(JavaPlugin::class.java)
 
-        val target = KotlinWithJavaTarget<KotlinJvmOptions>(project, KotlinPlatformType.jvm, name).apply {
+        val target = KotlinWithJavaTarget<KotlinJvmOptions>(project, KotlinPlatformType.jvm, name, { KotlinJvmOptionsImpl() }).apply {
             disambiguationClassifier = name
             preset = this@KotlinJvmWithJavaTargetPreset
         }
 
         AbstractKotlinPlugin.configureTarget(target) { compilation ->
-            Kotlin2JvmSourceSetProcessor(KotlinTasksProvider(name), compilation, kotlinPluginVersion)
+            Kotlin2JvmSourceSetProcessor(KotlinTasksProvider(), compilation)
         }
 
         target.compilations.getByName("test").run {

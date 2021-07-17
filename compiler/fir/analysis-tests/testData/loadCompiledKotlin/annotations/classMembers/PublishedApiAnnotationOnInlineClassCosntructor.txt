@@ -1,4 +1,4 @@
-public final inline class Z : R|kotlin/Any| {
+@R|kotlin/jvm/JvmInline|() public final inline class Z : R|kotlin/Any| {
     public open operator fun equals(other: R|kotlin/Any?|): R|kotlin/Boolean|
 
     public open fun hashCode(): R|kotlin/Int|
@@ -8,6 +8,7 @@ public final inline class Z : R|kotlin/Any| {
     public final val value: R|kotlin/Int|
         public get(): R|kotlin/Int|
 
-    internal constructor(value: R|kotlin/Int|): R|test/Z|
+    @R|kotlin/PublishedApi|() internal constructor(value: R|kotlin/Int|): R|test/Z|
 
 }
+

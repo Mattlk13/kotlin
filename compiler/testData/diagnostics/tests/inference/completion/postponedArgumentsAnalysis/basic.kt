@@ -119,8 +119,8 @@ fun main() {
      * K <: (A) -> Unit -> TypeVariable(_RP1) >: A
      * K >: (C) -> TypeVariable(_R) -> TypeVariable(_RP1) <: C
      */
-    val x12 = selectC(id <!TYPE_MISMATCH, TYPE_MISMATCH, TYPE_MISMATCH, TYPE_MISMATCH, TYPE_MISMATCH, TYPE_MISMATCH, TYPE_MISMATCH, TYPE_MISMATCH, TYPE_MISMATCH!>{ <!DEBUG_INFO_EXPRESSION_TYPE("C")!>it<!> }<!>, id <!TYPE_MISMATCH, TYPE_MISMATCH, TYPE_MISMATCH, TYPE_MISMATCH!>{ x: B -> }<!><!NO_VALUE_FOR_PARAMETER!>)<!>
-    val x13 = selectA(id <!TYPE_MISMATCH, TYPE_MISMATCH, TYPE_MISMATCH, TYPE_MISMATCH, TYPE_MISMATCH, TYPE_MISMATCH, TYPE_MISMATCH, TYPE_MISMATCH, TYPE_MISMATCH!>{ <!DEBUG_INFO_EXPRESSION_TYPE("A")!>it<!> }<!>, id <!TYPE_MISMATCH, TYPE_MISMATCH, TYPE_MISMATCH, TYPE_MISMATCH!>{ x: C -> }<!><!NO_VALUE_FOR_PARAMETER!>)<!>
+    val x12 = selectC(id <!TYPE_MISMATCH!>{ <!DEBUG_INFO_EXPRESSION_TYPE("C")!>it<!> }<!>, id <!TYPE_MISMATCH!>{ x: B -> }<!><!NO_VALUE_FOR_PARAMETER!>)<!>
+    val x13 = selectA(id <!TYPE_MISMATCH!>{ <!DEBUG_INFO_EXPRESSION_TYPE("A")!>it<!> }<!>, id <!TYPE_MISMATCH!>{ x: C -> }<!><!NO_VALUE_FOR_PARAMETER!>)<!>
     val x14 = selectC(id { <!DEBUG_INFO_EXPRESSION_TYPE("C")!>it<!> }, id { x: A -> }, { x -> x })
     val x15 = selectC(id { <!DEBUG_INFO_EXPRESSION_TYPE("C")!>it<!> }, { x: A -> }, id { x -> x })
     /*
@@ -138,8 +138,8 @@ fun main() {
      * K <: (C) -> Unit -> TypeVariable(_RP1) >: C
      * K == (B) -> Unit -> TypeVariable(_RP1) == B
      */
-    val x17: (C) -> Unit = <!TYPE_MISMATCH, TYPE_MISMATCH!>selectB(id <!TYPE_MISMATCH, TYPE_MISMATCH, TYPE_MISMATCH, TYPE_MISMATCH!>{ <!DEBUG_INFO_EXPRESSION_TYPE("B")!>it<!> }<!>, id <!TYPE_MISMATCH, TYPE_MISMATCH, TYPE_MISMATCH, TYPE_MISMATCH!>{ it }<!>, id<(B) -> Unit> { x -> x })<!>
-    val x18: (C) -> Unit = <!TYPE_MISMATCH!>select(id <!TYPE_MISMATCH, TYPE_MISMATCH, TYPE_MISMATCH, TYPE_MISMATCH, TYPE_MISMATCH, TYPE_MISMATCH, TYPE_MISMATCH, TYPE_MISMATCH, TYPE_MISMATCH!>{ <!DEBUG_INFO_EXPRESSION_TYPE("C")!>it<!> }<!>, <!TYPE_MISMATCH, TYPE_MISMATCH!>{ <!DEBUG_INFO_EXPRESSION_TYPE("C")!>it<!> }<!>, id<(B) -> Unit> { x -> x })<!>
+    val x17: (C) -> Unit = <!TYPE_MISMATCH, TYPE_MISMATCH!>selectB(id <!TYPE_MISMATCH, TYPE_MISMATCH!>{ <!DEBUG_INFO_EXPRESSION_TYPE("B")!>it<!> }<!>, id <!TYPE_MISMATCH, TYPE_MISMATCH!>{ it }<!>, id<(B) -> Unit> { x -> x })<!>
+    val x18: (C) -> Unit = <!TYPE_MISMATCH!>select(id <!TYPE_MISMATCH, TYPE_MISMATCH!>{ <!DEBUG_INFO_EXPRESSION_TYPE("C")!>it<!> }<!>, <!TYPE_MISMATCH!>{ <!DEBUG_INFO_EXPRESSION_TYPE("C")!>it<!> }<!>, id<(B) -> Unit> { x -> x })<!>
 
     // Resolution of extension/non-extension functions combination
     val x19: String.() -> Unit = select(<!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String.() -> kotlin.Unit")!>id { <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.String"), DEBUG_INFO_EXPRESSION_TYPE("kotlin.String")!>this<!> }<!>, <!DEBUG_INFO_EXPRESSION_TYPE("(kotlin.String) -> kotlin.Unit")!>id(fun(x: String) {})<!>)
@@ -153,7 +153,7 @@ fun main() {
     // Convert to extension lambda is impossible because the lambda parameter types aren't specified explicitly
     select(id(fun String.(x: String) {}), id(fun(x: String, y: String) { }), <!TYPE_MISMATCH!>{ <!EXPECTED_PARAMETERS_NUMBER_MISMATCH!>x, <!CANNOT_INFER_PARAMETER_TYPE!>y<!><!> -> x }<!>)
     select(id(id(fun(x: String, y: String) { }), <!TOO_MANY_ARGUMENTS!>fun String.(x: String) {}<!>), { x, y -> x })
-    val x26: Int.(String) -> Int = fun (x: String) = 10 // it must be error, see KT-38439
+    val x26: Int.(String) -> Int = <!TYPE_MISMATCH!>fun (x: String) = 10<!> // it must be error, see KT-38439
     // Receiver must be specified in anonymous function declaration
     val x27: Int.(String) -> Int = id(<!TYPE_MISMATCH!>fun <!EXPECTED_PARAMETERS_NUMBER_MISMATCH!>(<!EXPECTED_PARAMETER_TYPE_MISMATCH!>x: String<!>)<!> = 10<!>)
     select(id<Int.(String) -> Unit> {}, { x: Int, y: String -> x })

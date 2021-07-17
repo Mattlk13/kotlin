@@ -20,7 +20,7 @@ import org.jetbrains.kotlin.js.JavaScript
 import java.io.PrintStream
 import java.io.PrintWriter
 
-// BUNCH: 192
+
 class KotlinCompilerStartupActivity : StartupActivity {
     // Extending PluginException ensures that Exception Analyzer recognizes this as a Kotlin exception
     private class KotlinCompilerException(private val text: String) :
@@ -74,7 +74,7 @@ class KotlinCompilerStartupActivity : StartupActivity {
             override fun fileGenerated(outputRoot: String, relativePath: String) {
                 if (isUnitTestMode()) return
 
-                val ext = FileUtilRt.getExtension(relativePath).toLowerCase()
+                val ext = FileUtilRt.getExtension(relativePath).lowercase()
                 if (FILE_EXTS_WHICH_NEEDS_REFRESH.contains(ext)) {
                     val outFile = "$outputRoot/$relativePath"
                     val virtualFile = LocalFileSystem.getInstance().findFileByPath(outFile)

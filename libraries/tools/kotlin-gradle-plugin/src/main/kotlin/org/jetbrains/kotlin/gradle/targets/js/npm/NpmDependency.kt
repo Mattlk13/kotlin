@@ -21,10 +21,12 @@ import org.jetbrains.kotlin.gradle.targets.js.npm.resolved.KotlinCompilationNpmR
 import java.io.File
 
 data class NpmDependency(
-    internal val project: Project,
+    @Transient
+    internal val project: Project?,
     private val name: String,
     private val version: String,
-    val scope: Scope = Scope.NORMAL
+    val scope: Scope = Scope.NORMAL,
+    val generateExternals: Boolean = false
 ) : SelfResolvingDependency,
     SelfResolvingDependencyInternal,
     ResolvableDependency,
@@ -43,22 +45,6 @@ data class NpmDependency(
     internal val dependencies = mutableSetOf<NpmDependency>()
     internal var resolvedVersion: String? = null
     internal var integrity: String? = null
-
-    fun getDependenciesRecursively(): Set<NpmDependency> {
-        val visited = mutableSetOf<NpmDependency>()
-
-        fun visit(it: NpmDependency) {
-            if (!visited.add(it)) return
-
-            it.dependencies.forEach { child ->
-                visit(child)
-            }
-        }
-
-        visit(this)
-
-        return visited
-    }
 
     override fun resolve(transitive: Boolean): Set<File> =
         resolveProject()
@@ -96,7 +82,7 @@ data class NpmDependency(
     // (it can be called since NpmDependency added to configuration that
     // requires resolve to build package.json, in this case we should just skip this call)
     private fun resolveProject(): KotlinCompilationNpmResolution? {
-        val nodeJs = NodeJsRootPlugin.apply(project.rootProject)
+        val nodeJs = NodeJsRootPlugin.apply(project!!.rootProject)
         return nodeJs.npmResolutionManager.getNpmDependencyResolvedCompilation(this)
     }
 
@@ -104,7 +90,7 @@ data class NpmDependency(
 
     override fun toString() = "$key: $version"
 
-    override fun getFiles(): FileCollection = project.files(resolve(true))
+    override fun getFiles(): FileCollection = project!!.files(resolve(true))
 
     override fun getName() = name
 
@@ -114,7 +100,7 @@ data class NpmDependency(
 
     override fun contentEquals(dependency: Dependency) = this == dependency
 
-    override fun getTargetComponentId() = DefaultLibraryBinaryIdentifier(project.path, key, "npm")
+    override fun getTargetComponentId() = DefaultLibraryBinaryIdentifier(project!!.path, key, "npm")
 
     override fun copy(): Dependency = this.copy(name = name)
 
@@ -127,7 +113,33 @@ data class NpmDependency(
     override fun getReason(): String? = reason
 }
 
-internal fun String.isFileVersion() =
+internal fun directoryNpmDependency(
+    project: Project,
+    name: String,
+    directory: File,
+    scope: NpmDependency.Scope,
+    generateExternals: Boolean
+): NpmDependency {
+    check(directory.isDirectory) {
+        "Dependency on local path should point on directory but $directory found"
+    }
+
+    return NpmDependency(
+        project = project,
+        name = name,
+        version = fileVersion(directory),
+        scope = scope,
+        generateExternals = generateExternals
+    )
+}
+
+internal fun onlyNameNpmDependency(
+    name: String
+): Nothing {
+    throw IllegalArgumentException("NPM dependency '$name' doesn't have version. Please, set version explicitly.")
+}
+
+fun String.isFileVersion() =
     startsWith(FILE_VERSION_PREFIX)
 
 internal fun fileVersion(directory: File): String =

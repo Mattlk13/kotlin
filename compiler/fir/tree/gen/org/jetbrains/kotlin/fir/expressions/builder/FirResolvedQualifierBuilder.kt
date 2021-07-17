@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2021 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -9,8 +9,10 @@ import kotlin.contracts.*
 import org.jetbrains.kotlin.fir.FirSourceElement
 import org.jetbrains.kotlin.fir.builder.FirAnnotationContainerBuilder
 import org.jetbrains.kotlin.fir.builder.FirBuilderDsl
+import org.jetbrains.kotlin.fir.declarations.FirRegularClass
 import org.jetbrains.kotlin.fir.expressions.FirAnnotationCall
 import org.jetbrains.kotlin.fir.expressions.FirResolvedQualifier
+import org.jetbrains.kotlin.fir.expressions.builder.FirAbstractResolvedQualifierBuilder
 import org.jetbrains.kotlin.fir.expressions.builder.FirExpressionBuilder
 import org.jetbrains.kotlin.fir.expressions.impl.FirResolvedQualifierImpl
 import org.jetbrains.kotlin.fir.symbols.impl.FirClassLikeSymbol
@@ -27,15 +29,15 @@ import org.jetbrains.kotlin.name.FqName
  */
 
 @FirBuilderDsl
-class FirResolvedQualifierBuilder : FirAnnotationContainerBuilder, FirExpressionBuilder {
+class FirResolvedQualifierBuilder : FirAbstractResolvedQualifierBuilder, FirAnnotationContainerBuilder, FirExpressionBuilder {
     override var source: FirSourceElement? = null
     override var typeRef: FirTypeRef = FirImplicitTypeRefImpl(null)
     override val annotations: MutableList<FirAnnotationCall> = mutableListOf()
-    lateinit var packageFqName: FqName
-    var relativeClassFqName: FqName? = null
-    var symbol: FirClassLikeSymbol<*>? = null
-    var safe: Boolean by kotlin.properties.Delegates.notNull<Boolean>()
-    val typeArguments: MutableList<FirTypeProjection> = mutableListOf()
+    override lateinit var packageFqName: FqName
+    override var relativeClassFqName: FqName? = null
+    override var symbol: FirClassLikeSymbol<*>? = null
+    override var isNullableLHSForCallableReference: Boolean = false
+    override val typeArguments: MutableList<FirTypeProjection> = mutableListOf()
 
     override fun build(): FirResolvedQualifier {
         return FirResolvedQualifierImpl(
@@ -45,11 +47,25 @@ class FirResolvedQualifierBuilder : FirAnnotationContainerBuilder, FirExpression
             packageFqName,
             relativeClassFqName,
             symbol,
-            safe,
+            isNullableLHSForCallableReference,
             typeArguments,
         )
     }
 
+
+    @Deprecated("Modification of 'classId' has no impact for FirResolvedQualifierBuilder", level = DeprecationLevel.HIDDEN)
+    override var classId: ClassId?
+        get() = throw IllegalStateException()
+        set(_) {
+            throw IllegalStateException()
+        }
+
+    @Deprecated("Modification of 'resolvedToCompanionObject' has no impact for FirResolvedQualifierBuilder", level = DeprecationLevel.HIDDEN)
+    override var resolvedToCompanionObject: Boolean
+        get() = throw IllegalStateException()
+        set(_) {
+            throw IllegalStateException()
+        }
 }
 
 @OptIn(ExperimentalContracts::class)

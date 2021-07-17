@@ -49,17 +49,22 @@ class ExampleAnnotationProcessor : AbstractProcessor() {
         for (element in elements) {
             val packageName = elementUtils.getPackageOf(element).qualifiedName.toString()
             val simpleName = element.simpleName.toString()
-            val generatedJavaClassName = generatedFilePrefix.capitalize() + simpleName.capitalize() + generatedFileSuffix
+            val generatedJavaClassName =
+                generatedFilePrefix.replaceFirstChar(Char::uppercaseChar) +
+                        simpleName.replaceFirstChar(Char::uppercaseChar) +
+                        generatedFileSuffix
 
-            filer.createSourceFile(packageName + '.' + generatedJavaClassName).openWriter().use { with(it) {
-                appendln("package $packageName;")
-                appendln("public final class $generatedJavaClassName {}")
-            }}
+            filer.createSourceFile(packageName + '.' + generatedJavaClassName).openWriter().use {
+                with(it) {
+                    appendLine("package $packageName;")
+                    appendLine("public final class $generatedJavaClassName {}")
+                }
+            }
 
             if (generateKotlinCode && kotlinGenerated != null && element.kind == ElementKind.CLASS) {
                 File(kotlinGenerated, "$simpleName.kt").writer().buffered().use {
-                    it.appendln("package $packageName")
-                    it.appendln("fun $simpleName.customToString() = \"$generatedJavaClassName: \" + toString()")
+                    it.appendLine("package $packageName")
+                    it.appendLine("fun $simpleName.customToString() = \"$generatedJavaClassName: \" + toString()")
                 }
             }
         }

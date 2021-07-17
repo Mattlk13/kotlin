@@ -7,6 +7,7 @@ package org.jetbrains.kotlin.resolve.calls.inference.components
 
 import org.jetbrains.kotlin.descriptors.TypeParameterDescriptor
 import org.jetbrains.kotlin.descriptors.annotations.CompositeAnnotations
+import org.jetbrains.kotlin.resolve.calls.inference.isCaptured
 import org.jetbrains.kotlin.resolve.calls.inference.model.TypeVariableFromCallableDescriptor
 import org.jetbrains.kotlin.resolve.calls.inference.substitute
 import org.jetbrains.kotlin.types.*
@@ -15,13 +16,35 @@ import org.jetbrains.kotlin.types.checker.NewCapturedTypeConstructor
 import org.jetbrains.kotlin.types.checker.intersectTypes
 import org.jetbrains.kotlin.types.model.TypeSubstitutorMarker
 
-interface NewTypeSubstitutor: TypeSubstitutorMarker {
+interface NewTypeSubstitutor : TypeSubstitutorMarker {
     fun substituteNotNullTypeWithConstructor(constructor: TypeConstructor): UnwrappedType?
 
     fun safeSubstitute(type: UnwrappedType): UnwrappedType =
         substitute(type, runCapturedChecks = true, keepAnnotation = true) ?: type
 
     val isEmpty: Boolean
+
+    /**
+     * Returns not null when substitutor manages specific type projection substitution by itself.
+     * Intended for corner cases involving interactions with legacy type substitutor,
+     * please consider using substituteNotNullTypeWithConstructor instead of making manual projection substitutions.
+     */
+    fun substituteArgumentProjection(argument: TypeProjection): TypeProjection? {
+        return null
+    }
+
+    private fun substituteTypeEnhancement(
+        enhancementType: KotlinType,
+        keepAnnotation: Boolean,
+        runCapturedChecks: Boolean
+    ) = when (val type = enhancementType.unwrap()) {
+        is SimpleType -> substitute(type, keepAnnotation, runCapturedChecks) ?: enhancementType
+        is FlexibleType -> {
+            val substitutedLowerBound = substitute(type.lowerBound, keepAnnotation, runCapturedChecks) ?: type.lowerBound
+            val substitutedUpperBound = substitute(type.upperBound, keepAnnotation, runCapturedChecks) ?: type.upperBound
+            KotlinTypeFactory.flexibleType(substitutedLowerBound.lowerIfFlexible(), substitutedUpperBound.upperIfFlexible())
+        }
+    }
 
     private fun substitute(type: UnwrappedType, keepAnnotation: Boolean, runCapturedChecks: Boolean): UnwrappedType? =
         when (type) {
@@ -31,6 +54,10 @@ interface NewTypeSubstitutor: TypeSubstitutorMarker {
             } else {
                 val lowerBound = substitute(type.lowerBound, keepAnnotation, runCapturedChecks)
                 val upperBound = substitute(type.upperBound, keepAnnotation, runCapturedChecks)
+                val enhancement = if (type is TypeWithEnhancement) {
+                    substituteTypeEnhancement(type.enhancement, keepAnnotation, runCapturedChecks)
+                } else null
+
                 if (lowerBound == null && upperBound == null) {
                     null
                 } else {
@@ -38,7 +65,7 @@ interface NewTypeSubstitutor: TypeSubstitutorMarker {
                     KotlinTypeFactory.flexibleType(
                         lowerBound?.lowerIfFlexible() ?: type.lowerBound,
                         upperBound?.upperIfFlexible() ?: type.upperBound
-                    ).inheritEnhancement(type)
+                    ).wrapEnhancement(if (enhancement is TypeWithEnhancement) enhancement.enhancement else enhancement)
                 }
             }
         }
@@ -78,19 +105,19 @@ interface NewTypeSubstitutor: TypeSubstitutorMarker {
 
             val innerType = capturedType.lowerType ?: capturedType.constructor.projection.type.unwrap()
             val substitutedInnerType = substitute(innerType, keepAnnotation, runCapturedChecks = false)
+            val substitutedSuperTypes =
+                capturedType.constructor.supertypes.map { substitute(it, keepAnnotation, runCapturedChecks = false) ?: it }
 
             if (substitutedInnerType != null) {
-                if (innerType is StubType || substitutedInnerType is StubType) {
-                    return NewCapturedType(
+                return if (substitutedInnerType.isCaptured()) substitutedInnerType else {
+                    NewCapturedType(
                         capturedType.captureStatus,
                         NewCapturedTypeConstructor(
                             TypeProjectionImpl(typeConstructor.projection.projectionKind, substitutedInnerType),
                             typeParameter = typeConstructor.typeParameter
-                        ),
+                        ).also { it.initializeSupertypes(substitutedSuperTypes) },
                         lowerType = if (capturedType.lowerType != null) substitutedInnerType else null
                     )
-                } else {
-                    throwExceptionAboutInvalidCapturedSubstitution(capturedType, innerType, substitutedInnerType)
                 }
             }
 
@@ -165,6 +192,13 @@ interface NewTypeSubstitutor: TypeSubstitutorMarker {
             val argument = arguments[index]
 
             if (argument.isStarProjection) continue
+
+            val specialProjectionSubstitution = substituteArgumentProjection(argument)
+            if (specialProjectionSubstitution != null) {
+                newArguments[index] = specialProjectionSubstitution
+                continue
+            }
+
             val substitutedArgumentType = substitute(argument.type.unwrap(), keepAnnotation, runCapturedChecks) ?: continue
 
             newArguments[index] = TypeProjectionImpl(argument.projectionKind, substitutedArgumentType)
@@ -205,24 +239,39 @@ class FreshVariableNewTypeSubstitutor(val freshVariables: List<TypeVariableFromC
     }
 }
 
-fun createCompositeSubstitutor(appliedFirst: NewTypeSubstitutor, appliedLast: TypeSubstitutor): NewTypeSubstitutor {
-    if (appliedLast.isEmpty) return appliedFirst
+fun createCompositeSubstitutor(appliedFirst: TypeSubstitutor, appliedLast: NewTypeSubstitutor): NewTypeSubstitutor {
+    if (appliedFirst.isEmpty) return appliedLast
 
     return object : NewTypeSubstitutor {
-        override fun substituteNotNullTypeWithConstructor(constructor: TypeConstructor): UnwrappedType? {
-            val substitutedOnce = appliedFirst.substituteNotNullTypeWithConstructor(constructor)
+        override fun substituteArgumentProjection(argument: TypeProjection): TypeProjection? {
+            val substitutedProjection = appliedFirst.substitute(argument)
 
-            return if (substitutedOnce != null) {
-                appliedLast.substitute(substitutedOnce.unwrap())
+            if (substitutedProjection == null || substitutedProjection === argument) {
+                return null
+            }
+
+            if (substitutedProjection.isStarProjection)
+                return substitutedProjection
+
+            val resultingType = appliedLast.safeSubstitute(substitutedProjection.type.unwrap())
+            return TypeProjectionImpl(substitutedProjection.projectionKind, resultingType)
+        }
+
+        override fun substituteNotNullTypeWithConstructor(constructor: TypeConstructor): UnwrappedType? {
+            val substitutedOnce = constructor.declarationDescriptor?.defaultType?.let {
+                appliedFirst.substitute(it)
+            }
+
+            return if (substitutedOnce == null) {
+                appliedLast.substituteNotNullTypeWithConstructor(constructor)
             } else {
-                constructor.declarationDescriptor?.defaultType?.let {
-                    appliedLast.substitute(it)
-                }
+                appliedLast.safeSubstitute(substitutedOnce)
             }
         }
 
-        override val isEmpty: Boolean get() = appliedFirst.isEmpty && appliedLast.isEmpty
+        override val isEmpty: Boolean
+            get() = appliedFirst.isEmpty && appliedLast.isEmpty
     }
 }
 
-fun NewTypeSubstitutor.composeWith(appliedAfter: TypeSubstitutor) = createCompositeSubstitutor(this, appliedAfter)
+fun TypeSubstitutor.composeWith(appliedAfter: NewTypeSubstitutor) = createCompositeSubstitutor(this, appliedAfter)

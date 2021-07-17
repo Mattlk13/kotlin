@@ -19,6 +19,7 @@ import org.jetbrains.kotlin.idea.completion.handlers.KotlinClassifierInsertHandl
 import org.jetbrains.kotlin.idea.completion.handlers.KotlinFunctionInsertHandler
 import org.jetbrains.kotlin.idea.core.completion.DeclarationLookupObject
 import org.jetbrains.kotlin.idea.core.completion.PackageLookupObject
+import org.jetbrains.kotlin.idea.core.unwrapIfFakeOverride
 import org.jetbrains.kotlin.idea.highlighter.dsl.DslHighlighterExtension
 import org.jetbrains.kotlin.load.java.JvmAbi
 import org.jetbrains.kotlin.load.java.descriptors.JavaClassDescriptor
@@ -30,7 +31,6 @@ import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.descriptorUtil.isExtension
 import org.jetbrains.kotlin.synthetic.SamAdapterExtensionFunctionDescriptor
 import org.jetbrains.kotlin.synthetic.SyntheticJavaPropertyDescriptor
-import org.jetbrains.kotlin.utils.addToStdlib.firstNotNullResult
 import java.awt.Font
 
 class BasicLookupElementFactory(
@@ -51,11 +51,12 @@ class BasicLookupElementFactory(
         includeClassTypeArguments: Boolean = true,
         parametersAndTypeGrayed: Boolean = false
     ): LookupElement {
-        val _descriptor = if (descriptor is CallableMemberDescriptor)
-            DescriptorUtils.unwrapFakeOverride(descriptor)
-        else
-            descriptor
-        return createLookupElementUnwrappedDescriptor(_descriptor, qualifyNestedClasses, includeClassTypeArguments, parametersAndTypeGrayed)
+        return createLookupElementUnwrappedDescriptor(
+            descriptor.unwrapIfFakeOverride(),
+            qualifyNestedClasses,
+            includeClassTypeArguments,
+            parametersAndTypeGrayed
+        )
     }
 
     fun createLookupElementForJavaClass(
@@ -275,7 +276,7 @@ class BasicLookupElementFactory(
     }
 
     fun appendContainerAndReceiverInformation(descriptor: CallableDescriptor, appendTailText: (String) -> Unit) {
-        val information = CompletionInformationProvider.EP_NAME.extensions.firstNotNullResult {
+        val information = CompletionInformationProvider.EP_NAME.extensions.firstNotNullOfOrNull {
             it.getContainerAndReceiverInformation(descriptor)
         }
 

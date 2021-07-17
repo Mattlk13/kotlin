@@ -15,7 +15,7 @@ fun foo(): Int {
         }
         k.run()
         val d: Int = c
-        return a <!INAPPLICABLE_CANDIDATE!>+<!> d
+        return a <!UNSAFE_OPERATOR_CALL!>+<!> d
     }
     else return -1
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -216,6 +216,21 @@ class MapTest {
         assertEquals(mapOf(8 to "Mells"), m3)
     }
 
+    @Test fun flatMap() {
+        fun <T> list(entry: Map.Entry<T, T>): List<T> = listOf(entry.key, entry.value)
+        fun <T> seq(entry: Map.Entry<T, T>): Sequence<T> = sequenceOf(entry.key, entry.value)
+        val m = mapOf("x" to 1, "y" to 0)
+        val result1 = m.flatMap { list(it) }
+        val result2 = m.flatMap { seq(it) }
+        val result3 = m.flatMap(::list)
+        val result4 = m.flatMap(::seq)
+        val expected = listOf("x", 1, "y", 0)
+        assertEquals(expected, result1)
+        assertEquals(expected, result2)
+        assertEquals(expected, result3)
+        assertEquals(expected, result4)
+    }
+
     @Test fun createFrom() {
         val pairs = arrayOf("a" to 1, "b" to 2)
         val expected = mapOf(*pairs)
@@ -269,7 +284,7 @@ class MapTest {
     }
 
     @Test fun createWithSelectorForKeyAndValue() {
-        val map = listOf("a", "bb", "ccc").associateBy({ it.length }, { it.toUpperCase() })
+        val map = listOf("a", "bb", "ccc").associateBy({ it.length }, { it.uppercase() })
         assertEquals(3, map.size)
         assertEquals("A", map[1])
         assertEquals("BB", map[2])
@@ -277,7 +292,7 @@ class MapTest {
     }
 
     @Test fun createWithPairSelector() {
-        val map = listOf("a", "bb", "ccc").associate { it.length to it.toUpperCase() }
+        val map = listOf("a", "bb", "ccc").associate { it.length to it.uppercase() }
         assertEquals(3, map.size)
         assertEquals("A", map[1])
         assertEquals("BB", map[2])
@@ -384,6 +399,92 @@ class MapTest {
         assertEquals(1, filteredByValue.size)
         assertEquals(3, filteredByValue["b"])
     }
+
+    @Test
+    fun entriesCovariantContains() {
+        // Based on https://youtrack.jetbrains.com/issue/KT-42428.
+        fun doTest(implName: String, map: Map<String, Int>, key: String, value: Int) {
+            class SimpleEntry<out K, out V>(override val key: K, override val value: V) : Map.Entry<K, V> {
+                override fun toString(): String = "$key=$value"
+                override fun hashCode(): Int = key.hashCode() xor value.hashCode()
+                override fun equals(other: Any?): Boolean =
+                    other is Map.Entry<*, *> && key == other.key && value == other.value
+            }
+
+            val mapDescription = "$implName: ${map::class}"
+
+            assertTrue(map.keys.contains(key), mapDescription)
+            assertEquals(value, map[key], mapDescription)
+            // This one requires special efforts to make it work this way.
+            // map.entries can in fact be `MutableSet<MutableMap.MutableEntry>`,
+            // which [contains] method takes [MutableEntry], so the compiler may generate special bridge
+            // returning false for values that aren't [MutableEntry] (including [SimpleEntry]).
+            assertTrue(map.entries.contains(SimpleEntry(key, value)), mapDescription)
+            assertTrue(map.entries.toSet().contains(SimpleEntry(key, value)), "$mapDescription: reference")
+
+            assertFalse(map.entries.contains(null as Any?), "$mapDescription: contains null")
+            assertFalse(map.entries.contains("not an entry" as Any?), "$mapDescription: contains not an entry")
+        }
+
+        val mapLetterToIndex = ('a'..'z').mapIndexed { i, c -> "$c" to i }.toMap()
+        doTest("default read-only", mapLetterToIndex, "h", 7)
+        doTest("default mutable", mapLetterToIndex.toMutableMap(), "b", 1)
+        doTest("HashMap", mapLetterToIndex.toMap(HashMap()), "c", 2)
+        doTest("LinkedHashMap", mapLetterToIndex.toMap(LinkedHashMap()), "d", 3)
+
+        val builtMap = buildMap {
+            putAll(mapLetterToIndex)
+            doTest("MapBuilder", this, "z", 25)
+        }
+        doTest("built Map", builtMap, "y", 24)
+    }
+
+    @Test
+    fun entriesCovariantRemove() {
+        fun doTest(implName: String, map: MutableMap<String, Int>, key: String, value: Int) {
+            class SimpleEntry<out K, out V>(override val key: K, override val value: V) : Map.Entry<K, V> {
+                override fun toString(): String = "$key=$value"
+                override fun hashCode(): Int = key.hashCode() xor value.hashCode()
+                override fun equals(other: Any?): Boolean =
+                    other is Map.Entry<*, *> && key == other.key && value == other.value
+            }
+
+            val mapDescription = "$implName: ${map::class}"
+
+            assertTrue(map.entries.toMutableSet().remove(SimpleEntry(key, value) as Map.Entry<*, *>), "$mapDescription: reference")
+            assertTrue(map.entries.remove(SimpleEntry(key, value) as Map.Entry<*, *>), mapDescription)
+
+            assertFalse(map.entries.remove(null as Any?), "$mapDescription: remove null")
+            assertFalse(map.entries.remove("not an entry" as Any?), "$mapDescription: remove not an entry")
+        }
+
+        val mapLetterToIndex = ('a'..'z').mapIndexed { i, c -> "$c" to i }.toMap()
+        doTest("default mutable", mapLetterToIndex.toMutableMap(), "b", 1)
+        doTest("HashMap", mapLetterToIndex.toMap(HashMap()), "c", 2)
+        doTest("LinkedHashMap", mapLetterToIndex.toMap(LinkedHashMap()), "d", 3)
+
+        val builtMap = buildMap {
+            putAll(mapLetterToIndex)
+            doTest("MapBuilder", this, "z", 25)
+        }
+    }
+
+    @Test
+    fun firstNotNullOf() {
+        val map = mapOf("Alice" to 20, "Tom" to 13, "Bob" to 18)
+
+        val firstAdult = map.firstNotNullOf { (name, age) -> name.takeIf { age >= 18 } }
+        val firstAdultOrNull = map.firstNotNullOfOrNull { (name, age) -> name.takeIf { age >= 18 } }
+
+        assertEquals("Alice", firstAdult)
+        assertEquals("Alice", firstAdultOrNull)
+
+        assertFailsWith<NoSuchElementException> { val firstChild = map.firstNotNullOf { (name, age) -> name.takeIf { age <= 11 } } }
+        val firstChildOrNull = map.firstNotNullOfOrNull { (name, age) -> name.takeIf { age <= 11 } }
+
+        assertNull(firstChildOrNull)
+    }
+
 
     fun testPlusAssign(doPlusAssign: (MutableMap<String, Int>) -> Unit) {
         val map = hashMapOf("a" to 1, "b" to 2)

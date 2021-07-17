@@ -1,3 +1,4 @@
+// FIR_IDENTICAL
 // !LANGUAGE: +NewInference
 // !DIAGNOSTICS: -UNUSED_VARIABLE -ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE -UNUSED_VALUE -UNUSED_PARAMETER -UNUSED_EXPRESSION -EXTENSION_SHADOWED_BY_MEMBER
 // SKIP_TXT
@@ -6,8 +7,8 @@
  * KOTLIN DIAGNOSTICS SPEC TEST (POSITIVE)
  *
  * SPEC VERSION: 0.1-268
- * PLACE: overload-resolution, building-the-overload-candidate-set-ocs, operator-call -> paragraph 2 -> sentence 3
- * RELEVANT PLACES: overload-resolution, building-the-overload-candidate-set-ocs, call-with-an-explicit-receiver -> paragraph 6 -> sentence 4
+ * MAIN LINK: overload-resolution, building-the-overload-candidate-set-ocs, operator-call -> paragraph 2 -> sentence 3
+ * PRIMARY LINKS: overload-resolution, building-the-overload-candidate-set-ocs, call-with-an-explicit-receiver -> paragraph 6 -> sentence 4
  * overload-resolution, building-the-overload-candidate-set-ocs, operator-call -> paragraph 4 -> sentence 1
  * NUMBER: 4
  * DESCRIPTION: Extension callables declared in the package scope
@@ -25,7 +26,7 @@ operator fun Case.E.plus(value: Int) =  Case().Inv()
 operator fun Case.Inv.invoke(i: Int) = 1
 
 
-// FILE: TestCase1.kt
+// FILE: TestCase11.kt
 // TESTCASE NUMBER: 1
 package testPackCase1
 import libPackage.*
@@ -53,7 +54,7 @@ class Case() {
     }
 }
 
-// FILE: Lib1.kt
+// FILE: Lib11.kt
 // TESTCASE NUMBER: 2
 package libPackage1
 import testPackCase2.Case
@@ -64,7 +65,7 @@ operator fun Case.E.plus(value: Int) =  Inv()
 operator fun Case.Inv.invoke(i: Int) = 1
 
 
-// FILE: Lib2.kt
+// FILE: Lib21.kt
 // TESTCASE NUMBER: 2
 package testPackCase2
 import testPackCase2.Case
@@ -75,7 +76,7 @@ operator fun Case.E.plus(value: Int) =  Inv()
 operator fun Case.Inv.invoke(i: Int) = 1
 
 
-// FILE: TestCase1.kt
+// FILE: TestCase12.kt
 // TESTCASE NUMBER: 2
 package testPackCase2
 import libPackage1.*
@@ -143,7 +144,7 @@ class Case() {
     }
 }
 
-// FILE: Lib1.kt
+// FILE: Lib12.kt
 // TESTCASE NUMBER: 4
 package libPackage1
 import testPackCase4.Case
@@ -154,7 +155,7 @@ operator fun Case.E.plusAssign(value: Int) {}
 operator fun Case.Inv.invoke(i: Int) {}
 
 
-// FILE: Lib2.kt
+// FILE: Lib22.kt
 // TESTCASE NUMBER: 4
 package testPackCase4
 import testPackCase4.Case

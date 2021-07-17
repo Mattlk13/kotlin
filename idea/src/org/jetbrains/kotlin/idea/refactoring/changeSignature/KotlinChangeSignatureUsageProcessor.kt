@@ -10,6 +10,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Ref
 import com.intellij.psi.*
 import com.intellij.psi.codeStyle.JavaCodeStyleManager
+import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.searches.MethodReferencesSearch
 import com.intellij.psi.search.searches.OverridingMethodsSearch
 import com.intellij.psi.search.searches.ReferencesSearch
@@ -20,6 +21,7 @@ import com.intellij.refactoring.rename.UnresolvableCollisionUsageInfo
 import com.intellij.refactoring.util.CommonRefactoringUtil
 import com.intellij.refactoring.util.MoveRenameUsageInfo
 import com.intellij.refactoring.util.RefactoringUIUtil
+import com.intellij.refactoring.util.TextOccurrencesUtil
 import com.intellij.usageView.UsageInfo
 import com.intellij.util.containers.MultiMap
 import org.jetbrains.kotlin.asJava.elements.KtLightMethod
@@ -84,7 +86,7 @@ class KotlinChangeSignatureUsageProcessor : ChangeSignatureUsageProcessor {
         methodDescriptor = methodDescriptor,
         name = "",
         newReturnTypeInfo = KotlinTypeInfo(true),
-        newVisibility = Visibilities.DEFAULT_VISIBILITY,
+        newVisibility = DescriptorVisibilities.DEFAULT_VISIBILITY,
         parameterInfos = emptyList<KotlinParameterInfo>(),
         receiver = null,
         context = method
@@ -269,7 +271,10 @@ class KotlinChangeSignatureUsageProcessor : ChangeSignatureUsageProcessor {
         val oldName = changeInfo.oldName
 
         if (oldName != null) {
-            BunchedDeprecation.findNonCodeUsages(functionPsi, oldName, true, true, changeInfo.newName, result)
+            TextOccurrencesUtil.findNonCodeUsages(
+                functionPsi, GlobalSearchScope.projectScope(functionPsi.project),
+                oldName, true, true, changeInfo.newName, result
+            )
         }
 
         val oldParameters = (functionPsi as KtNamedDeclaration).getValueParameters()
@@ -784,7 +789,7 @@ class KotlinChangeSignatureUsageProcessor : ChangeSignatureUsageProcessor {
                     val prefix = if (declaration != null) RefactoringUIUtil.getDescription(declaration, true) else originalRef.text
                     result.putValue(
                         originalRef,
-                        KotlinBundle.message("text.0.will.no.longer.be.accessible.after.signature.change", prefix.capitalize())
+                        KotlinBundle.message("text.0.will.no.longer.be.accessible.after.signature.change", prefix.replaceFirstChar(Char::uppercaseChar))
                     )
                 }
             }
@@ -995,8 +1000,12 @@ class KotlinChangeSignatureUsageProcessor : ChangeSignatureUsageProcessor {
                     baseFunction = baseFunction.createPrimaryConstructorIfAbsent()
                 }
                 val resolutionFacade = baseFunction.getResolutionFacade()
-                val baseFunctionDescriptor = baseFunction.unsafeResolveToDescriptor() as FunctionDescriptor
-                val methodDescriptor = KotlinChangeSignatureData(baseFunctionDescriptor, baseFunction, listOf(baseFunctionDescriptor))
+                val baseCallableDescriptor = baseFunction.unsafeResolveToDescriptor() as CallableDescriptor
+                if (baseCallableDescriptor !is FunctionDescriptor) {
+                    return false
+                }
+
+                val methodDescriptor = KotlinChangeSignatureData(baseCallableDescriptor, baseFunction, listOf(baseCallableDescriptor))
 
                 val dummyClass = JavaPsiFacade.getElementFactory(method.project).createClass("Dummy")
                 val dummyMethod = createJavaMethod(method, dummyClass)

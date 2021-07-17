@@ -16,20 +16,18 @@
 
 package org.jetbrains.kotlin.ir.expressions
 
+import org.jetbrains.kotlin.ir.symbols.IrValueParameterSymbol
 import org.jetbrains.kotlin.ir.symbols.IrValueSymbol
 import org.jetbrains.kotlin.ir.symbols.IrVariableSymbol
 
-interface IrValueAccessExpression : IrDeclarationReference {
-    override val symbol: IrValueSymbol
-    val origin: IrStatementOrigin?
+abstract class IrValueAccessExpression : IrDeclarationReference() {
+    abstract override val symbol: IrValueSymbol
+    abstract val origin: IrStatementOrigin?
 }
 
-interface IrGetValue : IrValueAccessExpression, IrExpressionWithCopy {
-    override fun copy(): IrGetValue
-}
+abstract class IrGetValue : IrValueAccessExpression()
 
-interface IrSetVariable : IrValueAccessExpression {
-    override val symbol: IrVariableSymbol
-    var value: IrExpression
+abstract class IrSetValue : IrValueAccessExpression() {
+    abstract override val symbol: IrValueSymbol
+    abstract var value: IrExpression
 }
-

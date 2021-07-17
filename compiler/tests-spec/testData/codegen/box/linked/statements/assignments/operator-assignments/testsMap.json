@@ -6,13 +6,65 @@
           "specVersion": "0.1-222",
           "casesNumber": 0,
           "description": "A +\u003d B is exactly the same as A.plusAssign(B) or A \u003d A.plus(B) (applied in order)",
-          "unexpectedBehaviour": false
+          "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/neg/1.2.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "main"
         },
         {
           "specVersion": "0.1-222",
           "casesNumber": 0,
           "description": "A +\u003d B is exactly the same as A.plusAssign(B) or A \u003d A.plus(B) (applied in order)",
-          "unexpectedBehaviour": false
+          "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/neg/1.1.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "main"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/neg/2.1.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver and infix functions",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/neg/2.5.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver and infix functions",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/neg/2.4.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/neg/2.3.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/neg/2.2.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver and infix functions",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/neg/2.6.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
         }
       ],
       "2": [
@@ -21,14 +73,64 @@
           "casesNumber": 0,
           "description": "A +\u003d B is exactly the same as A.plusAssign(B) or A \u003d A.plus(B) (applied in order)",
           "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/neg/1.2.kt",
-          "unexpectedBehaviour": false
+          "unexpectedBehaviour": false,
+          "linkType": "primary"
         },
         {
           "specVersion": "0.1-222",
           "casesNumber": 0,
           "description": "A +\u003d B is exactly the same as A.plusAssign(B) or A \u003d A.plus(B) (applied in order)",
           "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/neg/1.1.kt",
-          "unexpectedBehaviour": false
+          "unexpectedBehaviour": false,
+          "linkType": "primary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/neg/2.1.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver and infix functions",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/neg/2.5.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver and infix functions",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/neg/2.4.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/neg/2.3.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/neg/2.2.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver and infix functions",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/neg/2.6.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
         }
       ],
       "3": [
@@ -37,7 +139,56 @@
           "casesNumber": 0,
           "description": "A +\u003d B is exactly the same as A.plusAssign(B) or A \u003d A.plus(B) (applied in order)",
           "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/neg/1.2.kt",
-          "unexpectedBehaviour": false
+          "unexpectedBehaviour": false,
+          "linkType": "primary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/neg/2.1.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver and infix functions",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/neg/2.5.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver and infix functions",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/neg/2.4.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/neg/2.3.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/neg/2.2.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver and infix functions",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/neg/2.6.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
         }
       ],
       "10": [
@@ -45,13 +196,17 @@
           "specVersion": "0.1-222",
           "casesNumber": 0,
           "description": "A /\u003d B is exactly the same as A.divAssign(B) or A \u003d A.div(B) (applied in order)",
-          "unexpectedBehaviour": false
+          "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/neg/10.2.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "main"
         },
         {
           "specVersion": "0.1-222",
           "casesNumber": 0,
           "description": "A /\u003d B is exactly the same as A.divAssign(B) or A \u003d A.div(B) (applied in order)",
-          "unexpectedBehaviour": false
+          "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/neg/10.1.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "main"
         }
       ],
       "11": [
@@ -60,14 +215,16 @@
           "casesNumber": 0,
           "description": "A /\u003d B is exactly the same as A.divAssign(B) or A \u003d A.div(B) (applied in order)",
           "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/neg/10.2.kt",
-          "unexpectedBehaviour": false
+          "unexpectedBehaviour": false,
+          "linkType": "primary"
         },
         {
           "specVersion": "0.1-222",
           "casesNumber": 0,
           "description": "A /\u003d B is exactly the same as A.divAssign(B) or A \u003d A.div(B) (applied in order)",
           "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/neg/10.1.kt",
-          "unexpectedBehaviour": false
+          "unexpectedBehaviour": false,
+          "linkType": "primary"
         }
       ],
       "12": [
@@ -76,7 +233,8 @@
           "casesNumber": 0,
           "description": "A /\u003d B is exactly the same as A.divAssign(B) or A \u003d A.div(B) (applied in order)",
           "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/neg/10.2.kt",
-          "unexpectedBehaviour": false
+          "unexpectedBehaviour": false,
+          "linkType": "primary"
         }
       ],
       "13": [
@@ -84,13 +242,17 @@
           "specVersion": "0.1-222",
           "casesNumber": 0,
           "description": "A %\u003d B is exactly the same as A.remAssign(B) or A \u003d A.rem(B) (applied in order)",
-          "unexpectedBehaviour": false
+          "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/neg/13.1.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "main"
         },
         {
           "specVersion": "0.1-222",
           "casesNumber": 0,
           "description": "A %\u003d B is exactly the same as A.remAssign(B) or A \u003d A.rem(B) (applied in order)",
-          "unexpectedBehaviour": false
+          "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/neg/13.2.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "main"
         }
       ],
       "14": [
@@ -99,14 +261,16 @@
           "casesNumber": 0,
           "description": "A %\u003d B is exactly the same as A.remAssign(B) or A \u003d A.rem(B) (applied in order)",
           "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/neg/13.1.kt",
-          "unexpectedBehaviour": false
+          "unexpectedBehaviour": false,
+          "linkType": "primary"
         },
         {
           "specVersion": "0.1-222",
           "casesNumber": 0,
           "description": "A %\u003d B is exactly the same as A.remAssign(B) or A \u003d A.rem(B) (applied in order)",
           "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/neg/13.2.kt",
-          "unexpectedBehaviour": false
+          "unexpectedBehaviour": false,
+          "linkType": "primary"
         }
       ],
       "7": [
@@ -114,13 +278,17 @@
           "specVersion": "0.1-222",
           "casesNumber": 0,
           "description": "A *\u003d B is exactly the same as A.timesAssign(B) or A \u003d A.times(B) (applied in order)",
-          "unexpectedBehaviour": false
+          "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/neg/7.2.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "main"
         },
         {
           "specVersion": "0.1-222",
           "casesNumber": 0,
           "description": "A *\u003d B is exactly the same as A.timesAssign(B) or A \u003d A.times(B) (applied in order)",
-          "unexpectedBehaviour": false
+          "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/neg/7.1.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "main"
         }
       ],
       "8": [
@@ -129,14 +297,16 @@
           "casesNumber": 0,
           "description": "A *\u003d B is exactly the same as A.timesAssign(B) or A \u003d A.times(B) (applied in order)",
           "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/neg/7.2.kt",
-          "unexpectedBehaviour": false
+          "unexpectedBehaviour": false,
+          "linkType": "primary"
         },
         {
           "specVersion": "0.1-222",
           "casesNumber": 0,
           "description": "A *\u003d B is exactly the same as A.timesAssign(B) or A \u003d A.times(B) (applied in order)",
           "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/neg/7.1.kt",
-          "unexpectedBehaviour": false
+          "unexpectedBehaviour": false,
+          "linkType": "primary"
         }
       ],
       "9": [
@@ -145,7 +315,8 @@
           "casesNumber": 0,
           "description": "A *\u003d B is exactly the same as A.timesAssign(B) or A \u003d A.times(B) (applied in order)",
           "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/neg/7.2.kt",
-          "unexpectedBehaviour": false
+          "unexpectedBehaviour": false,
+          "linkType": "primary"
         }
       ],
       "4": [
@@ -153,13 +324,17 @@
           "specVersion": "0.1-253",
           "casesNumber": 0,
           "description": "A -\u003d B is exactly the same as A.minusAssign(B) or A \u003d A.minus(B) (applied in order)",
-          "unexpectedBehaviour": false
+          "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/neg/4.1.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "main"
         },
         {
           "specVersion": "0.1-253",
           "casesNumber": 0,
           "description": "A -\u003d B is exactly the same as A.minusAssign(B) or A \u003d A.minus(B) (applied in order)",
-          "unexpectedBehaviour": false
+          "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/neg/4.2.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "main"
         }
       ],
       "5": [
@@ -168,14 +343,16 @@
           "casesNumber": 0,
           "description": "A -\u003d B is exactly the same as A.minusAssign(B) or A \u003d A.minus(B) (applied in order)",
           "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/neg/4.1.kt",
-          "unexpectedBehaviour": false
+          "unexpectedBehaviour": false,
+          "linkType": "primary"
         },
         {
           "specVersion": "0.1-253",
           "casesNumber": 0,
           "description": "A -\u003d B is exactly the same as A.minusAssign(B) or A \u003d A.minus(B) (applied in order)",
           "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/neg/4.2.kt",
-          "unexpectedBehaviour": false
+          "unexpectedBehaviour": false,
+          "linkType": "primary"
         }
       ],
       "6": [
@@ -184,7 +361,8 @@
           "casesNumber": 0,
           "description": "A -\u003d B is exactly the same as A.minusAssign(B) or A \u003d A.minus(B) (applied in order)",
           "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/neg/4.2.kt",
-          "unexpectedBehaviour": false
+          "unexpectedBehaviour": false,
+          "linkType": "primary"
         }
       ],
       "15": [
@@ -193,7 +371,8 @@
           "casesNumber": 0,
           "description": "A %\u003d B is exactly the same as A.remAssign(B) or A \u003d A.rem(B) (applied in order)",
           "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/neg/13.2.kt",
-          "unexpectedBehaviour": false
+          "unexpectedBehaviour": false,
+          "linkType": "primary"
         }
       ]
     },
@@ -203,13 +382,97 @@
           "specVersion": "0.1-222",
           "casesNumber": 0,
           "description": "A +\u003d B is exactly the same as A.plusAssign(B) or A \u003d A.plus(B) (applied in order)",
-          "unexpectedBehaviour": false
+          "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/pos/1.2.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "main"
         },
         {
           "specVersion": "0.1-222",
           "casesNumber": 0,
           "description": "A +\u003d B is exactly the same as A.plusAssign(B) or A \u003d A.plus(B) (applied in order)",
-          "unexpectedBehaviour": false
+          "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/pos/1.1.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "main"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver and inline operator function",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/pos/2.10.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/pos/2.1.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver and infix functions",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/pos/2.5.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/pos/2.4.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver and inline operator function",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/pos/2.9.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/pos/2.8.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver and infix functions",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/pos/2.7.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/pos/2.3.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/pos/2.2.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver and infix functions",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/pos/2.6.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
         }
       ],
       "2": [
@@ -218,14 +481,96 @@
           "casesNumber": 0,
           "description": "A +\u003d B is exactly the same as A.plusAssign(B) or A \u003d A.plus(B) (applied in order)",
           "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/pos/1.2.kt",
-          "unexpectedBehaviour": false
+          "unexpectedBehaviour": false,
+          "linkType": "primary"
         },
         {
           "specVersion": "0.1-222",
           "casesNumber": 0,
           "description": "A +\u003d B is exactly the same as A.plusAssign(B) or A \u003d A.plus(B) (applied in order)",
           "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/pos/1.1.kt",
-          "unexpectedBehaviour": false
+          "unexpectedBehaviour": false,
+          "linkType": "primary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver and inline operator function",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/pos/2.10.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/pos/2.1.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver and infix functions",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/pos/2.5.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/pos/2.4.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver and inline operator function",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/pos/2.9.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/pos/2.8.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver and infix functions",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/pos/2.7.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/pos/2.3.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/pos/2.2.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver and infix functions",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/pos/2.6.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
         }
       ],
       "3": [
@@ -234,7 +579,88 @@
           "casesNumber": 0,
           "description": "A +\u003d B is exactly the same as A.plusAssign(B) or A \u003d A.plus(B) (applied in order)",
           "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/pos/1.2.kt",
-          "unexpectedBehaviour": false
+          "unexpectedBehaviour": false,
+          "linkType": "primary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver and inline operator function",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/pos/2.10.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/pos/2.1.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver and infix functions",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/pos/2.5.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/pos/2.4.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver and inline operator function",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/pos/2.9.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/pos/2.8.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver and infix functions",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/pos/2.7.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/pos/2.3.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/pos/2.2.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
+        },
+        {
+          "specVersion": "0.1-488",
+          "casesNumber": 0,
+          "description": "nullable receiver and infix functions",
+          "path": "compiler/tests-spec/testData/codegen/box/linked/overload-resolution/building-the-overload-candidate-set-ocs/operator-call/p-1/pos/2.6.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "secondary"
         }
       ],
       "10": [
@@ -242,13 +668,17 @@
           "specVersion": "0.1-222",
           "casesNumber": 0,
           "description": "A /\u003d B is exactly the same as A.divAssign(B) or A \u003d A.div(B) (applied in order)",
-          "unexpectedBehaviour": false
+          "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/pos/10.2.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "main"
         },
         {
           "specVersion": "0.1-222",
           "casesNumber": 0,
           "description": "A /\u003d B is exactly the same as A.divAssign(B) or A \u003d A.div(B) (applied in order)",
-          "unexpectedBehaviour": false
+          "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/pos/10.1.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "main"
         }
       ],
       "11": [
@@ -257,14 +687,16 @@
           "casesNumber": 0,
           "description": "A /\u003d B is exactly the same as A.divAssign(B) or A \u003d A.div(B) (applied in order)",
           "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/pos/10.2.kt",
-          "unexpectedBehaviour": false
+          "unexpectedBehaviour": false,
+          "linkType": "primary"
         },
         {
           "specVersion": "0.1-222",
           "casesNumber": 0,
           "description": "A /\u003d B is exactly the same as A.divAssign(B) or A \u003d A.div(B) (applied in order)",
           "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/pos/10.1.kt",
-          "unexpectedBehaviour": false
+          "unexpectedBehaviour": false,
+          "linkType": "primary"
         }
       ],
       "12": [
@@ -273,7 +705,8 @@
           "casesNumber": 0,
           "description": "A /\u003d B is exactly the same as A.divAssign(B) or A \u003d A.div(B) (applied in order)",
           "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/pos/10.2.kt",
-          "unexpectedBehaviour": false
+          "unexpectedBehaviour": false,
+          "linkType": "primary"
         }
       ],
       "13": [
@@ -281,13 +714,17 @@
           "specVersion": "0.1-222",
           "casesNumber": 0,
           "description": "A %\u003d B is exactly the same as A.remAssign(B) or A \u003d A.rem(B) (applied in order)",
-          "unexpectedBehaviour": false
+          "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/pos/13.1.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "main"
         },
         {
           "specVersion": "0.1-222",
           "casesNumber": 0,
           "description": "A %\u003d B is exactly the same as A.remAssign(B) or A \u003d A.rem(B) (applied in order)",
-          "unexpectedBehaviour": false
+          "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/pos/13.2.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "main"
         }
       ],
       "14": [
@@ -296,14 +733,16 @@
           "casesNumber": 0,
           "description": "A %\u003d B is exactly the same as A.remAssign(B) or A \u003d A.rem(B) (applied in order)",
           "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/pos/13.1.kt",
-          "unexpectedBehaviour": false
+          "unexpectedBehaviour": false,
+          "linkType": "primary"
         },
         {
           "specVersion": "0.1-222",
           "casesNumber": 0,
           "description": "A %\u003d B is exactly the same as A.remAssign(B) or A \u003d A.rem(B) (applied in order)",
           "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/pos/13.2.kt",
-          "unexpectedBehaviour": false
+          "unexpectedBehaviour": false,
+          "linkType": "primary"
         }
       ],
       "7": [
@@ -311,13 +750,17 @@
           "specVersion": "0.1-222",
           "casesNumber": 0,
           "description": "A *\u003d B is exactly the same as A.timesAssign(B) or A \u003d A.times(B) (applied in order)",
-          "unexpectedBehaviour": false
+          "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/pos/7.2.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "main"
         },
         {
           "specVersion": "0.1-222",
           "casesNumber": 0,
           "description": "A *\u003d B is exactly the same as A.timesAssign(B) or A \u003d A.times(B) (applied in order)",
-          "unexpectedBehaviour": false
+          "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/pos/7.1.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "main"
         }
       ],
       "8": [
@@ -326,14 +769,16 @@
           "casesNumber": 0,
           "description": "A *\u003d B is exactly the same as A.timesAssign(B) or A \u003d A.times(B) (applied in order)",
           "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/pos/7.2.kt",
-          "unexpectedBehaviour": false
+          "unexpectedBehaviour": false,
+          "linkType": "primary"
         },
         {
           "specVersion": "0.1-222",
           "casesNumber": 0,
           "description": "A *\u003d B is exactly the same as A.timesAssign(B) or A \u003d A.times(B) (applied in order)",
           "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/pos/7.1.kt",
-          "unexpectedBehaviour": false
+          "unexpectedBehaviour": false,
+          "linkType": "primary"
         }
       ],
       "9": [
@@ -342,14 +787,16 @@
           "casesNumber": 0,
           "description": "A *\u003d B is exactly the same as A.timesAssign(B) or A \u003d A.times(B) (applied in order)",
           "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/pos/7.2.kt",
-          "unexpectedBehaviour": false
+          "unexpectedBehaviour": false,
+          "linkType": "primary"
         },
         {
           "specVersion": "0.1-222",
           "casesNumber": 0,
           "description": "A *\u003d B is exactly the same as A.timesAssign(B) or A \u003d A.times(B) (applied in order)",
           "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/pos/7.1.kt",
-          "unexpectedBehaviour": false
+          "unexpectedBehaviour": false,
+          "linkType": "primary"
         }
       ],
       "4": [
@@ -357,13 +804,17 @@
           "specVersion": "0.1-253",
           "casesNumber": 0,
           "description": "A -\u003d B is exactly the same as A.minusAssign(B) or A \u003d A.minus(B) (applied in order)",
-          "unexpectedBehaviour": false
+          "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/pos/4.1.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "main"
         },
         {
           "specVersion": "0.1-253",
           "casesNumber": 0,
           "description": "A -\u003d B is exactly the same as A.plusAssign(B) or A \u003d A.minus(B) (applied in order)",
-          "unexpectedBehaviour": false
+          "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/pos/4.2.kt",
+          "unexpectedBehaviour": false,
+          "linkType": "main"
         }
       ],
       "5": [
@@ -372,14 +823,16 @@
           "casesNumber": 0,
           "description": "A -\u003d B is exactly the same as A.minusAssign(B) or A \u003d A.minus(B) (applied in order)",
           "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/pos/4.1.kt",
-          "unexpectedBehaviour": false
+          "unexpectedBehaviour": false,
+          "linkType": "primary"
         },
         {
           "specVersion": "0.1-253",
           "casesNumber": 0,
           "description": "A -\u003d B is exactly the same as A.plusAssign(B) or A \u003d A.minus(B) (applied in order)",
           "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/pos/4.2.kt",
-          "unexpectedBehaviour": false
+          "unexpectedBehaviour": false,
+          "linkType": "primary"
         }
       ],
       "15": [
@@ -388,7 +841,8 @@
           "casesNumber": 0,
           "description": "A %\u003d B is exactly the same as A.remAssign(B) or A \u003d A.rem(B) (applied in order)",
           "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/pos/13.2.kt",
-          "unexpectedBehaviour": false
+          "unexpectedBehaviour": false,
+          "linkType": "primary"
         }
       ]
     }
@@ -401,35 +855,40 @@
           "casesNumber": 0,
           "description": "A +\u003d B is exactly the same as A.plusAssign(B) or A \u003d A.plus(B) (applied in order)",
           "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/neg/1.2.kt",
-          "unexpectedBehaviour": false
+          "unexpectedBehaviour": false,
+          "linkType": "primary"
         },
         {
           "specVersion": "0.1-222",
           "casesNumber": 0,
           "description": "A /\u003d B is exactly the same as A.divAssign(B) or A \u003d A.div(B) (applied in order)",
           "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/neg/10.2.kt",
-          "unexpectedBehaviour": false
+          "unexpectedBehaviour": false,
+          "linkType": "primary"
         },
         {
           "specVersion": "0.1-222",
           "casesNumber": 0,
           "description": "A *\u003d B is exactly the same as A.timesAssign(B) or A \u003d A.times(B) (applied in order)",
           "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/neg/7.2.kt",
-          "unexpectedBehaviour": false
+          "unexpectedBehaviour": false,
+          "linkType": "primary"
         },
         {
           "specVersion": "0.1-253",
           "casesNumber": 0,
           "description": "A -\u003d B is exactly the same as A.minusAssign(B) or A \u003d A.minus(B) (applied in order)",
           "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/neg/4.2.kt",
-          "unexpectedBehaviour": false
+          "unexpectedBehaviour": false,
+          "linkType": "primary"
         },
         {
           "specVersion": "0.1-222",
           "casesNumber": 0,
           "description": "A %\u003d B is exactly the same as A.remAssign(B) or A \u003d A.rem(B) (applied in order)",
           "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/neg/13.2.kt",
-          "unexpectedBehaviour": false
+          "unexpectedBehaviour": false,
+          "linkType": "primary"
         }
       ]
     },
@@ -440,35 +899,40 @@
           "casesNumber": 0,
           "description": "A +\u003d B is exactly the same as A.plusAssign(B) or A \u003d A.plus(B) (applied in order)",
           "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/pos/1.2.kt",
-          "unexpectedBehaviour": false
+          "unexpectedBehaviour": false,
+          "linkType": "primary"
         },
         {
           "specVersion": "0.1-222",
           "casesNumber": 0,
           "description": "A /\u003d B is exactly the same as A.divAssign(B) or A \u003d A.div(B) (applied in order)",
           "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/pos/10.2.kt",
-          "unexpectedBehaviour": false
+          "unexpectedBehaviour": false,
+          "linkType": "primary"
         },
         {
           "specVersion": "0.1-222",
           "casesNumber": 0,
           "description": "A *\u003d B is exactly the same as A.timesAssign(B) or A \u003d A.times(B) (applied in order)",
           "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/pos/7.2.kt",
-          "unexpectedBehaviour": false
+          "unexpectedBehaviour": false,
+          "linkType": "primary"
         },
         {
           "specVersion": "0.1-253",
           "casesNumber": 0,
           "description": "A -\u003d B is exactly the same as A.plusAssign(B) or A \u003d A.minus(B) (applied in order)",
           "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/pos/4.2.kt",
-          "unexpectedBehaviour": false
+          "unexpectedBehaviour": false,
+          "linkType": "primary"
         },
         {
           "specVersion": "0.1-222",
           "casesNumber": 0,
           "description": "A %\u003d B is exactly the same as A.remAssign(B) or A \u003d A.rem(B) (applied in order)",
           "path": "compiler/tests-spec/testData/codegen/box/linked/statements/assignments/operator-assignments/p-2/pos/13.2.kt",
-          "unexpectedBehaviour": false
+          "unexpectedBehaviour": false,
+          "linkType": "primary"
         }
       ]
     }

@@ -18,6 +18,7 @@ package org.jetbrains.kotlin.cli.common.arguments
 
 import com.intellij.util.xmlb.annotations.Transient
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
+import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity.WARNING
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.config.*
 import java.util.*
@@ -82,6 +83,15 @@ abstract class CommonCompilerArguments : CommonToolArguments() {
     @Argument(value = "-P", valueDescription = PLUGIN_OPTION_FORMAT, description = "Pass an option to a plugin")
     var pluginOptions: Array<String>? by FreezableVar(null)
 
+    @Argument(
+        value = "-opt-in",
+        // Uncomment after deletion of optInDeprecated
+        // deprecatedName = "-Xopt-in",
+        valueDescription = "<fq.name>",
+        description = "Enable usages of API that requires opt-in with an opt-in requirement marker with the given fully qualified name"
+    )
+    var optIn: Array<String>? by FreezableVar(null)
+
     // Advanced options
 
     @Argument(value = "-Xno-inline", description = "Disable method inlining")
@@ -122,13 +132,6 @@ abstract class CommonCompilerArguments : CommonToolArguments() {
     var intellijPluginRoot: String? by NullableStringFreezableVar(null)
 
     @Argument(
-        value = "-Xcoroutines",
-        valueDescription = "{enable|warn|error}",
-        description = "Enable coroutines or report warnings or errors on declarations and use sites of 'suspend' modifier"
-    )
-    var coroutinesState: String? by NullableStringFreezableVar(DEFAULT)
-
-    @Argument(
         value = "-Xnew-inference",
         description = "Enable new experimental generic type inference algorithm"
     )
@@ -165,25 +168,19 @@ abstract class CommonCompilerArguments : CommonToolArguments() {
     var readDeserializedContracts: Boolean by FreezableVar(false)
 
     @Argument(
-        value = "-Xexperimental",
-        valueDescription = "<fq.name>",
-        description = "Enable and propagate usages of experimental API for marker annotation with the given fully qualified name"
-    )
-    var experimental: Array<String>? by FreezableVar(null)
-
-    @Argument(
         value = "-Xuse-experimental",
         valueDescription = "<fq.name>",
         description = "Enable, but don't propagate usages of experimental API for marker annotation with the given fully qualified name"
     )
     var useExperimental: Array<String>? by FreezableVar(null)
 
+    // NB: we have to keep this flag for some time due to bootstrapping problems
     @Argument(
         value = "-Xopt-in",
         valueDescription = "<fq.name>",
         description = "Enable usages of API that requires opt-in with an opt-in requirement marker with the given fully qualified name"
     )
-    var optIn: Array<String>? by FreezableVar(null)
+    var optInDeprecated: Array<String>? by FreezableVar(null)
 
     @Argument(
         value = "-Xproper-ieee754-comparisons",
@@ -311,11 +308,24 @@ abstract class CommonCompilerArguments : CommonToolArguments() {
     )
     var checkStickyPhaseConditions: Boolean by FreezableVar(false)
 
+    @GradleOption(DefaultValues.BooleanFalseDefault::class)
     @Argument(
         value = "-Xuse-fir",
         description = "Compile using Front-end IR. Warning: this feature is far from being production-ready"
     )
     var useFir: Boolean by FreezableVar(false)
+
+    @Argument(
+        value = "-Xuse-fir-extended-checkers",
+        description = "Use extended analysis mode based on Front-end IR. Warning: this feature is far from being production-ready"
+    )
+    var useFirExtendedCheckers: Boolean by FreezableVar(false)
+
+    @Argument(
+        value = "-Xdisable-ultra-light-classes",
+        description = "Do not use the ultra light classes implementation"
+    )
+    var disableUltraLightClasses: Boolean by FreezableVar(false)
 
     @Argument(
         value = "-Xuse-mixed-named-arguments",
@@ -340,17 +350,57 @@ abstract class CommonCompilerArguments : CommonToolArguments() {
     )
     var explicitApi: String by FreezableVar(ExplicitApiMode.DISABLED.state)
 
-    open fun configureAnalysisFlags(collector: MessageCollector): MutableMap<AnalysisFlag<*>, Any> {
+    @Argument(
+        value = "-Xinference-compatibility",
+        description = "Enable compatibility changes for generic type inference algorithm"
+    )
+    var inferenceCompatibility: Boolean by FreezableVar(false)
+
+    @Argument(
+        value = "-Xsuppress-version-warnings",
+        description = "Suppress warnings about outdated, inconsistent or experimental language or API versions"
+    )
+    var suppressVersionWarnings: Boolean by FreezableVar(false)
+
+    @Argument(
+        value = "-Xextended-compiler-checks",
+        description = "Enable additional compiler checks that might provide verbose diagnostic information for certain errors.\n" +
+                "Warning: this mode is not backward-compatible and might cause compilation errors in previously compiled code."
+    )
+    var extendedCompilerChecks: Boolean by FreezableVar(false)
+
+    @GradleOption(DefaultValues.BooleanFalseDefault::class)
+    @Argument(
+        value = "-Xbuiltins-from-sources",
+        description = "Compile builtIns from sources"
+    )
+    var builtInsFromSources: Boolean by FreezableVar(false)
+
+    @Argument(
+        value = "-Xunrestricted-builder-inference",
+        description = "Eliminate builder inference restrictions like allowance of returning type variables of a builder inference call"
+    )
+    var unrestrictedBuilderInference: Boolean by FreezableVar(false)
+
+    open fun configureAnalysisFlags(collector: MessageCollector, languageVersion: LanguageVersion): MutableMap<AnalysisFlag<*>, Any> {
         return HashMap<AnalysisFlag<*>, Any>().apply {
             put(AnalysisFlags.skipMetadataVersionCheck, skipMetadataVersionCheck)
             put(AnalysisFlags.skipPrereleaseCheck, skipPrereleaseCheck || skipMetadataVersionCheck)
             put(AnalysisFlags.multiPlatformDoNotCheckActual, noCheckActual)
-            val experimentalFqNames = experimental?.toList().orEmpty()
-            if (experimentalFqNames.isNotEmpty()) {
-                put(AnalysisFlags.experimental, experimentalFqNames)
-                collector.report(CompilerMessageSeverity.WARNING, "'-Xexperimental' is deprecated and will be removed in a future release")
+            val useExperimentalFqNames = useExperimental?.toList().orEmpty()
+            if (useExperimentalFqNames.isNotEmpty()) {
+                collector.report(
+                    WARNING, "'-Xuse-experimental' is deprecated and will be removed in a future release, please use -opt-in instead"
+                )
             }
-            put(AnalysisFlags.useExperimental, useExperimental?.toList().orEmpty() + optIn?.toList().orEmpty())
+            val optInDeprecatedFqNames = optInDeprecated?.toList().orEmpty()
+            if (optInDeprecatedFqNames.isNotEmpty()) {
+                // TODO: uncomment this after -opt-in bootstrapping and Gradle script fixing
+//                collector.report(
+//                    WARNING, "'-Xopt-in' is deprecated and will be removed in a future release, please use -opt-in instead"
+//                )
+            }
+            put(AnalysisFlags.useExperimental, useExperimentalFqNames + optInDeprecatedFqNames + optIn?.toList().orEmpty())
             put(AnalysisFlags.expectActualLinker, expectActualLinker)
             put(AnalysisFlags.explicitApiVersion, apiVersion != null)
             put(AnalysisFlags.allowResultReturnType, allowResultReturnType)
@@ -358,6 +408,9 @@ abstract class CommonCompilerArguments : CommonToolArguments() {
                 CompilerMessageSeverity.ERROR,
                 "Unknown value for parameter -Xexplicit-api: '$explicitApi'. Value should be one of ${ExplicitApiMode.availableValues()}"
             )
+            put(AnalysisFlags.extendedCompilerChecks, extendedCompilerChecks)
+            put(AnalysisFlags.allowKotlinPackage, allowKotlinPackage)
+            put(AnalysisFlags.builtInsFromSources, builtInsFromSources)
         }
     }
 
@@ -367,21 +420,15 @@ abstract class CommonCompilerArguments : CommonToolArguments() {
                 put(LanguageFeature.MultiPlatformProjects, LanguageFeature.State.ENABLED)
             }
 
-            when (coroutinesState) {
-                CommonCompilerArguments.ERROR -> put(LanguageFeature.Coroutines, LanguageFeature.State.ENABLED_WITH_ERROR)
-                CommonCompilerArguments.ENABLE -> put(LanguageFeature.Coroutines, LanguageFeature.State.ENABLED)
-                CommonCompilerArguments.WARN, CommonCompilerArguments.DEFAULT -> {
-                }
-                else -> {
-                    val message = "Invalid value of -Xcoroutines (should be: enable, warn or error): " + coroutinesState
-                    collector.report(CompilerMessageSeverity.ERROR, message, null)
-                }
+            if (unrestrictedBuilderInference) {
+                put(LanguageFeature.UnrestrictedBuilderInference, LanguageFeature.State.ENABLED)
             }
 
             if (newInference) {
                 put(LanguageFeature.NewInference, LanguageFeature.State.ENABLED)
                 put(LanguageFeature.SamConversionPerArgument, LanguageFeature.State.ENABLED)
                 put(LanguageFeature.FunctionReferenceWithDefaultValueAsOtherType, LanguageFeature.State.ENABLED)
+                put(LanguageFeature.DisableCompatibilityModeForNewInference, LanguageFeature.State.ENABLED)
             }
 
             if (inlineClasses) {
@@ -411,6 +458,10 @@ abstract class CommonCompilerArguments : CommonToolArguments() {
 
             if (useMixedNamedArguments) {
                 put(LanguageFeature.MixedNamedArgumentsInTheirOwnPosition, LanguageFeature.State.ENABLED)
+            }
+
+            if (inferenceCompatibility) {
+                put(LanguageFeature.InferenceCompatibility, LanguageFeature.State.ENABLED)
             }
 
             if (progressiveMode) {
@@ -461,6 +512,8 @@ abstract class CommonCompilerArguments : CommonToolArguments() {
 
             if (!functionReferenceWithDefaultValueFeaturePassedExplicitly)
                 put(LanguageFeature.FunctionReferenceWithDefaultValueAsOtherType, LanguageFeature.State.ENABLED)
+
+            put(LanguageFeature.DisableCompatibilityModeForNewInference, LanguageFeature.State.ENABLED)
         }
 
         if (featuresThatForcePreReleaseBinaries.isNotEmpty()) {
@@ -489,19 +542,21 @@ abstract class CommonCompilerArguments : CommonToolArguments() {
         val apiVersion = parseVersion(collector, apiVersion, "API") ?: languageVersion
 
         checkApiVersionIsNotGreaterThenLanguageVersion(languageVersion, apiVersion, collector)
-        checkLanguageVersionIsStable(languageVersion, collector)
-        checkOutdatedVersions(languageVersion, apiVersion, collector)
-        checkProgressiveMode(languageVersion, collector)
 
         val languageVersionSettings = LanguageVersionSettingsImpl(
             languageVersion,
             ApiVersion.createByLanguageVersion(apiVersion),
-            configureAnalysisFlags(collector),
+            configureAnalysisFlags(collector, languageVersion),
             configureLanguageFeatures(collector)
         )
 
-        checkCoroutines(languageVersionSettings, collector)
-        checkIrSupport(languageVersionSettings, collector)
+        if (!suppressVersionWarnings) {
+            checkLanguageVersionIsStable(languageVersion, collector)
+            checkOutdatedVersions(languageVersion, apiVersion, collector)
+            checkProgressiveMode(languageVersion, collector)
+
+            checkIrSupport(languageVersionSettings, collector)
+        }
 
         return languageVersionSettings
     }
@@ -568,17 +623,6 @@ abstract class CommonCompilerArguments : CommonToolArguments() {
                         "Compiler behavior in such mode is undefined; please, consider moving to the latest stable version " +
                         "or turning off progressive mode."
             )
-        }
-    }
-
-    private fun checkCoroutines(languageVersionSettings: LanguageVersionSettings, collector: MessageCollector) {
-        if (languageVersionSettings.supportsFeature(LanguageFeature.ReleaseCoroutines)) {
-            if (coroutinesState != DEFAULT) {
-                collector.report(
-                    CompilerMessageSeverity.STRONG_WARNING,
-                    "-Xcoroutines has no effect: coroutines are enabled anyway in 1.3 and beyond"
-                )
-            }
         }
     }
 

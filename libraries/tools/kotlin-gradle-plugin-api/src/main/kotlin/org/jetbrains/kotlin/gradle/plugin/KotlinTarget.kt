@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -21,6 +21,7 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinCommonOptions
 interface KotlinTargetComponent : SoftwareComponent {
     val target: KotlinTarget
     val publishable: Boolean
+    val publishableOnCurrentHost: Boolean
     val defaultArtifactId: String
     val sourcesArtifacts: Set<PublishArtifact>
 }
@@ -28,7 +29,8 @@ interface KotlinTargetComponent : SoftwareComponent {
 interface KotlinTarget : Named, HasAttributes {
     val targetName: String
     val disambiguationClassifier: String? get() = targetName
-    val useDisambiguitionClassifierAsSourcesetNamePreffix: Boolean
+    val useDisambiguationClassifierAsSourceSetNamePrefix: Boolean
+    val overrideDisambiguationClassifierOnIdeImport: String?
 
     val platformType: KotlinPlatformType
 

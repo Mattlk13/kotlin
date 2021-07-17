@@ -1,15 +1,4 @@
 // !USE_EXPERIMENTAL: kotlin.contracts.ExperimentalContracts
-// !WITH_NEW_INFERENCE
-
-/*
- * KOTLIN DIAGNOSTICS NOT LINKED SPEC TEST (NEGATIVE)
- *
- * SECTIONS: contracts, analysis, smartcasts
- * NUMBER: 15
- * DESCRIPTION: Check smartcasts working if type checking for contract function is used
- * ISSUES: KT-27241
- * HELPERS: contractFunctions
- */
 
 // FILE: contracts.kt
 
@@ -40,20 +29,20 @@ import contracts.*
 // TESTCASE NUMBER: 1
 fun case_1(value: Any) {
     if (contracts.case_1_2(contracts.case_1_1(value is Char))) {
-        <!AMBIGUITY!>println<!>(value.<!INAPPLICABLE_CANDIDATE!>category<!>)
+        <!OVERLOAD_RESOLUTION_AMBIGUITY!>println<!>(value.<!UNRESOLVED_REFERENCE!>category<!>)
     }
 }
 
 // TESTCASE NUMBER: 2
 fun case_2(value: Any) {
     if (contracts.case_2(value is Char) is Boolean) {
-        <!AMBIGUITY!>println<!>(value.<!INAPPLICABLE_CANDIDATE!>category<!>)
+        <!OVERLOAD_RESOLUTION_AMBIGUITY!>println<!>(value.<!UNRESOLVED_REFERENCE!>category<!>)
     }
 }
 
 // TESTCASE NUMBER: 3
 fun case_3(value: String?) {
-    if (!value.isNullOrEmpty() is Boolean) {
-        value.<!INAPPLICABLE_CANDIDATE!>length<!>
+    if (<!USELESS_IS_CHECK!>!value.isNullOrEmpty() is Boolean<!>) {
+        value<!UNSAFE_CALL!>.<!>length
     }
 }

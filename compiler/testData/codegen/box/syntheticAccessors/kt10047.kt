@@ -1,4 +1,3 @@
-// IGNORE_BACKEND_FIR: JVM_IR
 // FILE: a.kt
 
 package test2
@@ -6,13 +5,15 @@ package test2
 import test.Actor
 import test.O2dScriptAction
 
+fun <T> eval(fn: () -> T) = fn()
+
 class CompositeActor : Actor()
 
 public open class O2dDialog : O2dScriptAction<CompositeActor>() {
 
-    fun test() = { owner }()
+    fun test() = eval { owner }
 
-    fun test2() = { calc() }()
+    fun test2() = eval { calc() }
 }
 
 fun box(): String {

@@ -1,5 +1,4 @@
 // !DIAGNOSTICS: -UNUSED_EXPRESSION -UNUSED_PARAMETER -UNUSED_VARIABLE
-// !WITH_NEW_INFERENCE
 // FILE: 1.kt
 package k
 
@@ -27,17 +26,17 @@ import k.two
 import k.all
 
 fun test() {
-    <!INAPPLICABLE_CANDIDATE!>zero<!>()
-    <!INAPPLICABLE_CANDIDATE!>zero<!>(1)
-    <!INAPPLICABLE_CANDIDATE!>zero<!>("")
+    <!NONE_APPLICABLE!>zero<!>()
+    <!NONE_APPLICABLE!>zero<!>(1)
+    <!NONE_APPLICABLE!>zero<!>("")
 
     one()
-    <!INAPPLICABLE_CANDIDATE!>one<!>(1)
-    <!INAPPLICABLE_CANDIDATE!>one<!>("")
+    one(<!TOO_MANY_ARGUMENTS!>1<!>)
+    one(<!TOO_MANY_ARGUMENTS!>""<!>)
 
     two()
     two(1)
-    <!INAPPLICABLE_CANDIDATE!>two<!>("")
+    two(<!ARGUMENT_TYPE_MISMATCH!>""<!>)
 
     all()
     all(1)

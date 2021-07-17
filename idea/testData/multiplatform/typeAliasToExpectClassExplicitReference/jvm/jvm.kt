@@ -1,10 +1,10 @@
-actual class A {
-    actual fun commonMember() { }
+actual class <!LINE_MARKER("descr='Has declaration in common module'")!>A<!> {
+    actual fun <!LINE_MARKER("descr='Has declaration in common module'")!>commonMember<!>() { }
 
     fun platformMember() { }
 }
 
 fun test() {
-    <!RESOLUTION_TO_CLASSIFIER("TypealiasFromCommon", "EXPECT_CLASS_AS_FUNCTION", "Expected class TypealiasFromCommon does not have default constructor")!>TypealiasFromCommon<!>().<!DEBUG_INFO_MISSING_UNRESOLVED!>commonMember<!>()
-    <!RESOLUTION_TO_CLASSIFIER("TypealiasFromCommon", "EXPECT_CLASS_AS_FUNCTION", "Expected class TypealiasFromCommon does not have default constructor")!>TypealiasFromCommon<!>().<!DEBUG_INFO_MISSING_UNRESOLVED!>platformwMember<!>()
+    <!RESOLUTION_TO_CLASSIFIER!>TypealiasFromCommon<!>().<!DEBUG_INFO_MISSING_UNRESOLVED!>commonMember<!>()
+    <!RESOLUTION_TO_CLASSIFIER!>TypealiasFromCommon<!>().<!DEBUG_INFO_MISSING_UNRESOLVED!>platformwMember<!>()
 }

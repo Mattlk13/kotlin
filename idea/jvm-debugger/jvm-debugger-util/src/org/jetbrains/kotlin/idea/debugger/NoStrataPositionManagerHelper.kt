@@ -20,6 +20,7 @@ import com.intellij.util.containers.ConcurrentFactoryMap
 import com.sun.jdi.Location
 import com.sun.jdi.ReferenceType
 import com.sun.jdi.VirtualMachine
+import org.jetbrains.kotlin.codegen.inline.SMAP
 import org.jetbrains.kotlin.idea.caches.project.implementingModules
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.core.util.getLineCount
@@ -74,7 +75,7 @@ fun createWeakBytecodeDebugInfoStorage(): ConcurrentMap<BinaryCacheKey, Bytecode
     }
 }
 
-class BytecodeDebugInfo(val smapData: SmapData?, val lineTableMapping: Map<BytecodeMethodKey, Map<String, Set<Int>>>)
+class BytecodeDebugInfo(val smapData: SMAP?, val lineTableMapping: Map<BytecodeMethodKey, Map<String, Set<Int>>>)
 
 data class BytecodeMethodKey(val methodName: String, val signature: String)
 
@@ -144,7 +145,7 @@ private fun readClassFileImpl(
 }
 
 private fun findClassFileByPaths(packageName: String, className: String, paths: List<String>): File? =
-    paths.mapNotNull { path -> findClassFileByPath(packageName, className, path) }.maxBy { it.lastModified() }
+    paths.mapNotNull { path -> findClassFileByPath(packageName, className, path) }.maxByOrNull { it.lastModified() }
 
 private fun findClassFileByPath(packageName: String, className: String, outputDirPath: String): File? {
     val outDirFile = File(outputDirPath).takeIf(File::exists) ?: return null
@@ -259,9 +260,7 @@ private fun inlinedLinesNumbers(
     val debugInfo = readBytecodeInfo(project, jvmClassName, virtualFile) ?: return listOf()
     val smapData = debugInfo.smapData ?: return listOf()
 
-    val smap = smapData.kotlinStrata ?: return listOf()
-
-    val mappingsToInlinedFile = smap.fileMappings.filter { it.name == inlineFileName }
+    val mappingsToInlinedFile = smapData.fileMappings.filter { it.name == inlineFileName }
     val mappingIntervals = mappingsToInlinedFile.flatMap { it.lineMappings }
 
     return mappingIntervals.asSequence().filter { rangeMapping -> rangeMapping.hasMappingForSource(inlineLineNumber) }

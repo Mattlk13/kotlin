@@ -16,14 +16,6 @@ annotation class JvmAnnotationForAnnotationClassesOnly(val text: String)
 @CommonAnnotationForAnnotationClassesOnly("annotation-class")
 annotation class JvmAnnotation(val text: String)
 
-//@Target(AnnotationTarget.CLASS)
-//annotation class CommonOuterAnnotation(val inner: CommonInnerAnnotation)
-//annotation class CommonInnerAnnotation(val text: String)
-//
-//@Target(AnnotationTarget.CLASS)
-//annotation class JvmOuterAnnotation(val inner: JvmInnerAnnotation)
-//annotation class JvmInnerAnnotation(val text: String)
-
 @JvmAnnotation("property")
 @CommonAnnotation("property")
 var propertyWithoutBackingField
@@ -38,7 +30,13 @@ val propertyWithBackingField = 3.14
 @delegate:CommonAnnotation("field")
 val propertyWithDelegateField: Int by lazy { 42 }
 
-val <@JvmAnnotation("type-parameter") @CommonAnnotation("type-parameter") T : CharSequence> @receiver:JvmAnnotation("receiver") @receiver:CommonAnnotation("receiver") T.propertyWithExtensionReceiver: Int
+val <
+        @JvmAnnotation("type-parameter")
+        @CommonAnnotation("type-parameter")
+        T : CharSequence>
+        @receiver:JvmAnnotation("receiver")
+        @receiver:CommonAnnotation("receiver")
+        T.propertyWithExtensionReceiver: Int
     get() = length
 
 @JvmAnnotation("function")
@@ -47,16 +45,28 @@ fun function1(@JvmAnnotation("parameter") @CommonAnnotation("parameter") text: S
 
 @JvmAnnotation("function")
 @CommonAnnotation("function")
-fun <@JvmAnnotation("type-parameter") @CommonAnnotation("type-parameter") Q : @JvmAnnotation("type1") @CommonAnnotation("type1") Number> @receiver:JvmAnnotation("receiver") @receiver:CommonAnnotation("receiver") Q.function2(): @JvmAnnotation("type2") @CommonAnnotation("type2") Q = this
+fun <
+        @JvmAnnotation("type-parameter")
+        @CommonAnnotation("type-parameter")
+        Q : @JvmAnnotation("type1")
+        @CommonAnnotation("type1")
+        Number>
+        @receiver:JvmAnnotation("receiver")
+        @receiver:CommonAnnotation("receiver")
+        Q.function2(): @JvmAnnotation("type2") @CommonAnnotation("type2") Q = this
 
 @JvmAnnotation("class")
 @CommonAnnotation("class")
 class AnnotatedClass @JvmAnnotation("constructor") @CommonAnnotation("constructor") constructor(val value: String)
 
-@JvmAnnotation("type-alias")
-@CommonAnnotation("type-alias")
-typealias AnnotatedTypeAlias = AnnotatedClass
+@JvmAnnotation("jvm-only-class")
+@CommonAnnotation("jvm-only-class")
+class JvmOnlyAnnotatedClass @JvmAnnotation("jvm-only-constructor") @CommonAnnotation("jvm-only-constructor") constructor(val value: String)
 
-//@JvmOuterAnnotation(inner = JvmInnerAnnotation("nested-annotations"))
-//@CommonOuterAnnotation(inner = CommonInnerAnnotation("nested-annotations"))
-//object ObjectWithNestedAnnotations
+@JvmAnnotation("lifted-up-type-alias")
+@CommonAnnotation("lifted-up-type-alias")
+typealias AnnotatedLiftedUpTypeAlias = AnnotatedClass
+
+@JvmAnnotation("non-lifted-up-type-alias")
+@CommonAnnotation("non-lifted-up-type-alias")
+typealias AnnotatedNonLiftedUpTypeAlias = JvmOnlyAnnotatedClass

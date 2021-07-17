@@ -19,11 +19,9 @@ import org.jetbrains.kotlin.resolve.descriptorUtil.annotationClass
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameUnsafe
 import org.jetbrains.kotlin.resolve.source.getPsi
 import org.jetbrains.kotlin.types.ErrorUtils
-import org.jetbrains.kotlin.utils.addToStdlib.firstIsInstance
+import org.jetbrains.kotlin.utils.addToStdlib.firstIsInstanceOrNull
 import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 import org.jetbrains.uast.*
-import org.jetbrains.uast.kotlin.declarations.KotlinUIdentifier
-import org.jetbrains.uast.kotlin.declarations.KotlinUMethod
 import org.jetbrains.uast.kotlin.internal.multiResolveResults
 
 abstract class KotlinUAnnotationBase<T : KtCallElement>(
@@ -64,7 +62,7 @@ abstract class KotlinUAnnotationBase<T : KtCallElement>(
     protected abstract fun computeClassDescriptor(): ClassDescriptor?
 
     override fun resolve(): PsiClass? = computeClassDescriptor()?.let {
-        sourcePsi.calleeExpression?.let { ktExpression -> resolveToDeclaration(ktExpression, it) }
+        sourcePsi.calleeExpression?.let { ktExpression -> resolveToDeclarationImpl(ktExpression, it) }
     } as? PsiClass
 
     override fun findAttributeValue(name: String?): UExpression? =
@@ -103,7 +101,7 @@ abstract class KotlinUAnnotationBase<T : KtCallElement>(
 
         val superParent = super.convertParent() ?: return null
         if (annotationUseSiteTarget() == AnnotationUseSiteTarget.RECEIVER) {
-            (superParent.uastParent as? KotlinUMethod)?.uastParameters?.firstIsInstance<KotlinReceiverUParameter>()?.let {
+            (superParent.uastParent as? KotlinUMethod)?.uastParameters?.firstIsInstanceOrNull<KotlinReceiverUParameter>()?.let {
                 return it
             }
         }

@@ -2,11 +2,11 @@
 
 inline fun foo(bar1: (String.() -> Int) -> Int, bar2: (()->Int) -> Int) {
     bar1 label@ {
-        this@label.<!UNRESOLVED_REFERENCE!>length<!>
+        this@label.length
     }
 
     bar1 {
-        this.<!UNRESOLVED_REFERENCE!>length<!>
+        this.length
     }
     //unmute after KT-4247 fix
     //bar1  {
@@ -24,7 +24,7 @@ inline fun foo(bar1: (String.() -> Int) -> Int, bar2: (()->Int) -> Int) {
 }
 
 inline fun foo2(bar1: (String.() -> Int) -> Int) {
-    l1@ bar1
+    l1@ <!USAGE_IS_NOT_INLINABLE!>bar1<!>
 
     l2@ bar1 {
         11

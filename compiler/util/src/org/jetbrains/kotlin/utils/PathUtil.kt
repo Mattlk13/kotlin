@@ -34,6 +34,11 @@ object PathUtil {
     const val NOARG_PLUGIN_JAR_NAME = "$NOARG_PLUGIN_NAME.jar"
     const val SAM_WITH_RECEIVER_PLUGIN_NAME = "sam-with-receiver-compiler-plugin"
     const val SAM_WITH_RECEIVER_PLUGIN_JAR_NAME = "$SAM_WITH_RECEIVER_PLUGIN_NAME.jar"
+    const val SERIALIZATION_PLUGIN_NAME = "kotlinx-serialization-compiler-plugin"
+    const val SERIALIZATION_PLUGIN_JAR_NAME = "$SERIALIZATION_PLUGIN_NAME.jar"
+    const val LOMBOK_PLUGIN_NAME = "lombok-compiler-plugin"
+    const val ANDROID_EXTENSIONS_RUNTIME_PLUGIN_JAR_NAME = "android-extensions-runtime.jar"
+    const val PARCELIZE_RUNTIME_PLUGIN_JAR_NAME = "parcelize-runtime.jar"
     const val JS_LIB_SRC_JAR_NAME = "kotlin-stdlib-js-sources.jar"
 
     const val KOTLIN_JAVA_RUNTIME_JRE7_NAME = "kotlin-stdlib-jre7"
@@ -69,11 +74,10 @@ object PathUtil {
     const val KOTLIN_SCRIPTING_JS_NAME = "kotlin-scripting-js"
     const val KOTLIN_SCRIPTING_JS_JAR = "$KOTLIN_SCRIPTING_JS_NAME.jar"
     const val KOTLIN_DAEMON_NAME = "kotlin-daemon"
-    const val KTOR_NAME = "ktor-network-1.0.1"
     const val KOTLIN_DAEMON_JAR = "$KOTLIN_SCRIPTING_JVM_NAME.jar"
     const val KOTLIN_SCRIPTING_COMPILER_PLUGIN_NAME = "kotlin-scripting-compiler"
     const val KOTLIN_SCRIPTING_COMPILER_PLUGIN_JAR = "$KOTLIN_SCRIPTING_COMPILER_PLUGIN_NAME.jar"
-    const val KOTLINX_COROUTINES_CORE_NAME = "kotlinx-coroutines-core"
+    const val KOTLINX_COROUTINES_CORE_NAME = "kotlinx-coroutines-core-jvm"
     const val KOTLINX_COROUTINES_CORE_JAR = "$KOTLINX_COROUTINES_CORE_NAME.jar"
     const val KOTLIN_SCRIPTING_COMPILER_IMPL_NAME = "kotlin-scripting-compiler-impl"
     const val KOTLIN_SCRIPTING_COMPILER_IMPL_JAR = "$KOTLIN_SCRIPTING_COMPILER_IMPL_NAME.jar"
@@ -83,7 +87,9 @@ object PathUtil {
 
     val KOTLIN_SCRIPTING_PLUGIN_CLASSPATH_JARS = arrayOf(
         KOTLIN_SCRIPTING_COMPILER_PLUGIN_JAR, KOTLIN_SCRIPTING_COMPILER_IMPL_JAR,
-        KOTLIN_SCRIPTING_COMMON_JAR, KOTLIN_SCRIPTING_JVM_JAR, KOTLIN_SCRIPTING_JS_JAR, JS_ENGINES_JAR
+        KOTLINX_COROUTINES_CORE_JAR,
+        KOTLIN_SCRIPTING_COMMON_JAR, KOTLIN_SCRIPTING_JVM_JAR,
+        KOTLIN_SCRIPTING_JS_JAR, JS_ENGINES_JAR
     )
 
     const val KOTLIN_TEST_NAME = "kotlin-test"

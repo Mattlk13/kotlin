@@ -17,8 +17,8 @@ class A<E>() : C(), T {
         super<C>.bar()
         super<T>@A.foo()
         super<C>@A.bar()
-        super<E>.<!UNRESOLVED_REFERENCE!>bar<!>()
-        super<E>@A.<!UNRESOLVED_REFERENCE!>bar<!>()
+        super<<!OTHER_ERROR, OTHER_ERROR!>E<!>>.<!UNRESOLVED_REFERENCE!>bar<!>()
+        super<<!OTHER_ERROR, OTHER_ERROR!>E<!>>@A.<!UNRESOLVED_REFERENCE!>bar<!>()
         <!NOT_A_SUPERTYPE!>super<Int><!>.<!UNRESOLVED_REFERENCE!>foo<!>()
         super<<!SYNTAX!><!>>.<!UNRESOLVED_REFERENCE!>foo<!>()
         <!NOT_A_SUPERTYPE!>super<() -> Unit><!>.<!UNRESOLVED_REFERENCE!>foo<!>()
@@ -56,7 +56,7 @@ class CG : G<Int> {
 }
 
 // The case when no supertype is resolved
-class ERROR<E>() : UR {
+class ERROR<E>() : <!UNRESOLVED_REFERENCE!>UR<!> {
 
     fun test() {
         super.<!UNRESOLVED_REFERENCE!>foo<!>()

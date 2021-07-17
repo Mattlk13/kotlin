@@ -25,11 +25,7 @@ export function configureBrowsers(config) {
 }
 
 function isDebuggableBrowser(browserName, config) {
-    if ([
-        'ChromeHeadless',
-        'ChromeCanaryHeadless',
-        'ChromiumHeadless'
-    ].includes(browserName)) {
+    if (isDebuggableBrowserName(browserName)) {
         return true
     }
 
@@ -41,6 +37,10 @@ function isDebuggableBrowser(browserName, config) {
     let customLauncher = customLaunchers[browserName];
     if (!customLauncher) {
         return false;
+    }
+
+    if (isDebuggableBrowserName(customLauncher.base)) {
+        return true
     }
 
     const flags = customLauncher.flags;
@@ -61,6 +61,14 @@ function isDebuggableBrowser(browserName, config) {
     }
 
     return true;
+}
+
+function isDebuggableBrowserName(browserName) {
+    return [
+        'ChromeHeadless',
+        'ChromeCanaryHeadless',
+        'ChromiumHeadless'
+    ].includes(browserName);
 }
 
 export function fixMochaTimeout(config) {
@@ -89,4 +97,5 @@ export function fixMochaTimeout(config) {
 
 export function fixBrowserActivityTimeout(config) {
     config.browserNoActivityTimeout = null
+    config.pingTimeout = 24 * 60 * 60 * 1000
 }

@@ -7,14 +7,22 @@ package org.jetbrains.kotlin.gradle.targets.js.yarn
 
 import org.gradle.api.Plugin
 import org.gradle.api.Project
+import org.gradle.api.attributes.Usage
 import org.gradle.api.plugins.BasePlugin
+import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinUsages
+import org.jetbrains.kotlin.gradle.plugin.mpp.disambiguateName
+import org.jetbrains.kotlin.gradle.plugin.usesPlatformOf
+import org.jetbrains.kotlin.gradle.targets.js.MultiplePluginDeclarationDetector
 import org.jetbrains.kotlin.gradle.targets.js.nodejs.NodeJsRootPlugin
 import org.jetbrains.kotlin.gradle.targets.js.npm.tasks.KotlinNpmInstallTask
 import org.jetbrains.kotlin.gradle.targets.js.npm.tasks.RootPackageJsonTask
 import org.jetbrains.kotlin.gradle.tasks.CleanDataTask
+import org.jetbrains.kotlin.gradle.tasks.registerTask
 
 open class YarnPlugin : Plugin<Project> {
     override fun apply(project: Project): Unit = project.run {
+        MultiplePluginDeclarationDetector.detect(project)
+
         check(project == project.rootProject) {
             "YarnPlugin can be applied only to root project"
         }
@@ -22,8 +30,13 @@ open class YarnPlugin : Plugin<Project> {
         val yarnRootExtension = this.extensions.create(YarnRootExtension.YARN, YarnRootExtension::class.java, this)
         val nodeJs = NodeJsRootPlugin.apply(this)
 
-        tasks.create(YarnSetupTask.NAME, YarnSetupTask::class.java) {
-            it.dependsOn(nodeJs.nodeJsSetupTask)
+        val setupTask = registerTask<YarnSetupTask>(YarnSetupTask.NAME) {
+            it.dependsOn(nodeJs.nodeJsSetupTaskProvider)
+
+            it.configuration = provider {
+                this.project.configurations.detachedConfiguration(this.project.dependencies.create(it.ivyDependency))
+                    .also { conf -> conf.isTransitive = false }
+            }
         }
 
         val rootClean = project.rootProject.tasks.named(BasePlugin.CLEAN_TASK_NAME)
@@ -37,6 +50,7 @@ open class YarnPlugin : Plugin<Project> {
 
         tasks.named(KotlinNpmInstallTask.NAME).configure {
             it.dependsOn(rootPackageJson)
+            it.dependsOn(setupTask)
         }
 
         tasks.register("yarn" + CleanDataTask.NAME_SUFFIX, CleanDataTask::class.java) {

@@ -1,3 +1,4 @@
+// FIR_COMPARISON
 // COMPILER_ARGUMENTS: -XXLanguage:+ReadDeserializedContracts -XXLanguage:+UseReturnsEffect
 
 interface Foo {

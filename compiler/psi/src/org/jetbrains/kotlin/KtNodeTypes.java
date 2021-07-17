@@ -64,6 +64,8 @@ public interface KtNodeTypes {
     IElementType TYPE_ARGUMENT_LIST                 = KtStubElementTypes.TYPE_ARGUMENT_LIST;
     IElementType VALUE_ARGUMENT_LIST                = KtStubElementTypes.VALUE_ARGUMENT_LIST;
     IElementType VALUE_ARGUMENT                     = KtStubElementTypes.VALUE_ARGUMENT;
+    IElementType CONTRACT_EFFECT_LIST               = KtStubElementTypes.CONTRACT_EFFECT_LIST;
+    IElementType CONTRACT_EFFECT                    = KtStubElementTypes.CONTRACT_EFFECT;
     IElementType LAMBDA_ARGUMENT                    = KtStubElementTypes.LAMBDA_ARGUMENT;
     IElementType VALUE_ARGUMENT_NAME                = KtStubElementTypes.VALUE_ARGUMENT_NAME;
     IElementType TYPE_REFERENCE                     = KtStubElementTypes.TYPE_REFERENCE;
@@ -73,6 +75,7 @@ public interface KtNodeTypes {
     IElementType FUNCTION_TYPE            = KtStubElementTypes.FUNCTION_TYPE;
     IElementType FUNCTION_TYPE_RECEIVER   = KtStubElementTypes.FUNCTION_TYPE_RECEIVER;
     IElementType NULLABLE_TYPE            = KtStubElementTypes.NULLABLE_TYPE;
+    IElementType DEFINITELY_NOT_NULL_TYPE = KtStubElementTypes.DEFINITELY_NOT_NULL_TYPE;
     IElementType TYPE_PROJECTION          = KtStubElementTypes.TYPE_PROJECTION;
 
     IElementType PROPERTY_ACCESSOR       = KtStubElementTypes.PROPERTY_ACCESSOR;
@@ -158,7 +161,7 @@ public interface KtNodeTypes {
 
     IElementType SCRIPT = KtStubElementTypes.SCRIPT;
 
-    IFileElementType TYPE_CODE_FRAGMENT = new KtTypeCodeFragmentType();
-    IFileElementType EXPRESSION_CODE_FRAGMENT = new KtExpressionCodeFragmentType();
-    IFileElementType BLOCK_CODE_FRAGMENT = new KtBlockCodeFragmentType();
+    IFileElementType TYPE_CODE_FRAGMENT = KtStubElementTypes.TYPE_CODE_FRAGMENT;
+    IFileElementType EXPRESSION_CODE_FRAGMENT = KtStubElementTypes.EXPRESSION_CODE_FRAGMENT;
+    IFileElementType BLOCK_CODE_FRAGMENT = KtStubElementTypes.BLOCK_CODE_FRAGMENT;
 }

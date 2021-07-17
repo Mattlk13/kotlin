@@ -38,14 +38,14 @@ fun ok4(): Outer.Obj.Nested2<A>.Inner5<B> = null!!
 fun ok5(): test.Outer.Obj.Nested2<A>.Inner5<B> = null!!
 
 // All arguments are resolved
-fun errorTypeWithArguments(): Q<A>.W<B, C, D>.R.M = null!!
+fun errorTypeWithArguments(): <!UNRESOLVED_REFERENCE!>Q<A>.W<B, C, D>.R.M<!> = null!!
 
-fun error1(): Outer<A>.Inner<B>.Inner3<C, D> = null!!
-fun error2(): Outer<A>.Inner<B, C, D>.Inner2 = null!!
-fun error3(): Outer.Inner<A, B>.Inner3<C> = null!!
+fun error1(): Outer<A>.Inner<B>.Inner3<!WRONG_NUMBER_OF_TYPE_ARGUMENTS!><C, D><!> = null!!
+fun error2(): Outer<A>.Inner<!WRONG_NUMBER_OF_TYPE_ARGUMENTS!><B, C, D><!>.Inner2 = null!!
+fun error3(): <!WRONG_NUMBER_OF_TYPE_ARGUMENTS!>Outer<!>.Inner<A, B>.Inner3<C> = null!!
 
-fun error4(): Outer<A>.Nested<B>.Inner4<C> = null!!
-fun error5(): Outer<A>.Obj.Nested2<B>.Inner5<C> = null!!
-fun error6(): Outer.Obj<A>.Nested2<B>.Inner5<C> = null!!
+fun error4(): Outer<!WRONG_NUMBER_OF_TYPE_ARGUMENTS!><A><!>.Nested<B>.Inner4<C> = null!!
+fun error5(): Outer<!WRONG_NUMBER_OF_TYPE_ARGUMENTS!><A><!>.Obj.Nested2<B>.Inner5<C> = null!!
+fun error6(): Outer.Obj<!WRONG_NUMBER_OF_TYPE_ARGUMENTS!><A><!>.Nested2<B>.Inner5<C> = null!!
 
-fun error7(): test<String>.Outer.Obj.Nested2<A>.Inner5<B> = null!!
+fun error7(): test<!WRONG_NUMBER_OF_TYPE_ARGUMENTS!><String><!>.Outer.Obj.Nested2<A>.Inner5<B> = null!!

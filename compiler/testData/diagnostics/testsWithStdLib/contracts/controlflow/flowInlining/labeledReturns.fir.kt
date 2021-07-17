@@ -42,9 +42,9 @@ fun threeLevelsReturnNoInitialization(x: Int?): Int? {
             }
         }
         // Possible to report unreachable here
-        y = 54
+        <!VAL_REASSIGNMENT!>y<!> = 54
     }
-    return y.inc()
+    return <!UNINITIALIZED_VARIABLE!>y<!>.inc()
 }
 
 fun threeLevelsReturnWithInitialization(x: Int?): Int? {
@@ -82,5 +82,5 @@ fun threeLevelsReturnWithUnknown(x: Int?): Int? {
             }
         }
     }
-    return y.inc()
+    return <!UNINITIALIZED_VARIABLE!>y<!>.inc()
 }

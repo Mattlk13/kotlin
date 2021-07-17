@@ -49,8 +49,9 @@
                     </execution>
                 </executions>
                 <configuration>
+                    <languageVersion>1.4</languageVersion>
                     <args>
-                        <arg>-XXLanguage:+InlineClasses</arg>
+                        <arg>-Xinline-classes</arg>
                     </args>
                 </configuration>
             </plugin>

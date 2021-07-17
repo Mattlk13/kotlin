@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -8,7 +8,6 @@ package test.collections
 import test.collections.behaviors.iteratorBehavior
 import test.collections.behaviors.listIteratorBehavior
 import test.collections.behaviors.listIteratorProperties
-import test.collections.compare
 import kotlin.random.Random
 import kotlin.random.nextInt
 import kotlin.test.*
@@ -89,7 +88,7 @@ class ArrayDequeTest {
     }
 
     @Test
-    fun clear() = testArrayDeque { bufferSize: Int, dequeSize: Int, head: Int, tail: Int ->
+    fun clear() = testArrayDeque { bufferSize: Int, _: Int, head: Int, tail: Int ->
         val deque = generateArrayDeque(head, tail, bufferSize).apply { clear() }
         assertTrue(deque.isEmpty())
     }
@@ -543,7 +542,7 @@ class ArrayDequeTest {
     }
 
     @Test
-    fun removeAll() = testArrayDeque { bufferSize: Int, dequeSize: Int, head: Int, tail: Int ->
+    fun removeAll() = testArrayDeque { bufferSize: Int, _: Int, head: Int, tail: Int ->
         generateArrayDeque(head, tail, bufferSize).let { deque ->
             deque.removeAll(emptyList())
             assertEquals((head until tail).toList(), deque)
@@ -565,7 +564,7 @@ class ArrayDequeTest {
     }
 
     @Test
-    fun retainAll() = testArrayDeque { bufferSize: Int, dequeSize: Int, head: Int, tail: Int ->
+    fun retainAll() = testArrayDeque { bufferSize: Int, _: Int, head: Int, tail: Int ->
         val listToRetain = (head..tail).filter { Random.nextBoolean() }
 
         val elements = (head until tail).toMutableList().apply { retainAll(listToRetain) }
@@ -646,5 +645,49 @@ class ArrayDequeTest {
 
             assertEquals(Int.MAX_VALUE, ArrayDeque.newCapacity(oldCapacity, minCapacity))
         }
+    }
+
+    @Suppress("INVISIBLE_MEMBER")
+    @Test
+    fun toArray() {
+        val deque = ArrayDeque<Int>()
+
+        // empty
+        assertTrue(deque.testToArray().isEmpty())
+
+        fun testContentEquals(expected: Array<Int>) {
+            assertTrue(expected contentEquals deque.testToArray())
+            assertTrue(expected contentEquals deque.testToArray(emptyArray()))
+
+            val dest = Array(expected.size + 2) { it + 100 }
+
+            @Suppress("UNCHECKED_CAST")
+            val nullTerminatedExpected = (expected as Array<Any?>) + null + (expected.size + 101)
+            val actual = deque.testToArray(dest)
+            assertTrue(
+                nullTerminatedExpected contentEquals actual,
+                message = "Expected: ${nullTerminatedExpected.contentToString()}, Actual: ${actual.contentToString()}"
+            )
+        }
+
+        // head < tail
+        deque.addAll(listOf(0, 1, 2, 3))
+        deque.internalStructure { head, _ -> assertEquals(0, head) }
+        testContentEquals(arrayOf(0, 1, 2, 3))
+        deque.removeFirst()
+        deque.internalStructure { head, _ -> assertEquals(1, head) }
+        testContentEquals(arrayOf(1, 2, 3))
+
+        // head > tail
+        deque.addFirst(-1)
+        deque.addFirst(-2)
+        deque.addFirst(-3)
+        deque.internalStructure { head, _ -> assertEquals(-2, head) } // deque min capacity is 10
+        testContentEquals(arrayOf(-3, -2, -1, 1, 2, 3))
+
+        // head == tail
+        deque.addAll(listOf(4, 5, 6, 7))
+        deque.internalStructure { head, _ -> assertEquals(-2, head) } // deque min capacity is 10
+        testContentEquals(arrayOf(-3, -2, -1, 1, 2, 3, 4, 5, 6, 7))
     }
 }

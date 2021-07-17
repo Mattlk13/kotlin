@@ -26,17 +26,17 @@ import com.intellij.psi.PsiElementVisitor
 import com.intellij.psi.impl.search.IndexPatternBuilder
 import com.intellij.psi.impl.source.resolve.reference.ReferenceProvidersRegistry
 import com.intellij.psi.xml.XmlFileNSInfoProvider
+import com.intellij.testFramework.TestApplicationManager
 import com.intellij.xml.XmlSchemaProvider
 import org.jetbrains.kotlin.idea.framework.KotlinSdkType
-import org.jetbrains.kotlin.idea.perf.Stats.Companion.tcSuite
-import org.jetbrains.kotlin.idea.perf.Stats.Companion.tcTest
+import org.jetbrains.kotlin.idea.perf.util.TeamCity
 import org.jetbrains.kotlin.idea.util.getProjectJdkTableSafe
 import java.io.File
 
 abstract class WholeProjectPerformanceTest : DaemonAnalyzerTestCase(), WholeProjectFileProvider {
 
     private val rootProjectFile: File = File("../perfTestProject").absoluteFile
-    private val perfStats: Stats = Stats(name = "whole", header = arrayOf("File", "ProcessID", "Time"))
+    private val perfStats: Stats = Stats(name = "whole")
     private val tmp = rootProjectFile
 
     override fun isStressTest(): Boolean = false
@@ -95,16 +95,16 @@ abstract class WholeProjectPerformanceTest : DaemonAnalyzerTestCase(), WholeProj
 
     fun testWholeProjectPerformance() {
 
-        tcSuite(this::class.simpleName ?: "Unknown") {
+        TeamCity.suite(this::class.simpleName ?: "Unknown") {
             val totals = mutableMapOf<String, Long>()
 
             fun appendInspectionResult(file: String, id: String, nanoTime: Long) {
                 totals.merge(id, nanoTime) { a, b -> a + b }
 
-                perfStats.append(file, id, nanoTime)
+                //perfStats.append(file, id, nanoTime)
             }
 
-            tcSuite("TotalPerFile") {
+            TeamCity.suite("TotalPerFile") {
                 // TODO: [VD] temp to limit number of files (and total time to run)
                 val files = provideFiles(project).sortedBy { it.name }.take(10)
 
@@ -120,7 +120,7 @@ abstract class WholeProjectPerformanceTest : DaemonAnalyzerTestCase(), WholeProj
                 }
             }
 
-            tcSuite("Total") {
+            TeamCity.suite("Total") {
                 totals.forEach { (k, v) ->
                     tcTest(k) {
                         v.nsToMs to emptyList()
@@ -139,6 +139,11 @@ abstract class WholeProjectPerformanceTest : DaemonAnalyzerTestCase(), WholeProj
 
     companion object {
         val Long.nsToMs get() = (this * 1e-6).toLong()
+
+        inline fun tcTest(name: String, block: () -> Pair<Long, List<Throwable>>) {
+            val (time, errors) = block()
+            TeamCity.test(name, time, errors = errors) {}
+        }
     }
 
 }

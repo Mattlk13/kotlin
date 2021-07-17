@@ -12,11 +12,9 @@ import org.jetbrains.kotlin.gradle.targets.jvm.KotlinJvmTarget
 import org.jetbrains.kotlin.gradle.targets.jvm.KotlinJvmTargetConfigurator
 
 class KotlinJvmTargetPreset(
-    project: Project,
-    kotlinPluginVersion: String
+    project: Project
 ) : KotlinOnlyTargetPreset<KotlinJvmTarget, KotlinJvmCompilation>(
-    project,
-    kotlinPluginVersion
+    project
 ) {
     override fun instantiateTarget(name: String): KotlinJvmTarget {
         return project.objects.newInstance(KotlinJvmTarget::class.java, project)
@@ -24,10 +22,10 @@ class KotlinJvmTargetPreset(
 
     override fun getName(): String = PRESET_NAME
 
-    override fun createCompilationFactory(forTarget: KotlinOnlyTarget<KotlinJvmCompilation>): KotlinCompilationFactory<KotlinJvmCompilation> =
+    override fun createCompilationFactory(forTarget: KotlinJvmTarget): KotlinCompilationFactory<KotlinJvmCompilation> =
         KotlinJvmCompilationFactory(forTarget)
 
-    override fun createKotlinTargetConfigurator() = KotlinJvmTargetConfigurator(kotlinPluginVersion)
+    override fun createKotlinTargetConfigurator() = KotlinJvmTargetConfigurator()
 
     override val platformType: KotlinPlatformType
         get() = KotlinPlatformType.jvm

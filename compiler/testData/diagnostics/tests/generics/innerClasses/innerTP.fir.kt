@@ -1,4 +1,3 @@
-// !WITH_NEW_INFERENCE
 // !CHECK_TYPE
 // !DIAGNOSTICS: -UNUSED_EXPRESSION -UNUSED_PARAMETER
 
@@ -14,7 +13,7 @@ class Outer<E> {
     fun set(inner: Inner<out E>) {}
 
     fun inside() {
-        innerFactory().checkType { <!INAPPLICABLE_CANDIDATE!>_<!><Inner<String>>() }
+        innerFactory().checkType { _<Inner<String>>() }
     }
 }
 
@@ -31,12 +30,12 @@ fun main() {
     checkSubtype<Outer<*>.Inner<*>>(outer.bar())
     checkSubtype<Outer<*>.Inner<*>>(outer.Inner<Int>())
 
-    <!INAPPLICABLE_CANDIDATE!>checkSubtype<!><Outer<CharSequence>.Inner<CharSequence>>(outer.bar())
-    <!INAPPLICABLE_CANDIDATE!>checkSubtype<!><Outer<CharSequence>.Inner<CharSequence>>(outer.Inner())
+    checkSubtype<Outer<CharSequence>.Inner<CharSequence>>(<!ARGUMENT_TYPE_MISMATCH!>outer.bar()<!>)
+    checkSubtype<Outer<CharSequence>.Inner<CharSequence>>(<!ARGUMENT_TYPE_MISMATCH!>outer.Inner()<!>)
 
-    outer.<!INAPPLICABLE_CANDIDATE!>set<!>(outer.bar())
-    outer.<!INAPPLICABLE_CANDIDATE!>set<!>(outer.Inner())
+    outer.set(outer.bar())
+    outer.set(outer.Inner())
 
     val x: Outer<String>.Inner<String> = factoryString()
-    outer.<!INAPPLICABLE_CANDIDATE!>set<!>(x)
+    outer.set(x)
 }

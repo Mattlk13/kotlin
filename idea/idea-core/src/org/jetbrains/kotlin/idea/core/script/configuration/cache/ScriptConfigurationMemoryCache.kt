@@ -33,6 +33,9 @@ open class ScriptConfigurationMemoryCache(
         memoryCache.put(file, old.copy(applied = configurationSnapshot))
     }
 
+    override fun remove(file: VirtualFile) =
+        memoryCache.remove(file)
+
     @Synchronized
     override fun setLoaded(file: VirtualFile, configurationSnapshot: ScriptConfigurationSnapshot) {
         val old = memoryCache[file] ?: ScriptConfigurationState()
@@ -41,11 +44,11 @@ open class ScriptConfigurationMemoryCache(
 
     @Synchronized
     @Suppress("UNCHECKED_CAST")
-    override fun allApplied(): Map<VirtualFile, ScriptCompilationConfigurationWrapper> {
-        val result = hashMapOf<VirtualFile, ScriptCompilationConfigurationWrapper>()
+    override fun allApplied(): List<Pair<VirtualFile, ScriptCompilationConfigurationWrapper>> {
+        val result = mutableListOf<Pair<VirtualFile, ScriptCompilationConfigurationWrapper>>()
         for ((file, configuration) in memoryCache.entrySet()) {
             if (configuration.applied?.configuration != null) {
-                result[file] = configuration.applied.configuration
+                result.add(Pair(file, configuration.applied.configuration))
             }
         }
         return result

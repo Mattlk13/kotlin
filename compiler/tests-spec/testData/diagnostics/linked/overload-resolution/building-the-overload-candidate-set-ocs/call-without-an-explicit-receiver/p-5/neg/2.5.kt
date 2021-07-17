@@ -6,8 +6,8 @@
  * KOTLIN DIAGNOSTICS SPEC TEST (NEGATIVE)
  *
  * SPEC VERSION: 0.1-278
- * PLACE: overload-resolution, building-the-overload-candidate-set-ocs, call-without-an-explicit-receiver -> paragraph 5 -> sentence 2
- * RELEVANT PLACES: overload-resolution, building-the-overload-candidate-set-ocs, call-without-an-explicit-receiver -> paragraph 4 -> sentence 1
+ * MAIN LINK: overload-resolution, building-the-overload-candidate-set-ocs, call-without-an-explicit-receiver -> paragraph 5 -> sentence 2
+ * PRIMARY LINKS: overload-resolution, building-the-overload-candidate-set-ocs, call-without-an-explicit-receiver -> paragraph 4 -> sentence 1
  * overload-resolution, building-the-overload-candidate-set-ocs, call-without-an-explicit-receiver -> paragraph 8 -> sentence 1
  * overload-resolution, building-the-overload-candidate-set-ocs, call-with-an-explicit-receiver -> paragraph 6 -> sentence 5
  * overload-resolution, building-the-overload-candidate-set-ocs, call-with-specified-type-parameters -> paragraph 1 -> sentence 2
@@ -16,20 +16,20 @@
  */
 
 
-// FILE: Lib.kt
+// FILE: Lib1.kt
 package libPackageCase1
 import testsCase1.*
 
 public fun <T> emptyArray(): Array<T> = TODO()
 fun <T> Case1.emptyArray(): Array<T> = TODO()
-// FILE: Lib.kt
+// FILE: Lib2.kt
 package libPackageCase1Duplicate
 import testsCase1.*
 
 public fun <T> emptyArray(): Array<T> = TODO()
 fun <T> Case1.emptyArray(): Array<T> = TODO()
 
-// FILE: Lib.kt
+// FILE: Lib3.kt
 package libPackageCase1Explicit
 
 public fun <T> emptyArray(): Array<T> = TODO()

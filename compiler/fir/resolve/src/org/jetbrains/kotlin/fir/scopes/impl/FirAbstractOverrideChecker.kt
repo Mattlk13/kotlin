@@ -5,41 +5,31 @@
 
 package org.jetbrains.kotlin.fir.scopes.impl
 
-import org.jetbrains.kotlin.fir.declarations.FirCallableMemberDeclaration
-import org.jetbrains.kotlin.fir.declarations.FirSimpleFunction
+import org.jetbrains.kotlin.fir.FirSession
+import org.jetbrains.kotlin.fir.declarations.FirCallableDeclaration
 import org.jetbrains.kotlin.fir.resolve.substitution.ConeSubstitutor
 import org.jetbrains.kotlin.fir.resolve.substitution.substitutorByMap
 import org.jetbrains.kotlin.fir.scopes.FirOverrideChecker
-import org.jetbrains.kotlin.fir.types.FirTypeRef
 import org.jetbrains.kotlin.fir.types.impl.ConeTypeParameterTypeImpl
 
 abstract class FirAbstractOverrideChecker : FirOverrideChecker {
 
-    protected abstract fun isEqualTypes(candidateTypeRef: FirTypeRef, baseTypeRef: FirTypeRef, substitutor: ConeSubstitutor): Boolean
-
-    protected fun getSubstitutorIfTypeParametersAreCompatible(
-        overrideCandidate: FirSimpleFunction,
-        baseDeclaration: FirSimpleFunction
-    ): ConeSubstitutor? {
-        val substitutor = buildSubstitutorForOverridesCheck(overrideCandidate, baseDeclaration) ?: return null
-        if (!overrideCandidate.typeParameters.zip(baseDeclaration.typeParameters).all { (a, b) ->
-                a.bounds.size == b.bounds.size && a.bounds.zip(b.bounds).all { (aBound, bBound) ->
-                    isEqualTypes(aBound, bBound, substitutor)
-                }
-            }
-        ) return null
-        return substitutor
-    }
+    protected abstract fun buildTypeParametersSubstitutorIfCompatible(
+        overrideCandidate: FirCallableDeclaration,
+        baseDeclaration: FirCallableDeclaration
+    ): ConeSubstitutor?
 }
 
 fun buildSubstitutorForOverridesCheck(
-    overrideCandidate: FirCallableMemberDeclaration<*>,
-    baseDeclaration: FirCallableMemberDeclaration<*>
+    overrideCandidate: FirCallableDeclaration,
+    baseDeclaration: FirCallableDeclaration,
+    useSiteSession: FirSession
 ): ConeSubstitutor? {
     if (overrideCandidate.typeParameters.size != baseDeclaration.typeParameters.size) return null
 
+    if (baseDeclaration.typeParameters.isEmpty()) return ConeSubstitutor.Empty
     val types = baseDeclaration.typeParameters.map {
         ConeTypeParameterTypeImpl(it.symbol.toLookupTag(), false)
     }
-    return substitutorByMap(overrideCandidate.typeParameters.map { it.symbol }.zip(types).toMap())
+    return substitutorByMap(overrideCandidate.typeParameters.map { it.symbol }.zip(types).toMap(), useSiteSession)
 }

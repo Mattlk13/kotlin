@@ -1,14 +1,5 @@
 // !USE_EXPERIMENTAL: kotlin.contracts.ExperimentalContracts
 
-/*
- * KOTLIN DIAGNOSTICS NOT LINKED SPEC TEST (NEGATIVE)
- *
- * SECTIONS: contracts, declarations, contractBuilder, common
- * NUMBER: 11
- * DESCRIPTION: Functions with contracts and external contract builder.
- * ISSUES: KT-26186
- */
-
 // FILE: builder.kt
 
 package builder
@@ -17,7 +8,7 @@ import kotlin.contracts.*
 
 // TESTCASE NUMBER: 1, 2
 inline fun contractBuilder(block: () -> Unit): ContractBuilder.() -> Unit = {
-    callsInPlace(block, InvocationKind.EXACTLY_ONCE)
+    callsInPlace(<!USAGE_IS_NOT_INLINABLE!>block<!>, InvocationKind.EXACTLY_ONCE)
 }
 
 // FILE: main.kt

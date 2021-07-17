@@ -5,9 +5,9 @@ import JavaClass
 
 fun foo(javaClass: JavaClass) {
     javaClass.somethingPublic
-    javaClass.<!INAPPLICABLE_CANDIDATE!>somethingProtected<!>
-    javaClass.<!INAPPLICABLE_CANDIDATE!>somethingPrivate<!>
-    javaClass.<!INAPPLICABLE_CANDIDATE!>somethingPackage<!>
+    javaClass.<!INVISIBLE_REFERENCE!>somethingProtected<!>
+    javaClass.<!INVISIBLE_REFERENCE!>somethingPrivate<!>
+    javaClass.<!INVISIBLE_REFERENCE!>somethingPackage<!>
     javaClass.somethingPublic = 1
 }
 

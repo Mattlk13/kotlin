@@ -1,4 +1,3 @@
-
 description = "Kotlin Scripting Compiler Plugin"
 
 plugins {
@@ -14,6 +13,9 @@ dependencies {
     compileOnly(project(":compiler:cli"))
     compileOnly(project(":compiler:backend.js"))
     compileOnly(project(":core:descriptors.runtime"))
+    compileOnly(project(":compiler:ir.tree.impl"))
+    compileOnly(project(":compiler:backend.jvm:backend.jvm.entrypoint"))
+    compileOnly(project(":kotlin-reflect-api"))
     compile(project(":kotlin-scripting-common"))
     compile(project(":kotlin-scripting-js"))
     compile(project(":kotlin-util-klib"))
@@ -33,7 +35,9 @@ dependencies {
     testCompile(commonDep("junit:junit"))
 
     testImplementation(intellijCoreDep()) { includeJars("intellij-core") }
-    testRuntimeOnly(intellijDep()) { includeJars("jps-model") }
+    testRuntimeOnly(intellijDep()) { includeJars("jps-model", "jna") }
+
+    testImplementation(project(":kotlin-reflect"))
 }
 
 sourceSets {
@@ -43,9 +47,7 @@ sourceSets {
 
 tasks.withType<org.jetbrains.kotlin.gradle.dsl.KotlinCompile<*>> {
     kotlinOptions {
-        languageVersion = "1.3"
-        apiVersion = "1.3"
-        freeCompilerArgs += "-Xskip-metadata-version-check"
+        freeCompilerArgs = freeCompilerArgs - "-progressive" + "-Xskip-metadata-version-check"
     }
 }
 
@@ -62,3 +64,11 @@ projectTest(parallel = true) {
     workingDir = rootDir
     systemProperty("kotlin.test.script.classpath", testSourceSet.output.classesDirs.joinToString(File.pathSeparator))
 }
+
+projectTest(taskName = "testWithIr", parallel = true) {
+    dependsOn(":dist")
+    workingDir = rootDir
+    systemProperty("kotlin.test.script.classpath", testSourceSet.output.classesDirs.joinToString(File.pathSeparator))
+    systemProperty("kotlin.script.test.base.compiler.arguments", "-Xuse-ir")
+}
+

@@ -5,7 +5,10 @@
 
 package org.jetbrains.kotlin.gradle.internal.kapt.incremental
 
-import org.gradle.api.artifacts.transform.ArtifactTransform
+import org.gradle.api.artifacts.transform.*
+import org.gradle.api.file.FileSystemLocation
+import org.gradle.api.provider.Provider
+import org.gradle.api.tasks.Classpath
 import org.jetbrains.org.objectweb.asm.ClassReader
 import org.jetbrains.org.objectweb.asm.ClassWriter
 import java.io.*
@@ -15,23 +18,51 @@ import java.util.zip.ZipFile
 const val CLASS_STRUCTURE_ARTIFACT_TYPE = "class-structure"
 private const val MODULE_INFO = "module-info.class"
 
-class StructureArtifactTransform : ArtifactTransform() {
-    override fun transform(input: File): MutableList<File> {
+@CacheableTransform
+abstract class StructureTransformAction : TransformAction<TransformParameters.None> {
+    @get:InputArtifact
+    @get:Classpath
+    abstract val inputArtifact: Provider<FileSystemLocation>
+
+    override fun transform(outputs: TransformOutputs) {
         try {
-            val data = if (input.isDirectory) {
-                visitDirectory(input)
-            } else {
-                visitJar(input)
-            }
-
-            val dataFile = outputDirectory.resolve("output.bin")
-            data.saveTo(dataFile)
-
-            return mutableListOf(dataFile)
+            transform(inputArtifact.get().asFile, outputs)
         } catch (e: Throwable) {
             throw e
         }
     }
+}
+
+/**
+ * [StructureTransformLegacyAction] is a legacy version of [StructureTransformAction] and should only be used when gradle version is 5.3
+ * or less. The reason of having this legacy artifact transform is that declaring inputArtifact as type Provider<FileSystemLocation> is not
+ * supported until gradle version 5.4. Once our minimal supported gradle version is 5.4 or above, this legacy artifact transform can be
+ * removed.
+ */
+@CacheableTransform
+abstract class StructureTransformLegacyAction : TransformAction<TransformParameters.None> {
+    @get:InputArtifact
+    @get:Classpath
+    abstract val inputArtifact: File
+
+    override fun transform(outputs: TransformOutputs) {
+        try {
+            transform(inputArtifact, outputs)
+        } catch (e: Throwable) {
+            throw e
+        }
+    }
+}
+
+private fun transform(input: File, outputs: TransformOutputs) {
+    val data = if (input.isDirectory) {
+        visitDirectory(input)
+    } else {
+        visitJar(input)
+    }
+
+    val dataFile = outputs.file("output.bin")
+    data.saveTo(dataFile)
 }
 
 private fun visitDirectory(directory: File): ClasspathEntryData {
@@ -101,6 +132,7 @@ class ClasspathEntryData : Serializable {
 
     @Transient
     var classAbiHash = mutableMapOf<String, ByteArray>()
+
     @Transient
     var classDependencies = mutableMapOf<String, ClassDependencies>()
 
@@ -111,7 +143,9 @@ class ClasspathEntryData : Serializable {
 
         val names = LinkedHashMap<String, Int>()
         sortedClassDependencies.forEach {
-            names[it.key] = names.size
+            if (it.key !in names) {
+                names[it.key] = names.size
+            }
             it.value.abiTypes.forEach { type ->
                 if (type !in names) names[type] = names.size
             }

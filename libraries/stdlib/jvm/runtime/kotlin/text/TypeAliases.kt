@@ -3,7 +3,7 @@
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
-@file:Suppress("ACTUAL_WITHOUT_EXPECT") // for building kotlin-stdlib-minimal-for-test
+@file:Suppress("ACTUAL_WITHOUT_EXPECT") // for building kotlin-stdlib-jvm-minimal-for-test
 
 package kotlin.text
 
@@ -15,6 +15,6 @@ package kotlin.text
 /**
  *  The exception thrown when a character encoding or decoding error occurs.
  */
-@SinceKotlin("1.3")
-@ExperimentalStdlibApi
+@SinceKotlin("1.4")
+@WasExperimental(ExperimentalStdlibApi::class)
 public actual typealias CharacterCodingException = java.nio.charset.CharacterCodingException

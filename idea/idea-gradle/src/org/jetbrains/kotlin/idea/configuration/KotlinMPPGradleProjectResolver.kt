@@ -1,22 +1,20 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.configuration
 
-import com.google.common.graph.GraphBuilder
-import com.google.common.graph.Graphs
 import com.intellij.ide.plugins.PluginManager
 import com.intellij.openapi.extensions.PluginId
 import com.intellij.openapi.externalSystem.model.DataNode
 import com.intellij.openapi.externalSystem.model.ProjectKeys
 import com.intellij.openapi.externalSystem.model.project.*
 import com.intellij.openapi.externalSystem.util.ExternalSystemApiUtil
+import com.intellij.openapi.externalSystem.util.ExternalSystemApiUtil.normalizePath
 import com.intellij.openapi.externalSystem.util.ExternalSystemApiUtil.toCanonicalPath
 import com.intellij.openapi.externalSystem.util.ExternalSystemConstants
 import com.intellij.openapi.externalSystem.util.Order
-import com.intellij.openapi.roots.DependencyScope
 import com.intellij.openapi.util.Key
 import com.intellij.openapi.util.Pair
 import com.intellij.openapi.util.io.FileUtil
@@ -28,34 +26,38 @@ import com.intellij.util.text.VersionComparatorUtil
 import org.gradle.tooling.model.UnsupportedMethodException
 import org.gradle.tooling.model.idea.IdeaContentRoot
 import org.gradle.tooling.model.idea.IdeaModule
-import org.jetbrains.annotations.NonNls
 import org.jetbrains.kotlin.cli.common.arguments.CommonCompilerArguments
 import org.jetbrains.kotlin.cli.common.arguments.K2JVMCompilerArguments
 import org.jetbrains.kotlin.cli.common.arguments.ManualLanguageFeatureSetting
 import org.jetbrains.kotlin.cli.common.arguments.parseCommandLineArguments
-import org.jetbrains.kotlin.config.*
+import org.jetbrains.kotlin.config.ExternalSystemNativeMainRunTask
+import org.jetbrains.kotlin.config.ExternalSystemRunTask
+import org.jetbrains.kotlin.config.ExternalSystemTestRunTask
+import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.gradle.*
 import org.jetbrains.kotlin.idea.configuration.GradlePropertiesFileFacade.Companion.KOTLIN_NOT_IMPORTED_COMMON_SOURCE_SETS_SETTING
-import org.jetbrains.kotlin.idea.configuration.klib.KotlinNativeLibrariesDependencySubstitutor
-import org.jetbrains.kotlin.idea.configuration.klib.KotlinNativeLibrariesFixer
-import org.jetbrains.kotlin.idea.configuration.klib.KotlinNativeLibraryNameUtil.KOTLIN_NATIVE_LIBRARY_PREFIX_PLUS_SPACE
+import org.jetbrains.kotlin.idea.configuration.mpp.createPopulateModuleDependenciesContext
+import org.jetbrains.kotlin.idea.configuration.mpp.getCompilations
+import org.jetbrains.kotlin.idea.configuration.mpp.populateModuleDependenciesByCompilations
+import org.jetbrains.kotlin.idea.configuration.mpp.populateModuleDependenciesBySourceSetVisibilityGraph
+import org.jetbrains.kotlin.idea.configuration.utils.UnsafeTestSourceSetHeuristicApi
+import org.jetbrains.kotlin.idea.configuration.utils.predictedProductionSourceSetName
 import org.jetbrains.kotlin.idea.platform.IdePlatformKindTooling
+import org.jetbrains.kotlin.idea.util.NotNullableCopyableDataNodeUserDataProperty
 import org.jetbrains.kotlin.util.removeSuffixIfPresent
-import org.jetbrains.kotlin.utils.addToStdlib.firstNotNullResult
 import org.jetbrains.plugins.gradle.model.*
 import org.jetbrains.plugins.gradle.model.data.BuildScriptClasspathData
 import org.jetbrains.plugins.gradle.model.data.GradleSourceSetData
 import org.jetbrains.plugins.gradle.service.project.GradleProjectResolver
 import org.jetbrains.plugins.gradle.service.project.GradleProjectResolver.CONFIGURATION_ARTIFACTS
 import org.jetbrains.plugins.gradle.service.project.GradleProjectResolver.MODULES_OUTPUTS
-import org.jetbrains.plugins.gradle.service.project.GradleProjectResolverUtil.buildDependencies
 import org.jetbrains.plugins.gradle.service.project.GradleProjectResolverUtil.getModuleId
 import org.jetbrains.plugins.gradle.service.project.ProjectResolverContext
 import org.jetbrains.plugins.gradle.util.GradleConstants
 import java.io.File
 import java.lang.reflect.Proxy
 import java.util.*
-import kotlin.collections.HashMap
+import java.util.stream.Collectors
 
 @Order(ExternalSystemConstants.UNORDERED + 1)
 open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtensionCompat() {
@@ -89,7 +91,7 @@ open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtensionComp
     }
 
     override fun populateModuleContentRoots(gradleModule: IdeaModule, ideModule: DataNode<ModuleData>) {
-        val mppModel = resolverCtx.getExtraProject(gradleModule, KotlinMPPGradleModel::class.java)
+        val mppModel = resolverCtx.getMppModel(gradleModule)
         if (mppModel == null) {
             return super.populateModuleContentRoots(gradleModule, ideModule)
         } else {
@@ -112,7 +114,9 @@ open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtensionComp
         val projectDataNode = ideModule.getDataNode(ProjectKeys.PROJECT)!!
         val moduleOutputsMap = projectDataNode.getUserData(MODULES_OUTPUTS)!!
         val outputDirs = HashSet<String>()
-        processCompilations(gradleModule, mppModel, ideModule, resolverCtx) { dataNode, compilation ->
+        getCompilations(gradleModule, mppModel, ideModule, resolverCtx)
+            .filterNot { (_, compilation) -> delegateToAndroidPlugin(compilation) }
+            .forEach { (dataNode, compilation) ->
             var gradleOutputMap = dataNode.getUserData(GradleProjectResolver.GRADLE_OUTPUTS)
             if (gradleOutputMap == null) {
                 gradleOutputMap = MultiMap.create()
@@ -149,8 +153,6 @@ open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtensionComp
                 sourceSet.dependencies.modifyDependenciesOnMppModules(ideProject, resolverCtx)
             }
             super.populateModuleDependencies(gradleModule, ideModule, ideProject)//TODO add dependencies on mpp module
-        } else {
-            mppModel.dependencyMap.values.modifyDependenciesOnMppModules(ideProject, resolverCtx)
         }
         populateModuleDependencies(gradleModule, ideProject, ideModule, resolverCtx)
     }
@@ -189,6 +191,10 @@ open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtensionComp
             Key.create<MutableMap<String/* artifact path */, MutableList<String> /* module ids*/>>("gradleMPPArtifactsMap")
         val proxyObjectCloningCache = WeakHashMap<Any, Any>()
 
+        //flag for avoid double resolve from KotlinMPPGradleProjectResolver and KotlinAndroidMPPGradleProjectResolver
+        private var DataNode<ModuleData>.isMppDataInitialized
+                by NotNullableCopyableDataNodeUserDataProperty(Key.create<Boolean>("IS_MPP_DATA_INITIALIZED"), false)
+
         private var nativeDebugAdvertised = false
         private val androidPluginPresent = PluginManager.getPlugin(PluginId.findId("org.jetbrains.android"))?.isEnabled ?: false
 
@@ -199,45 +205,41 @@ open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtensionComp
                 else -> emptyList()
             }
 
-        private fun Collection<ExternalDependency>.modifyDependenciesOnMppModules(
+        private fun getOrCreateAffiliatedArtifactsMap(ideProject: DataNode<ProjectData>): Map<String, List<String>>? {
+            val mppArtifacts = ideProject.getUserData(MPP_CONFIGURATION_ARTIFACTS) ?: return null
+            val configArtifacts = ideProject.getUserData(CONFIGURATION_ARTIFACTS) ?: return null
+            // All MPP modules are already known, we can fill configurations map
+            return /*ideProject.getUserData(MPP_AFFILATED_ARTIFACTS) ?:*/ HashMap<String, MutableList<String>>().also { newMap ->
+                mppArtifacts.forEach { (filePath, moduleIds) ->
+                    val list2add = ArrayList<String>()
+                    newMap[filePath] = list2add
+                    for ((index, module) in moduleIds.withIndex()) {
+                        if (index == 0) {
+                            configArtifacts[filePath] = module
+                        } else {
+                            val affiliatedFileName = "$filePath-MPP-$index"
+                            configArtifacts[affiliatedFileName] = module
+                            list2add.add(affiliatedFileName)
+                        }
+                    }
+                }
+                //ideProject.putUserData(MPP_AFFILATED_ARTIFACTS, newMap)
+            }
+        }
+
+        internal fun Collection<ExternalDependency>.modifyDependenciesOnMppModules(
             ideProject: DataNode<ProjectData>,
             resolverCtx: ProjectResolverContext
         ) {
             // Add mpp-artifacts into map used for dependency substitution
-            val mppArtifacts = ideProject.getUserData(MPP_CONFIGURATION_ARTIFACTS)
-            val configArtifacts = ideProject.getUserData(CONFIGURATION_ARTIFACTS)
-            if (mppArtifacts != null && configArtifacts != null) {
-                val reverseConfigArtifacts = HashMap(configArtifacts.map { it.value to it.key }.toMap())
-                // processing case when one artifact could be produced by several (actualized!)source sets
-                if (mppArtifacts.isNotEmpty() && resolverCtx.isResolveModulePerSourceSet) {
-                    //Note! Should not use MultiValuesMap as it contains Set of values, but we need comparision === instead of ==
-                    val artifactToDependency = HashMap<String, MutableCollection<ExternalDependency>>()
-                    this.forEach { dependency ->
-                        dependency.getDependencyArtifacts().map { toCanonicalPath(it.absolutePath) }
-                            .filter { mppArtifacts.keys.contains(it) }.forEach { filePath ->
-                                (artifactToDependency[filePath] ?: ArrayList<ExternalDependency>().also { newCollection ->
-                                    artifactToDependency[filePath] = newCollection
-                                }).add(dependency)
-                            }
-                    }
-                    // create 'fake' dependency artifact files and put them into dependency substitution map
-                    mppArtifacts.forEach { (filePath, moduleIds) ->
-                        moduleIds.firstOrNull()?.also { configArtifacts[filePath] = it }
-                        artifactToDependency[filePath]?.forEach { externalDependency ->
-                            for ((index, module) in moduleIds.withIndex()) {
-                                if (index != 0) {
-                                    val fakeArtifact = if (reverseConfigArtifacts.containsKey(module)) {
-                                        reverseConfigArtifacts[module]
-                                    } else {
-                                        val result = "$filePath-MPP-$index"
-                                        configArtifacts[result] = module
-                                        reverseConfigArtifacts[module] = result
-                                        result
-                                    }
-                                    externalDependency.addDependencyArtifactInternal(File(fakeArtifact))
-                                }
-                            }
-                        }
+            val affiliatedArtifacts = getOrCreateAffiliatedArtifactsMap(ideProject)
+            if (affiliatedArtifacts != null) {
+                this.forEach { dependency ->
+                    val existingArtifactDependencies = dependency.getDependencyArtifacts().map { normalizePath(it.absolutePath) }
+                    val dependencies2add = existingArtifactDependencies.flatMap { affiliatedArtifacts[it] ?: emptyList() }
+                        .filter { !existingArtifactDependencies.contains(it) }
+                    dependencies2add.forEach {
+                        dependency.addDependencyArtifactInternal(File(it))
                     }
                 }
             }
@@ -264,6 +266,8 @@ open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtensionComp
             projectDataNode: DataNode<ProjectData>,
             resolverCtx: ProjectResolverContext
         ) {
+            if (mainModuleNode.isMppDataInitialized) return
+
             val mainModuleData = mainModuleNode.data
             val mainModuleConfigPath = mainModuleData.linkedExternalProjectPath
             val mainModuleFileDirectoryPath = mainModuleData.moduleFileDirectoryPath
@@ -271,10 +275,11 @@ open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtensionComp
             val externalProject = resolverCtx.getExtraProject(gradleModule, ExternalProject::class.java)
             val mppModel = resolverCtx.getMppModel(gradleModule)
             if (mppModel == null || externalProject == null) return
+            mainModuleNode.isMppDataInitialized = true
 
             val jdkName = gradleModule.jdkNameIfAny
 
-            // save artefacts locations.
+            // save artifacts locations.
             val userData = projectDataNode.getUserData(MPP_CONFIGURATION_ARTIFACTS) ?: HashMap<String, MutableList<String>>().apply {
                 projectDataNode.putUserData(MPP_CONFIGURATION_ARTIFACTS, this)
             }
@@ -283,8 +288,8 @@ open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtensionComp
                 val path = toCanonicalPath(target.jar!!.archiveFile!!.absolutePath)
                 val currentModules = userData[path] ?: ArrayList<String>().apply { userData[path] = this }
                 // Test modules should not be added. Otherwise we could get dependnecy of java.mail on jvmTest
-                val allSourceSets = target.compilations.filter { !it.isTestModule }.flatMap { it.sourceSets }.toSet()
-                val availableViaDependsOn = allSourceSets.flatMap { it.dependsOnSourceSets }.mapNotNull { mppModel.sourceSets[it] }
+                val allSourceSets = target.compilations.filter { !it.isTestModule }.flatMap { it.declaredSourceSets }.toSet()
+                val availableViaDependsOn = allSourceSets.flatMap { it.allDependsOnSourceSets }.mapNotNull { mppModel.sourceSetsByName[it] }
                 allSourceSets.union(availableViaDependsOn).forEach { sourceSet ->
                     currentModules.add(getKotlinModuleId(gradleModule, sourceSet, resolverCtx))
                 }
@@ -356,7 +361,7 @@ open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtensionComp
                         resolverCtx
                     ) ?: continue
                     kotlinSourceSet.externalSystemRunTasks =
-                        compilation.sourceSets.firstNotNullResult { sourceSetToRunTasks[it] } ?: emptyList()
+                        compilation.declaredSourceSets.firstNotNullOfOrNull { sourceSetToRunTasks[it] } ?: emptyList()
 
                     if (compilation.platform == KotlinPlatform.JVM || compilation.platform == KotlinPlatform.ANDROID) {
                         compilationData.targetCompatibility = (kotlinSourceSet.compilerArguments as? K2JVMCompilerArguments)?.jvmTarget
@@ -368,9 +373,9 @@ open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtensionComp
                         }
                     }
 
-                    for (sourceSet in compilation.sourceSets) {
+                    for (sourceSet in compilation.declaredSourceSets) {
                         sourceSetToCompilationData.getOrPut(sourceSet.name) { LinkedHashSet() } += compilationData
-                        for (dependentSourceSetName in sourceSet.dependsOnSourceSets) {
+                        for (dependentSourceSetName in sourceSet.allDependsOnSourceSets) {
                             sourceSetToCompilationData.getOrPut(dependentSourceSetName) { LinkedHashSet() } += compilationData
                         }
                     }
@@ -387,14 +392,10 @@ open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtensionComp
                 targetData.moduleIds = compilationIds
             }
 
-            sourceSetMap.values.forEach {
-                it.getSecond().dependencies?.modifyDependenciesOnMppModules(projectDataNode, resolverCtx)
-            }
-
             val ignoreCommonSourceSets by lazy { externalProject.notImportedCommonSourceSets() }
-            for (sourceSet in mppModel.sourceSets.values) {
+            for (sourceSet in mppModel.sourceSetsByName.values) {
                 if (delegateToAndroidPlugin(sourceSet)) continue
-                if (sourceSet.actualPlatforms.supports(KotlinPlatform.COMMON) && ignoreCommonSourceSets) continue
+                if (sourceSet.actualPlatforms.platforms.singleOrNull() == KotlinPlatform.COMMON && ignoreCommonSourceSets) continue
                 val moduleId = getKotlinModuleId(gradleModule, sourceSet, resolverCtx)
                 val existingSourceSetDataNode = sourceSetMap[moduleId]?.first
                 if (existingSourceSetDataNode?.kotlinSourceSet != null) continue
@@ -408,15 +409,14 @@ open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtensionComp
                     it.group = externalProject.group
                     it.version = externalProject.version
 
-                    val name = sourceSet.name
-                    val baseName = name.removeSuffix("Test")
-                    if (baseName != name) {
+                    if (sourceSet.isTestModule) {
                         it.productionModuleId = getInternalModuleName(
                             gradleModule,
                             externalProject,
                             sourceSet,
                             resolverCtx,
-                            baseName + "Main"
+                            @OptIn(UnsafeTestSourceSetHeuristicApi::class)
+                            predictedProductionSourceSetName(sourceSet.name)
                         )
                     }
 
@@ -426,9 +426,9 @@ open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtensionComp
                     sourceSetToCompilationData[sourceSet.name]?.let { compilationDataRecords ->
                         it.targetCompatibility = compilationDataRecords
                             .mapNotNull { compilationData -> compilationData.targetCompatibility }
-                            .minWith(VersionComparatorUtil.COMPARATOR)
+                            .minWithOrNull(VersionComparatorUtil.COMPARATOR)
 
-                        if (sourceSet.actualPlatforms.getSinglePlatform() == KotlinPlatform.NATIVE) {
+                        if (sourceSet.actualPlatforms.singleOrNull() == KotlinPlatform.NATIVE) {
                             it.konanTargets = compilationDataRecords
                                 .flatMap { compilationData -> compilationData.konanTargets }
                                 .toSet()
@@ -436,7 +436,7 @@ open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtensionComp
                     }
                 }
 
-                val kotlinSourceSet = createSourceSetInfo(sourceSet, gradleModule, resolverCtx) ?: continue
+                val kotlinSourceSet = createSourceSetInfo(mppModel, sourceSet, gradleModule, resolverCtx) ?: continue
                 kotlinSourceSet.externalSystemRunTasks = sourceSetToRunTasks[sourceSet] ?: emptyList()
 
                 val sourceSetDataNode =
@@ -455,9 +455,12 @@ open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtensionComp
                 }
             }
 
-            mainModuleNode.kotlinNativeHome = mppModel.kotlinNativeHome
-            mainModuleNode.coroutines = mppModel.extraFeatures.coroutinesState
-            mainModuleNode.isHmpp = mppModel.extraFeatures.isHMPPEnabled
+            with(mainModuleNode) {
+                kotlinNativeHome = mppModel.kotlinNativeHome
+                coroutines = mppModel.extraFeatures.coroutinesState
+                isHmpp = mppModel.extraFeatures.isHMPPEnabled
+                kotlinImportingDiagnosticsContainer = mppModel.kotlinImportingDiagnostics
+            }
             //TODO improve passing version of used multiplatform
         }
 
@@ -470,8 +473,7 @@ open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtensionComp
             val dependsOnReverseGraph: MutableMap<String, MutableSet<KotlinSourceSet>> = HashMap()
             mppModel.targets.forEach { target ->
                 target.compilations.forEach { compilation ->
-                    val testRunTasks = target.testRunTasks
-                        .filter { task -> task.compilationName == compilation.name }
+                    val testRunTasks = target.testTasksFor(compilation)
                         .map {
                             ExternalSystemTestRunTask(
                                 it.taskName,
@@ -491,15 +493,15 @@ open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtensionComp
                             )
                         }
                     val allRunTasks = testRunTasks + nativeMainRunTasks
-                    compilation.sourceSets.forEach { sourceSet ->
+                    compilation.declaredSourceSets.forEach { sourceSet ->
                         sourceSetToRunTasks.getOrPut(sourceSet) { LinkedHashSet() } += allRunTasks
-                        sourceSet.dependsOnSourceSets.forEach { dependentModule ->
-                            dependsOnReverseGraph.getOrPut(dependentModule) { LinkedHashSet() } += sourceSet
+                        mppModel.resolveAllDependsOnSourceSets(sourceSet).forEach { dependentModule ->
+                            dependsOnReverseGraph.getOrPut(dependentModule.name) { LinkedHashSet() } += sourceSet
                         }
                     }
                 }
             }
-            mppModel.sourceSets.forEach { (sourceSetName, sourceSet) ->
+            mppModel.sourceSetsByName.forEach { (sourceSetName, sourceSet) ->
                 dependsOnReverseGraph[sourceSetName]?.forEach { dependingSourceSet ->
                     sourceSetToRunTasks.getOrPut(sourceSet) { LinkedHashSet() } += sourceSetToRunTasks[dependingSourceSet] ?: emptyList()
                 }
@@ -515,7 +517,7 @@ open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtensionComp
             val mppModel = resolverCtx.getMppModel(gradleModule) ?: return
             val sourceSetToPackagePrefix = mppModel.targets.flatMap { it.compilations }
                 .flatMap { compilation ->
-                    compilation.sourceSets.map { sourceSet -> sourceSet.name to compilation.kotlinTaskProperties.packagePrefix }
+                    compilation.declaredSourceSets.map { sourceSet -> sourceSet.name to compilation.kotlinTaskProperties.packagePrefix }
                 }
                 .toMap()
             if (resolverCtx.getExtraProject(gradleModule, ExternalProject::class.java) == null) return
@@ -547,9 +549,19 @@ open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtensionComp
                 }
                 ideModule.createChild(ProjectKeys.CONTENT_ROOT, ideContentRoot)
             }
+
+            val mppModelPureKotlinSourceFolders = mppModel.targets.flatMap { it.compilations }
+                .flatMap { it.kotlinTaskProperties.pureKotlinSourceFolders ?: emptyList() }
+                .map { it.absolutePath }
+
+            ideModule.pureKotlinSourceFolders =
+                if (ideModule.pureKotlinSourceFolders.isEmpty())
+                    mppModelPureKotlinSourceFolders
+                else
+                    mppModelPureKotlinSourceFolders + ideModule.pureKotlinSourceFolders
         }
 
-        private data class CompilationWithDependencies(
+        internal data class CompilationWithDependencies(
             val compilation: KotlinCompilation,
             val substitutedDependencies: List<ExternalDependency>
         ) {
@@ -567,225 +579,17 @@ open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtensionComp
             ideModule: DataNode<ModuleData>,
             resolverCtx: ProjectResolverContext
         ) {
-            val mppModel = resolverCtx.getMppModel(gradleModule) ?: return
-            val sourceSetMap = ideProject.getUserData(GradleProjectResolver.RESOLVED_SOURCE_SETS) ?: return
-            val artifactsMap = ideProject.getUserData(CONFIGURATION_ARTIFACTS) ?: return
-            val substitutor = KotlinNativeLibrariesDependencySubstitutor(mppModel, gradleModule, resolverCtx)
-            val sourceSetToCompilations = mutableMapOf<String, MutableList<CompilationWithDependencies>>()
-            val processedModuleIds = HashSet<String>()
-            processCompilations(gradleModule, mppModel, ideModule, resolverCtx) { dataNode, compilation ->
-                if (processedModuleIds.add(getKotlinModuleId(gradleModule, compilation, resolverCtx))) {
-                    val substitutedDependencies =
-                        substitutor.substituteDependencies(compilation.dependencies.mapNotNull { mppModel.dependencyMap[it] })
-                    buildDependencies(
-                        resolverCtx,
-                        sourceSetMap,
-                        artifactsMap,
-                        dataNode,
-                        preprocessDependencies(substitutedDependencies),
-                        ideProject
-                    )
-                    KotlinNativeLibrariesFixer.applyTo(dataNode, ideProject)
-                    for (sourceSet in compilation.sourceSets) {
-                        (sourceSet.dependsOnSourceSets + sourceSet.name).forEach {
-                            sourceSetToCompilations
-                                .getOrPut(it) { mutableListOf() }
-                                .add(CompilationWithDependencies(compilation, substitutedDependencies))
-                        }
-                        if (sourceSet.fullName() == compilation.fullName()) continue
-                        val targetDataNode = getSiblingKotlinModuleData(sourceSet, gradleModule, ideModule, resolverCtx) ?: continue
-                        addDependency(dataNode, targetDataNode, sourceSet.isTestModule)
-                    }
-                }
-            }
-            val sourceSetGraph = GraphBuilder.directed().build<KotlinSourceSet>()
-            processSourceSets(gradleModule, mppModel, ideModule, resolverCtx) { dataNode, sourceSet ->
-                sourceSetGraph.addNode(sourceSet)
-                val productionSourceSet = dataNode
-                    ?.data
-                    ?.productionModuleId
-                    ?.let { ideModule.findChildModuleByInternalName(it) }
-                    ?.kotlinSourceSet
-                    ?.kotlinModule
-                    ?.toSourceSet(mppModel)
-                if (productionSourceSet != null) {
-                    sourceSetGraph.putEdge(sourceSet, productionSourceSet)
-                }
-                for (targetSourceSetName in sourceSet.dependsOnSourceSets) {
-                    val targetSourceSet = mppModel.sourceSets[targetSourceSetName] ?: continue
-                    sourceSetGraph.putEdge(sourceSet, targetSourceSet)
-                }
-                // Workaround: Non-android source sets have commonMain/commonTest in their dependsOn
-                // Remove when the same is implemented for Android modules as well
-                if (sourceSet.actualPlatforms.supports(KotlinPlatform.ANDROID)) {
-                    val commonSourceSetName = if (sourceSet.isTestModule) {
-                        KotlinSourceSet.COMMON_TEST_SOURCE_SET_NAME
-                    } else {
-                        KotlinSourceSet.COMMON_MAIN_SOURCE_SET_NAME
-                    }
-                    val commonSourceSet = mppModel.sourceSets[commonSourceSetName]
-                    if (commonSourceSet != null && commonSourceSet != sourceSet) {
-                        sourceSetGraph.putEdge(sourceSet, commonSourceSet)
-                    }
-                }
-            }
-            val closedSourceSetGraph = Graphs.transitiveClosure(sourceSetGraph)
-            for (sourceSet in closedSourceSetGraph.nodes()) {
-                val isAndroid = delegateToAndroidPlugin(sourceSet)
-                val fromDataNode = if (isAndroid) {
-                    ideModule
-                } else {
-                    getSiblingKotlinModuleData(sourceSet, gradleModule, ideModule, resolverCtx)
-                } ?: continue
-                val dependeeSourceSets = closedSourceSetGraph.successors(sourceSet)
-                val sourceSetInfos = if (isAndroid) {
-                    ideModule.kotlinAndroidSourceSets?.filter {
-                        (it.kotlinModule as? KotlinCompilation)?.sourceSets?.contains(sourceSet) ?: false
-                    } ?: emptyList()
-                } else {
-                    listOfNotNull(fromDataNode.kotlinSourceSet)
-                }
-                for (sourceSetInfo in sourceSetInfos) {
-                    if (sourceSetInfo.kotlinModule is KotlinCompilation) {
-                        val selfName = sourceSetInfo.kotlinModule.fullName()
-                        sourceSetInfo.addSourceSets(dependeeSourceSets, selfName, gradleModule, resolverCtx)
-                    }
-                }
-                if (delegateToAndroidPlugin(sourceSet)) continue
-                for (dependeeSourceSet in dependeeSourceSets) {
-                    val toDataNode = getSiblingKotlinModuleData(dependeeSourceSet, gradleModule, ideModule, resolverCtx) ?: continue
-                    addDependency(fromDataNode, toDataNode, dependeeSourceSet.isTestModule)
-                }
-                if (processedModuleIds.add(getKotlinModuleId(gradleModule, sourceSet, resolverCtx))) {
-                    val mergedSubstitutedDependencies = LinkedHashSet<KotlinDependency>().apply {
-                        val forceNativeDependencyPropagation: Boolean
-                        val excludeInheritedNativeDependencies: Boolean
-                        if (mppModel.extraFeatures.isHMPPEnabled && sourceSet.actualPlatforms.getSinglePlatform() == KotlinPlatform.NATIVE) {
-                            forceNativeDependencyPropagation = mppModel.extraFeatures.isNativeDependencyPropagationEnabled
-                            excludeInheritedNativeDependencies = !forceNativeDependencyPropagation
-                        } else {
-                            forceNativeDependencyPropagation = false
-                            excludeInheritedNativeDependencies = false
-                        }
-                        addAll(substitutor.substituteDependencies(sourceSet))
-                        dependeeSourceSets.flatMapTo(this) { dependeeSourceSet ->
-                            substitutor.substituteDependencies(dependeeSourceSet).run {
-                                if (excludeInheritedNativeDependencies)
-                                    filter { !it.name.startsWith(KOTLIN_NATIVE_LIBRARY_PREFIX_PLUS_SPACE) }
-                                else this
-                            }
-                        }
-                        if (forceNativeDependencyPropagation) {
-                            sourceSetToCompilations[sourceSet.name]?.let { compilations ->
-                                addAll(propagatedNativeDependencies(compilations))
-                            }
-                        }
-                    }
-                    buildDependencies(
-                        resolverCtx,
-                        sourceSetMap,
-                        artifactsMap,
-                        fromDataNode,
-                        preprocessDependencies(mergedSubstitutedDependencies),
-                        ideProject
-                    )
-                    @Suppress("UNCHECKED_CAST")
-                    KotlinNativeLibrariesFixer.applyTo(fromDataNode as DataNode<GradleSourceSetData>, ideProject)
-                }
-            }
+            val context = createPopulateModuleDependenciesContext(
+                gradleModule = gradleModule,
+                ideProject = ideProject,
+                ideModule = ideModule,
+                resolverCtx = resolverCtx
+            ) ?: return
+            populateModuleDependenciesByCompilations(context)
+            populateModuleDependenciesBySourceSetVisibilityGraph(context)
         }
 
-        private fun KotlinNativeLibrariesDependencySubstitutor.substituteDependencies(kotlinModule: KotlinModule): List<ExternalDependency> =
-            substituteDependencies(kotlinModule.dependencies.mapNotNull { mppModel.dependencyMap[it] })
-
-        // We can't really commonize native platform libraries yet.
-        // But APIs for different targets may be very similar.
-        // E.g. ios_arm64 and ios_x64 have almost identical platform libraries.
-        // We handle these special cases and resolve common sources for such
-        // targets against libraries of one of them. E.g. common sources for
-        // ios_x64 and ios_arm64 will be resolved against ios_arm64 libraries.
-        //
-        // Currently such special casing is available for Apple platforms
-        // (iOS, watchOS and tvOS) and native Android (ARM, X86).
-        // TODO: Do we need to support user's interop libraries too?
-        private fun propagatedNativeDependencies(compilations: List<CompilationWithDependencies>): List<ExternalDependency> {
-            if (compilations.size <= 1) {
-                return emptyList()
-            }
-
-            val copyFrom = when {
-                compilations.all { it.isAppleCompilation } ->
-                    compilations.selectFirstAvailableTarget(
-                        "watchos_arm64", "watchos_arm32", "watchos_x86",
-                        "ios_arm64", "ios_arm32", "ios_x64",
-                        "tvos_arm64", "tvos_x64"
-                    )
-                compilations.all { it.konanTarget?.startsWith("android") == true } ->
-                    compilations.selectFirstAvailableTarget(
-                        "android_arm64", "android_arm32", "android_x64", "android_x86"
-                    )
-                else -> return emptyList()
-            }
-
-            return copyFrom.dependencyNames.mapNotNull { (name, dependency) ->
-                when {
-                    !name.startsWith(KOTLIN_NATIVE_LIBRARY_PREFIX_PLUS_SPACE) -> null  // Support only default platform libs for now.
-                    compilations.all { it.dependencyNames.containsKey(name) } -> dependency
-                    else -> null
-                }
-            }
-        }
-
-        private val CompilationWithDependencies.isAppleCompilation: Boolean
-            get() = konanTarget?.let {
-                it.startsWith("ios") || it.startsWith("watchos") || it.startsWith("tvos")
-            } ?: false
-
-        private fun Iterable<CompilationWithDependencies>.selectFirstAvailableTarget(@NonNls vararg targetsByPriority: String): CompilationWithDependencies {
-            for (target in targetsByPriority) {
-                val result = firstOrNull { it.konanTarget == target }
-                if (result != null) {
-                    return result
-                }
-            }
-            return first()
-        }
-
-        private fun KotlinModule.toSourceSet(mppModel: KotlinMPPGradleModel) = when (this) {
-            is KotlinSourceSet -> this
-            is KotlinCompilation -> mppModel.sourceSets[fullName()]
-            else -> null
-        }
-
-        private fun preprocessDependencies(dependencies: Collection<KotlinDependency>): List<ExternalDependency> {
-            return dependencies
-                .groupBy { it.id }
-                .mapValues { it.value.firstOrNull { it.scope == "COMPILE" } ?: it.value.lastOrNull() }
-                .values
-                .filterNotNull()
-        }
-
-        private fun addDependency(fromModule: DataNode<*>, toModule: DataNode<*>, dependOnTestModule: Boolean) {
-            if (fromModule.data == toModule.data) return
-            val fromData = fromModule.data as? ModuleData ?: return
-            val toData = toModule.data as? ModuleData ?: return
-            val existing = fromModule.children.mapNotNull { it.data as? ModuleDependencyData }.filter { it.target.id == (toModule.data as? ModuleData)?.id }
-            val nodeToModify =
-                existing.singleOrNull() ?: existing.firstOrNull { it.scope == DependencyScope.COMPILE } ?: existing.firstOrNull()
-            if (nodeToModify != null) {
-                nodeToModify.scope = DependencyScope.COMPILE
-                nodeToModify.isProductionOnTestDependency = nodeToModify.isProductionOnTestDependency || dependOnTestModule
-                return
-            }
-            val moduleDependencyData = ModuleDependencyData(fromData, toData).also {
-                it.scope = DependencyScope.COMPILE
-                it.isExported = false
-                it.isProductionOnTestDependency = dependOnTestModule
-            }
-            fromModule.createChild(ProjectKeys.MODULE_DEPENDENCY, moduleDependencyData)
-        }
-
-        private fun getSiblingKotlinModuleData(
+        internal fun getSiblingKotlinModuleData(
             kotlinModule: KotlinModule,
             gradleModule: IdeaModule,
             ideModule: DataNode<ModuleData>,
@@ -821,33 +625,10 @@ open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtensionComp
                     sourceSetsMap[dataNode.data.id] = dataNode
                 }
             }
-            for (sourceSet in mppModel.sourceSets.values) {
+            for (sourceSet in mppModel.sourceSetsByName.values) {
                 val moduleId = getKotlinModuleId(gradleModule, sourceSet, resolverCtx)
                 val moduleDataNode = sourceSetsMap[moduleId]
                 processor(moduleDataNode, sourceSet)
-            }
-        }
-
-        private fun processCompilations(
-            gradleModule: IdeaModule,
-            mppModel: KotlinMPPGradleModel,
-            ideModule: DataNode<ModuleData>,
-            resolverCtx: ProjectResolverContext,
-            processor: (DataNode<GradleSourceSetData>, KotlinCompilation) -> Unit
-        ) {
-            val sourceSetsMap = HashMap<String, DataNode<GradleSourceSetData>>()
-            for (dataNode in ExternalSystemApiUtil.findAll(ideModule, GradleSourceSetData.KEY)) {
-                if (dataNode.kotlinSourceSet != null) {
-                    sourceSetsMap[dataNode.data.id] = dataNode
-                }
-            }
-            for (target in mppModel.targets) {
-                if (delegateToAndroidPlugin(target)) continue
-                for (compilation in target.compilations) {
-                    val moduleId = getKotlinModuleId(gradleModule, compilation, resolverCtx)
-                    val moduleDataNode = sourceSetsMap[moduleId] ?: continue
-                    processor(moduleDataNode, compilation)
-                }
             }
         }
 
@@ -861,6 +642,16 @@ open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtensionComp
         private fun getExternalModuleName(gradleModule: IdeaModule, kotlinModule: KotlinModule) =
             gradleModule.name + ":" + kotlinModule.fullName()
 
+        private fun gradlePathToQualifiedName(
+            rootName: String,
+            gradlePath: String
+        ): String? {
+            return ((if (gradlePath.startsWith(":")) "$rootName." else "")
+                + Arrays.stream(gradlePath.split(":".toRegex()).toTypedArray())
+            .filter { s: String -> s.isNotEmpty() }
+            .collect(Collectors.joining(".")))
+        }
+
         private fun getInternalModuleName(
             gradleModule: IdeaModule,
             externalProject: ExternalProject,
@@ -870,14 +661,24 @@ open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtensionComp
         ): String {
             val delimiter: String
             val moduleName = StringBuilder()
+
+            val buildSrcGroup = resolverCtx.buildSrcGroup
             if (resolverCtx.isUseQualifiedModuleNames) {
                 delimiter = "."
-                if (StringUtil.isNotEmpty(externalProject.group)) {
-                    moduleName.append(externalProject.group).append(delimiter)
+                if (StringUtil.isNotEmpty(buildSrcGroup)) {
+                    moduleName.append(buildSrcGroup).append(delimiter)
                 }
-                moduleName.append(externalProject.name)
+                moduleName.append(
+                    gradlePathToQualifiedName(
+                        gradleModule.project.name,
+                        externalProject.qName
+                    )
+                )
             } else {
                 delimiter = "_"
+                if (StringUtil.isNotEmpty(buildSrcGroup)) {
+                    moduleName.append(buildSrcGroup).append(delimiter)
+                }
                 moduleName.append(gradleModule.name)
             }
             moduleName.append(delimiter)
@@ -904,7 +705,7 @@ open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtensionComp
                 if (effectiveClassesDir != null) {
                     sourcesWithTypes += compilation.sourceType to DefaultExternalSourceDirectorySet().also { dirSet ->
                         dirSet.outputDir = effectiveClassesDir
-                        dirSet.srcDirs = compilation.sourceSets.flatMapTo(LinkedHashSet()) { it.sourceDirs }
+                        dirSet.srcDirs = compilation.declaredSourceSets.flatMapTo(LinkedHashSet()) { it.sourceDirs }
                         dirSet.gradleOutputDirs += compilation.output.classesDirs
                         dirSet.setInheritedCompilerOutput(false)
                     }
@@ -912,14 +713,12 @@ open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtensionComp
                 if (resourcesDir != null) {
                     sourcesWithTypes += compilation.resourceType to DefaultExternalSourceDirectorySet().also { dirSet ->
                         dirSet.outputDir = resourcesDir
-                        dirSet.srcDirs = compilation.sourceSets.flatMapTo(LinkedHashSet()) { it.resourceDirs }
+                        dirSet.srcDirs = compilation.declaredSourceSets.flatMapTo(LinkedHashSet()) { it.resourceDirs }
                         dirSet.gradleOutputDirs += resourcesDir
                         dirSet.setInheritedCompilerOutput(false)
                     }
                 }
 
-                // BUNCH: 191 Can't use property because there's no getter in 192 and thus it isn't property anymore
-                @Suppress("UsePropertyAccessSyntax")
                 sourceSet.setSources(sourcesWithTypes.toMap())
             }
         }
@@ -935,8 +734,6 @@ open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtensionComp
                 sourceSet.targetCompatibility = ktSourceSetData.targetCompatibility
                 sourceSet.dependencies += ktSourceSet.dependencies.mapNotNull { mppModel.dependencyMap[it] }
 
-                // BUNCH: 191 Can't use property because there's no getter in 192 and thus it isn't property anymore
-                @Suppress("UsePropertyAccessSyntax")
                 sourceSet.setSources(linkedMapOf(
                     ktSourceSet.sourceType to DefaultExternalSourceDirectorySet().also { dirSet ->
                         dirSet.srcDirs = ktSourceSet.sourceDirs
@@ -954,7 +751,9 @@ open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtensionComp
         private val KotlinModule.resourceType
             get() = if (isTestModule) ExternalSystemSourceType.TEST_RESOURCE else ExternalSystemSourceType.RESOURCE
 
+        @OptIn(ExperimentalGradleToolingApi::class)
         private fun createSourceSetInfo(
+            mppModel: KotlinMPPGradleModel,
             sourceSet: KotlinSourceSet,
             gradleModule: IdeaModule,
             resolverCtx: ProjectResolverContext
@@ -964,13 +763,15 @@ open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtensionComp
                 val languageSettings = sourceSet.languageSettings
                 info.moduleId = getKotlinModuleId(gradleModule, sourceSet, resolverCtx)
                 info.gradleModuleId = getModuleId(resolverCtx, gradleModule)
-                info.actualPlatforms.addSimplePlatforms(sourceSet.actualPlatforms.platforms)
+                info.actualPlatforms.pushPlatforms(sourceSet.actualPlatforms)
                 info.isTestModule = sourceSet.isTestModule
-                info.dependsOn = sourceSet.dependsOnSourceSets.toList().map {
-                    getGradleModuleQualifiedName(resolverCtx, gradleModule, it)
+                info.dependsOn = mppModel.resolveAllDependsOnSourceSets(sourceSet).map { dependsOnSourceSet ->
+                    getGradleModuleQualifiedName(resolverCtx, gradleModule, dependsOnSourceSet.name)
                 }
                 //TODO(auskov): target flours are lost here
-                info.compilerArguments = createCompilerArguments(emptyList(), sourceSet.actualPlatforms.getSinglePlatform()).also {
+                info.compilerArguments = createCompilerArguments(
+                    emptyList(), sourceSet.actualPlatforms.singleOrNull() ?: KotlinPlatform.COMMON
+                ).also {
                     it.multiPlatform = true
                     it.languageVersion = languageSettings.languageVersion
                     it.apiVersion = languageSettings.apiVersion
@@ -1006,9 +807,9 @@ open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtensionComp
             return KotlinSourceSetInfo(compilation).also { sourceSetInfo ->
                 sourceSetInfo.moduleId = getKotlinModuleId(gradleModule, compilation, resolverCtx)
                 sourceSetInfo.gradleModuleId = getModuleId(resolverCtx, gradleModule)
-                sourceSetInfo.actualPlatforms.addSimplePlatforms(listOf(compilation.platform))
+                sourceSetInfo.actualPlatforms.pushPlatforms(listOf(compilation.platform))
                 sourceSetInfo.isTestModule = compilation.isTestModule
-                sourceSetInfo.dependsOn = compilation.sourceSets.flatMap { it.dependsOnSourceSets }.map {
+                sourceSetInfo.dependsOn = compilation.declaredSourceSets.flatMap { it.allDependsOnSourceSets }.map {
                     getGradleModuleQualifiedName(resolverCtx, gradleModule, it)
                 }.distinct().toList()
                 sourceSetInfo.compilerArguments =
@@ -1018,14 +819,14 @@ open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtensionComp
                 sourceSetInfo.dependencyClasspath = compilation.dependencyClasspath.toList()
                 sourceSetInfo.defaultCompilerArguments =
                     createCompilerArguments(compilation.arguments.defaultArguments.toList(), compilation.platform)
-                sourceSetInfo.addSourceSets(compilation.sourceSets, compilation.fullName(), gradleModule, resolverCtx)
+                sourceSetInfo.addSourceSets(compilation.allSourceSets, compilation.fullName(), gradleModule, resolverCtx)
             }
         }
 
         /** Checks if our IDE doesn't support such platform */
         private fun KotlinPlatform.isNotSupported() = IdePlatformKindTooling.getToolingIfAny(this) == null
 
-        private fun KotlinSourceSetInfo.addSourceSets(
+        internal fun KotlinSourceSetInfo.addSourceSets(
             sourceSets: Collection<KotlinModule>,
             selfName: String,
             gradleModule: IdeaModule,
@@ -1051,7 +852,7 @@ open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtensionComp
         private fun getKotlinModuleId(gradleModule: IdeaModule, kotlinModule: KotlinModule, resolverCtx: ProjectResolverContext) =
             getGradleModuleQualifiedName(resolverCtx, gradleModule, kotlinModule.fullName())
 
-        private fun getGradleModuleQualifiedName(
+        internal fun getGradleModuleQualifiedName(
             resolverCtx: ProjectResolverContext,
             gradleModule: IdeaModule,
             simpleName: String
@@ -1064,11 +865,21 @@ open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtensionComp
                 ignoreCase = true
             ) ?: false
 
-        private fun delegateToAndroidPlugin(kotlinTarget: KotlinTarget): Boolean =
+        internal fun delegateToAndroidPlugin(compilation: KotlinCompilation): Boolean =
+            androidPluginPresent && compilation.platform == KotlinPlatform.ANDROID
+
+        internal fun delegateToAndroidPlugin(kotlinTarget: KotlinTarget): Boolean =
             androidPluginPresent && kotlinTarget.platform == KotlinPlatform.ANDROID
 
-        private fun delegateToAndroidPlugin(kotlinSourceSet: KotlinSourceSet): Boolean =
+        internal fun delegateToAndroidPlugin(kotlinSourceSet: KotlinSourceSet): Boolean =
             androidPluginPresent && kotlinSourceSet.actualPlatforms.platforms.singleOrNull() == KotlinPlatform.ANDROID
+    }
+}
+
+private fun KotlinTarget.testTasksFor(compilation: KotlinCompilation) = testRunTasks.filter { task ->
+    when (name) {
+        "android" -> task.taskName.endsWith(compilation.name, true)
+        else -> task.compilationName == compilation.name
     }
 }
 

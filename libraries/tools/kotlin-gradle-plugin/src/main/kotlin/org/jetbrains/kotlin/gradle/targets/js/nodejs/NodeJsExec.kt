@@ -13,13 +13,17 @@ import org.jetbrains.kotlin.gradle.targets.js.npm.RequiresNpmDependencies
 import org.jetbrains.kotlin.gradle.targets.js.npm.npmProject
 import org.jetbrains.kotlin.gradle.tasks.registerTask
 import org.jetbrains.kotlin.gradle.utils.newFileProperty
+import javax.inject.Inject
 
-open class NodeJsExec : AbstractExecTask<NodeJsExec>(NodeJsExec::class.java), RequiresNpmDependencies {
+open class NodeJsExec
+@Inject
+constructor(
+    @Internal
+    override val compilation: KotlinJsCompilation
+) : AbstractExecTask<NodeJsExec>(NodeJsExec::class.java), RequiresNpmDependencies {
+    @Transient
     @get:Internal
     lateinit var nodeJs: NodeJsRootExtension
-
-    @get:Internal
-    override lateinit var compilation: KotlinJsCompilation
 
     init {
         onlyIf {
@@ -30,9 +34,13 @@ open class NodeJsExec : AbstractExecTask<NodeJsExec>(NodeJsExec::class.java), Re
     }
 
     @Input
+    var nodeArgs: MutableList<String> = mutableListOf()
+
+    @Input
     var sourceMapStackTraces = true
 
     @Optional
+    @PathSensitive(PathSensitivity.ABSOLUTE)
     @InputFile
     val inputFileProperty: RegularFileProperty = project.newFileProperty()
 
@@ -41,17 +49,22 @@ open class NodeJsExec : AbstractExecTask<NodeJsExec>(NodeJsExec::class.java), Re
         get() = true
 
     @get:Internal
-    override val requiredNpmDependencies: Collection<RequiredKotlinJsDependency>
-        get() = mutableListOf<RequiredKotlinJsDependency>().also {
+    override val requiredNpmDependencies: Set<RequiredKotlinJsDependency> by lazy {
+        mutableSetOf<RequiredKotlinJsDependency>().also {
             if (sourceMapStackTraces) {
                 it.add(nodeJs.versions.sourceMapSupport)
             }
         }
+    }
 
     override fun exec() {
+        val newArgs = mutableListOf<String>()
+        newArgs.addAll(nodeArgs)
         if (inputFileProperty.isPresent) {
-            args(inputFileProperty.asFile.get())
+            newArgs.add(inputFileProperty.asFile.get().canonicalPath)
         }
+        args?.let { newArgs.addAll(it) }
+        args = newArgs
 
         if (sourceMapStackTraces) {
             val sourceMapSupportArgs = mutableListOf(
@@ -76,15 +89,18 @@ open class NodeJsExec : AbstractExecTask<NodeJsExec>(NodeJsExec::class.java), Re
             val target = compilation.target
             val project = target.project
             val nodeJs = NodeJsRootPlugin.apply(project.rootProject)
+            val npmProject = compilation.npmProject
 
-            return project.registerTask(name) {
+            return project.registerTask(
+                name,
+                listOf(compilation)
+            ) {
                 it.nodeJs = nodeJs
-                it.compilation = compilation
                 it.executable = nodeJs.requireConfigured().nodeExecutable
-                it.dependsOn(nodeJs.npmInstallTask)
+                it.workingDir = npmProject.dir
+                it.dependsOn(nodeJs.npmInstallTaskProvider)
 
-                val compileKotlinTask = compilation.compileKotlinTask
-                it.dependsOn(nodeJs.npmInstallTask, compileKotlinTask)
+                it.dependsOn(nodeJs.npmInstallTaskProvider, compilation.compileKotlinTaskProvider)
 
                 it.configuration()
             }

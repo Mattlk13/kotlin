@@ -6,14 +6,14 @@
  * KOTLIN DIAGNOSTICS SPEC TEST (POSITIVE)
  *
  * SPEC VERSION: 0.1-278
- * PLACE: overload-resolution, receivers -> paragraph 5 -> sentence 5
- * RELEVANT PLACES: overload-resolution, receivers -> paragraph 5 -> sentence 4
+ * MAIN LINK: overload-resolution, receivers -> paragraph 5 -> sentence 5
+ * PRIMARY LINKS: overload-resolution, receivers -> paragraph 5 -> sentence 4
  * overload-resolution, building-the-overload-candidate-set-ocs, call-without-an-explicit-receiver -> paragraph 5 -> sentence 2
  * NUMBER: 1
  * DESCRIPTION: Superclass companion object receivers are prioritized according to the inheritance order
  */
 
-// FILE: TestCase.kt
+// FILE: TestCase1.kt
 // TESTCASE NUMBER: 1
 package testsCase1
 
@@ -60,7 +60,7 @@ open class Super_2 : Super_1() {
 }
 
 
-// FILE: TestCase.kt
+// FILE: TestCase2.kt
 // TESTCASE NUMBER: 2
 package testsCase2
 
@@ -106,7 +106,7 @@ open class Super_2 : Super_1() {
 
 }
 
-// FILE: TestCase.kt
+// FILE: TestCase3.kt
 // TESTCASE NUMBER: 3
 package testsCase3
 
@@ -153,7 +153,7 @@ open class Super_2 : Super_1() {
 }
 
 
-// FILE: TestCase.kt
+// FILE: TestCase4.kt
 // TESTCASE NUMBER: 4
 package testsCase4
 

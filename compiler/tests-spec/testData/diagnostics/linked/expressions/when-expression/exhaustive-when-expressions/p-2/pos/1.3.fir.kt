@@ -1,15 +1,5 @@
 // SKIP_TXT
 
-/*
- * KOTLIN DIAGNOSTICS SPEC TEST (POSITIVE)
- *
- * SPEC VERSION: 0.1-100
- * PLACE: expressions, when-expression, exhaustive-when-expressions -> paragraph 2 -> sentence 1
- * NUMBER: 3
- * DESCRIPTION: Exhaustive when, with bound value (sealed, enum, boolean), with redundant else branch.
- * HELPERS: enumClasses, sealedClasses
- */
-
 // TESTCASE NUMBER: 1
 fun case_1(value_1: EnumClass): String = when (value_1) {
     EnumClass.EAST -> ""
@@ -63,7 +53,7 @@ fun case_6(value_1: SealedClass?): String = when (value_1) {
 
 // TESTCASE NUMBER: 7
 fun case_7(value_1: SealedClassSingle): String = when (value_1) {
-    is SealedClassSingle -> ""
+    <!USELESS_IS_CHECK!>is SealedClassSingle<!> -> ""
     else -> ""
 }
 

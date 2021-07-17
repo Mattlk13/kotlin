@@ -1,10 +1,12 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2021 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package templates
 
+import templates.DocExtensions.collection
+import templates.DocExtensions.element
 import templates.Family.*
 import templates.SequenceClass.*
 
@@ -19,12 +21,16 @@ object Elements : TemplateGroupBase() {
             }
             specialFor(RangesOfPrimitives) {
                 if (primitive in PrimitiveType.unsignedPrimitives) {
-                    since("1.3")
-                    annotation("@ExperimentalUnsignedTypes")
+                    sinceAtLeast("1.5")
+                    wasExperimental("ExperimentalUnsignedTypes")
                     sourceFile(SourceFile.URanges)
                 }
             }
         }
+    }
+
+    private fun floatingSearchDeprecationMessage(signature: String, replacement: String): String {
+        return "The function has unclear behavior when searching for NaN or zero values and will be removed soon. Use '$replacement' instead to continue using this behavior, or '.asList().$signature' to get the same search behavior as in a list."
     }
 
     val f_contains = fn("contains(element: T)") {
@@ -34,12 +40,18 @@ object Elements : TemplateGroupBase() {
 
         doc { "Returns `true` if [element] is found in the ${f.collection}." }
         typeParam("@kotlin.internal.OnlyInputTypes T")
+        if (f == ArraysOfPrimitives && primitive!!.isFloatingPoint()) {
+            val replacement = "any { it == element }"
+            val message = floatingSearchDeprecationMessage(signature, replacement)
+            deprecate(Deprecation(message, replacement, warningSince = "1.4"))
+            annotation("""@Suppress("DEPRECATION")""")
+        }
         returns("Boolean")
         body(Iterables) {
             """
-                if (this is Collection)
-                    return contains(element)
-                return indexOf(element) >= 0
+            if (this is Collection)
+                return contains(element)
+            return indexOf(element) >= 0
             """
         }
         body(ArraysOfPrimitives, ArraysOfObjects, Sequences) {
@@ -56,6 +68,11 @@ object Elements : TemplateGroupBase() {
         typeParam("@kotlin.internal.OnlyInputTypes T")
         specialFor(Lists) {
             annotation("""@Suppress("EXTENSION_SHADOWED_BY_MEMBER") // false warning, extension takes precedence in some cases""")
+        }
+        if (f == ArraysOfPrimitives && primitive!!.isFloatingPoint()) {
+            val replacement = "indexOfFirst { it == element }"
+            val message = floatingSearchDeprecationMessage(signature, replacement)
+            deprecate(Deprecation(message, replacement, warningSince = "1.4"))
         }
         returns("Int")
         body {
@@ -116,6 +133,11 @@ object Elements : TemplateGroupBase() {
         typeParam("@kotlin.internal.OnlyInputTypes T")
         specialFor(Lists) {
             annotation("""@Suppress("EXTENSION_SHADOWED_BY_MEMBER") // false warning, extension takes precedence in some cases""")
+        }
+        if (f == ArraysOfPrimitives && primitive!!.isFloatingPoint()) {
+            val replacement = "indexOfLast { it == element }"
+            val message = floatingSearchDeprecationMessage(signature, replacement)
+            deprecate(Deprecation(message, replacement, warningSince = "1.4"))
         }
         returns("Int")
         body {
@@ -409,6 +431,7 @@ object Elements : TemplateGroupBase() {
         include(CharSequences, Lists, ArraysOfObjects, ArraysOfPrimitives, ArraysOfUnsigned)
     } builder {
         doc { "Returns ${f.element.prefixWithArticle()} at the given [index] or `null` if the [index] is out of bounds of this ${f.collection}." }
+        sample("samples.collections.Collections.Elements.getOrNull")
         returns("T?")
         body {
             """
@@ -541,17 +564,24 @@ object Elements : TemplateGroupBase() {
     } builder {
         inline(Inline.Only)
         doc { "Returns the first ${f.element} matching the given [predicate], or `null` if no such ${f.element} was found." }
+        sample("samples.collections.Collections.Elements.find")
         returns("T?")
         body { "return firstOrNull(predicate)"}
     }
 
+    private val Family.sampleClass: String
+        get() = when (this) {
+            Strings, CharSequences -> "samples.text.Strings"
+            else -> "samples.collections.Collections.Elements"
+        }
 
     val f_last = fn("last()") {
         includeDefault()
         include(CharSequences, Lists, ArraysOfUnsigned)
     } builder {
-        doc { """Returns the last ${f.element}.
-        @throws [NoSuchElementException] if the ${f.collection} is empty.""" }
+        doc { "Returns the last ${f.element}." }
+        throws("NoSuchElementException", "if the ${f.collection} is empty.")
+        sample("${f.sampleClass}.last")
         returns("T")
         body {
             """
@@ -599,6 +629,7 @@ object Elements : TemplateGroupBase() {
         include(Lists, CharSequences, ArraysOfUnsigned)
     } builder {
         doc { "Returns the last ${f.element}, or `null` if the ${f.collection} is empty." }
+        sample("${f.sampleClass}.last")
         returns("T?")
         body {
             """
@@ -646,8 +677,9 @@ object Elements : TemplateGroupBase() {
         inline()
         specialFor(ArraysOfUnsigned) { inlineOnly() }
 
-        doc { """Returns the last ${f.element} matching the given [predicate].
-        @throws [NoSuchElementException] if no such ${f.element} is found.""" }
+        doc { "Returns the last ${f.element} matching the given [predicate]." }
+        throws("NoSuchElementException", "if no such ${f.element} is found.")
+        sample("${f.sampleClass}.last")
         returns("T")
         body {
             """
@@ -694,6 +726,7 @@ object Elements : TemplateGroupBase() {
         specialFor(ArraysOfUnsigned) { inlineOnly() }
 
         doc { "Returns the last ${f.element} matching the given [predicate], or `null` if no such ${f.element} was found." }
+        sample("${f.sampleClass}.last")
         returns("T?")
         body {
             """
@@ -735,6 +768,7 @@ object Elements : TemplateGroupBase() {
     } builder {
         inline(Inline.Only)
         doc { "Returns the last ${f.element} matching the given [predicate], or `null` if no such ${f.element} was found." }
+        sample("samples.collections.Collections.Elements.find")
         returns("T?")
         body { "return lastOrNull(predicate)"}
     }
@@ -909,8 +943,8 @@ object Elements : TemplateGroupBase() {
     val f_randomOrNull = fn("randomOrNull()") {
         include(Collections, ArraysOfObjects, ArraysOfPrimitives, ArraysOfUnsigned, CharSequences, RangesOfPrimitives)
     } builder {
-        since("1.3")
-        annotation("@ExperimentalStdlibApi")
+        since("1.4")
+        wasExperimental("ExperimentalStdlibApi")
         inlineOnly()
         returns("T?")
         doc {
@@ -954,7 +988,7 @@ object Elements : TemplateGroupBase() {
         specialFor(RangesOfPrimitives) {
             body {
                 val expr = when (primitive) {
-                    PrimitiveType.Char -> "nextInt(first.toInt(), last.toInt() + 1).toChar()"
+                    PrimitiveType.Char -> "nextInt(first.code, last.code + 1).toChar()"
                     else -> "next$primitive(this)"
                 }
                 """
@@ -971,8 +1005,8 @@ object Elements : TemplateGroupBase() {
     val f_randomOrNull_random = fn("randomOrNull(random: Random)") {
         include(Collections, ArraysOfObjects, ArraysOfPrimitives, ArraysOfUnsigned, CharSequences, RangesOfPrimitives)
     } builder {
-        since("1.3")
-        annotation("@ExperimentalStdlibApi")
+        since("1.4")
+        wasExperimental("ExperimentalStdlibApi")
         returns("T?")
         doc {
             """
@@ -999,7 +1033,7 @@ object Elements : TemplateGroupBase() {
         specialFor(RangesOfPrimitives) {
             body {
                 val expr = when (primitive) {
-                    PrimitiveType.Char -> "nextInt(first.toInt(), last.toInt() + 1).toChar()"
+                    PrimitiveType.Char -> "nextInt(first.code, last.code + 1).toChar()"
                     else -> "next$primitive(this)"
                 }
                 """
@@ -1044,6 +1078,58 @@ object Elements : TemplateGroupBase() {
             }
             returns("T")
             body { "return get(${n-1})" }
+        }
+    }
+
+    val f_firstNotNullOfOrNull = fn("firstNotNullOfOrNull(transform: (T) -> R?)") {
+        include(Iterables, Sequences, Maps, CharSequences, ArraysOfObjects)
+    } builder {
+        inlineOnly()
+        since("1.5")
+        typeParam("R : Any")
+        returns("R?")
+
+        sample("samples.collections.Collections.Transformations.firstNotNullOf")
+
+        doc {
+            """
+            Returns the first non-null value produced by [transform] function being applied to ${f.element.pluralize()} of this ${f.collection} in iteration order,
+            or `null` if no non-null value was produced.
+            """
+        }
+        body {
+            """
+            for (element in this) {
+                val result = transform(element)
+                if (result != null) {
+                    return result
+                }
+            }
+            return null
+            """
+        }
+    }
+
+    val f_firstNotNullOf = fn("firstNotNullOf(transform: (T) -> R?)") {
+        include(Iterables, Sequences, Maps, CharSequences, ArraysOfObjects)
+    } builder {
+        inlineOnly()
+        since("1.5")
+        typeParam("R : Any")
+        returns("R")
+
+        sample("samples.collections.Collections.Transformations.firstNotNullOf")
+
+        doc {
+            """
+            Returns the first non-null value produced by [transform] function being applied to ${f.element.pluralize()} of this ${f.collection} in iteration order,
+            or throws [NoSuchElementException] if no non-null value was produced.
+            """
+        }
+        body {
+            """
+            return firstNotNullOfOrNull(transform) ?: throw NoSuchElementException("No element of the ${f.collection} was transformed to a non-null value.")
+            """
         }
     }
 

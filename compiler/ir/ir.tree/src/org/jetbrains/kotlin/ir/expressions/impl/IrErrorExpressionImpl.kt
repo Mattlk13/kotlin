@@ -17,23 +17,15 @@
 package org.jetbrains.kotlin.ir.expressions.impl
 
 import org.jetbrains.kotlin.ir.expressions.IrErrorExpression
-import org.jetbrains.kotlin.ir.expressions.IrExpressionWithCopy
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.visitors.IrElementVisitor
 
 class IrErrorExpressionImpl(
-    startOffset: Int,
-    endOffset: Int,
-    type: IrType,
+    override val startOffset: Int,
+    override val endOffset: Int,
+    override var type: IrType,
     override val description: String
-) :
-    IrTerminalExpressionBase(startOffset, endOffset, type),
-    IrExpressionWithCopy,
-    IrErrorExpression {
-
+) : IrErrorExpression() {
     override fun <R, D> accept(visitor: IrElementVisitor<R, D>, data: D): R =
         visitor.visitErrorExpression(this, data)
-
-    override fun copy(): IrErrorExpressionImpl =
-        IrErrorExpressionImpl(startOffset, endOffset, type, description)
 }

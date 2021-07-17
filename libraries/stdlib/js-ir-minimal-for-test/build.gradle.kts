@@ -16,11 +16,18 @@ val commonMainSources by task<Sync> {
         val fullCommonMainSources = tasks.getByPath(":kotlin-stdlib-js-ir:commonMainSources")
         exclude(
             listOf(
-                "libraries/stdlib/unsigned/**",
+                "libraries/stdlib/unsigned/src/kotlin/UByteArray.kt",
+                "libraries/stdlib/unsigned/src/kotlin/UIntArray.kt",
+                "libraries/stdlib/unsigned/src/kotlin/ULongArray.kt",
+                "libraries/stdlib/unsigned/src/kotlin/UMath.kt",
+                "libraries/stdlib/unsigned/src/kotlin/UNumbers.kt",
+                "libraries/stdlib/unsigned/src/kotlin/UShortArray.kt",
+                "libraries/stdlib/unsigned/src/kotlin/UStrings.kt",
                 "libraries/stdlib/common/src/generated/_Arrays.kt",
                 "libraries/stdlib/common/src/generated/_Collections.kt",
                 "libraries/stdlib/common/src/generated/_Comparisons.kt",
                 "libraries/stdlib/common/src/generated/_Maps.kt",
+                "libraries/stdlib/common/src/generated/_OneToManyTitlecaseMappings.kt",
                 "libraries/stdlib/common/src/generated/_Sequences.kt",
                 "libraries/stdlib/common/src/generated/_Sets.kt",
                 "libraries/stdlib/common/src/generated/_Strings.kt",
@@ -35,7 +42,6 @@ val commonMainSources by task<Sync> {
                 "libraries/stdlib/common/src/kotlin/collections/**",
                 "libraries/stdlib/common/src/kotlin/ioH.kt",
                 "libraries/stdlib/src/kotlin/collections/**",
-                "libraries/stdlib/src/kotlin/experimental/bitwiseOperations.kt",
                 "libraries/stdlib/src/kotlin/properties/Delegates.kt",
                 "libraries/stdlib/src/kotlin/random/URandom.kt",
                 "libraries/stdlib/src/kotlin/text/**",
@@ -57,10 +63,6 @@ val jsMainSources by task<Sync> {
         val fullJsMainSources = tasks.getByPath(":kotlin-stdlib-js-ir:jsMainSources")
         exclude(
             listOf(
-                "libraries/stdlib/js-ir/runtime/collectionsHacks.kt",
-                "libraries/stdlib/js-ir/src/generated/**",
-                "libraries/stdlib/js-ir/src/kotlin/text/**",
-                "libraries/stdlib/js/src/jquery/**",
                 "libraries/stdlib/js/src/org.w3c/**",
                 "libraries/stdlib/js/src/kotlin/char.kt",
                 "libraries/stdlib/js/src/kotlin/collections.kt",
@@ -69,7 +71,6 @@ val jsMainSources by task<Sync> {
                 "libraries/stdlib/js/src/kotlin/console.kt",
                 "libraries/stdlib/js/src/kotlin/coreDeprecated.kt",
                 "libraries/stdlib/js/src/kotlin/date.kt",
-                "libraries/stdlib/js/src/kotlin/debug.kt",
                 "libraries/stdlib/js/src/kotlin/grouping.kt",
                 "libraries/stdlib/js/src/kotlin/json.kt",
                 "libraries/stdlib/js/src/kotlin/promise.kt",
@@ -81,10 +82,25 @@ val jsMainSources by task<Sync> {
                 "libraries/stdlib/js/src/kotlin/reflect/KTypeParameterImpl.kt",
                 "libraries/stdlib/js/src/kotlin/reflect/KTypeImpl.kt",
                 "libraries/stdlib/js/src/kotlin/dom/**",
-                "libraries/stdlib/js/src/kotlin/browser/**"
+                "libraries/stdlib/js/src/kotlin/browser/**",
+                "libraries/stdlib/js/src/kotlinx/dom/**",
+                "libraries/stdlib/js/src/kotlinx/browser/**"
             )
         )
         fullJsMainSources.outputs.files.singleFile
+    }
+
+    for (jsIrSrcDir in listOf("builtins", "runtime", "src")) {
+        from("$rootDir/libraries/stdlib/js-ir/$jsIrSrcDir") {
+            exclude(
+                listOf(
+                    "collectionsHacks.kt",
+                    "generated/**",
+                    "kotlin/text/**"
+                )
+            )
+            into("libraries/stdlib/js-ir/$jsIrSrcDir")
+        }
     }
 
     from("$rootDir/libraries/stdlib/js-ir-minimal-for-test/src")
@@ -94,21 +110,20 @@ val jsMainSources by task<Sync> {
 kotlin {
     sourceSets {
         val commonMain by getting {
-            kotlin.srcDir(commonMainSources.get().destinationDir)
+            kotlin.srcDir(files(commonMainSources.map { it.destinationDir }))
         }
         val jsMain by getting {
-           kotlin.srcDir(jsMainSources.get().destinationDir)
+            kotlin.srcDir(files(jsMainSources.map { it.destinationDir }))
         }
     }
 }
 
-tasks.withType<KotlinCompile<*>>().configureEach {
+tasks.withType<KotlinCompile<*>> {
     kotlinOptions.freeCompilerArgs += listOf(
         "-Xallow-kotlin-package",
         "-Xallow-result-return-type",
-        "-Xuse-experimental=kotlin.Experimental",
-        "-Xuse-experimental=kotlin.ExperimentalMultiplatform",
-        "-Xuse-experimental=kotlin.contracts.ExperimentalContracts",
+        "-Xopt-in=kotlin.ExperimentalMultiplatform",
+        "-Xopt-in=kotlin.contracts.ExperimentalContracts",
         "-Xinline-classes",
         "-Xopt-in=kotlin.RequiresOptIn",
         "-Xopt-in=kotlin.ExperimentalUnsignedTypes",
@@ -116,8 +131,12 @@ tasks.withType<KotlinCompile<*>>().configureEach {
     )
 }
 
-tasks.named("compileKotlinJs") {
-    (this as KotlinCompile<*>).kotlinOptions.freeCompilerArgs += "-Xir-module-name=kotlin"
-    dependsOn(commonMainSources)
-    dependsOn(jsMainSources)
+tasks {
+    compileKotlinMetadata {
+        enabled = false
+    }
+
+    named("compileKotlinJs", KotlinCompile::class) {
+        kotlinOptions.freeCompilerArgs += "-Xir-module-name=kotlin"
+    }
 }

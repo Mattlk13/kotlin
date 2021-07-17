@@ -1,7 +1,6 @@
 // !LANGUAGE: +AllowContractsForCustomFunctions +UseReturnsEffect
 // !USE_EXPERIMENTAL: kotlin.contracts.ExperimentalContracts
 // !DIAGNOSTICS: -INVISIBLE_REFERENCE -INVISIBLE_MEMBER
-// !WITH_NEW_INFERENCE
 
 import kotlin.contracts.*
 
@@ -68,12 +67,12 @@ fun nested2(x: Any?) {
 
 fun nested3(x: Any?) {
     myAssert(equalsTrue(notEqualsNull(nullWhenNotString(x))))
-    x.<!UNRESOLVED_REFERENCE!>length<!>
+    x.length
 }
 
 fun branchedAndNested(x: Any?, y: Any?) {
     myAssert(equalsTrue(notEqualsNull(nullWhenNotString(x))) && equalsTrue(isString(y)))
-    x.<!UNRESOLVED_REFERENCE!>length<!>
+    x.length
     y.length
 }
 
@@ -95,9 +94,9 @@ fun branchedAndNestedWithNativeOperators(x: Any?, y: Any?) {
                     equalsTrue(isInt(y) && isString(y))                          // y is Int, String
             )
             &&
-            (1 == 2 || y is Int || isString(y))
+            (1 == 2 || <!USELESS_IS_CHECK!>y is Int<!> || isString(y))
     )
-    x.<!UNRESOLVED_REFERENCE!>length<!>
+    x.length
     y.length
     y.inc()
 }

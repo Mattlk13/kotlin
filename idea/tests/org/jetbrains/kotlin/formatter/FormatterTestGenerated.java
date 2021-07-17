@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2021 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -8,6 +8,7 @@ package org.jetbrains.kotlin.formatter;
 import com.intellij.testFramework.TestDataPath;
 import org.jetbrains.kotlin.test.JUnit3RunnerWithInners;
 import org.jetbrains.kotlin.test.KotlinTestUtils;
+import org.jetbrains.kotlin.test.util.KtTestUtil;
 import org.jetbrains.kotlin.test.TestMetadata;
 import org.junit.runner.RunWith;
 
@@ -32,7 +33,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
         }
 
         public void testAllFilesPresentInFormatter() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter"), Pattern.compile("^([^\\.]+)\\.after\\.kt.*$"), null, true);
+            KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter"), Pattern.compile("^([^\\.]+)\\.after\\.kt.*$"), null, true);
         }
 
         @TestMetadata("AnnotationBeforeExpression.after.kt")
@@ -278,6 +279,16 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
         @TestMetadata("EmptyLineBetweeAbstractFunctions.after.kt")
         public void testEmptyLineBetweeAbstractFunctions() throws Exception {
             runTest("idea/testData/formatter/EmptyLineBetweeAbstractFunctions.after.kt");
+        }
+
+        @TestMetadata("EmptyLineBetweeMultilineDeclarationTwo.after.kt")
+        public void testEmptyLineBetweeMultilineDeclarationTwo() throws Exception {
+            runTest("idea/testData/formatter/EmptyLineBetweeMultilineDeclarationTwo.after.kt");
+        }
+
+        @TestMetadata("EmptyLineBetweeMultilineDeclarationZero.after.kt")
+        public void testEmptyLineBetweeMultilineDeclarationZero() throws Exception {
+            runTest("idea/testData/formatter/EmptyLineBetweeMultilineDeclarationZero.after.kt");
         }
 
         @TestMetadata("EmptyLineBetweeSecondaryConstructors.after.kt")
@@ -894,7 +905,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
             }
 
             public void testAllFilesPresentInCallChain() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/callChain"), Pattern.compile("^([^\\.]+)\\.after\\.kt.*$"), null, true);
+                KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/callChain"), Pattern.compile("^([^\\.]+)\\.after\\.kt.*$"), null, true);
             }
 
             @TestMetadata("CallChainWrapping.after.kt")
@@ -997,7 +1008,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
             }
 
             public void testAllFilesPresentInFileAnnotations() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/fileAnnotations"), Pattern.compile("^([^\\.]+)\\.after\\.kt.*$"), null, true);
+                KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/fileAnnotations"), Pattern.compile("^([^\\.]+)\\.after\\.kt.*$"), null, true);
             }
 
             @TestMetadata("beforeDeclaration.after.kt")
@@ -1050,7 +1061,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
             }
 
             public void testAllFilesPresentInModifierList() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/modifierList"), Pattern.compile("^([^\\.]+)\\.after\\.kt.*$"), null, true);
+                KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/modifierList"), Pattern.compile("^([^\\.]+)\\.after\\.kt.*$"), null, true);
             }
 
             @TestMetadata("funAnnotationBeforeAnnotation.after.kt")
@@ -1143,7 +1154,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
             }
 
             public void testAllFilesPresentInParameterList() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/parameterList"), Pattern.compile("^([^\\.]+)\\.after\\.kt.*$"), null, true);
+                KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/parameterList"), Pattern.compile("^([^\\.]+)\\.after\\.kt.*$"), null, true);
             }
 
             @TestMetadata("ArgumentListChopAsNeeded.after.kt")
@@ -1211,7 +1222,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
             }
 
             public void testAllFilesPresentInTrailingComma() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma"), Pattern.compile("^([^\\.]+)\\.after\\.kt.*$"), null, true);
+                KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma"), Pattern.compile("^([^\\.]+)\\.after\\.kt.*$"), null, true);
             }
 
             @TestMetadata("idea/testData/formatter/trailingComma/collectionLiteralExpression")
@@ -1223,7 +1234,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
                 }
 
                 public void testAllFilesPresentInCollectionLiteralExpression() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/collectionLiteralExpression"), Pattern.compile("^([^\\.]+)\\.after\\.kt.*$"), null, true);
+                    KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/collectionLiteralExpression"), Pattern.compile("^([^\\.]+)\\.after\\.kt.*$"), null, true);
                 }
 
                 @TestMetadata("CollectionLiteralInAnnotation.after.kt")
@@ -1241,7 +1252,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
                 }
 
                 public void testAllFilesPresentInDestructuringDeclarations() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/destructuringDeclarations"), Pattern.compile("^([^\\.]+)\\.after\\.kt.*$"), null, true);
+                    KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/destructuringDeclarations"), Pattern.compile("^([^\\.]+)\\.after\\.kt.*$"), null, true);
                 }
 
                 @TestMetadata("DestructuringDeclarationsInLambda.after.kt")
@@ -1264,7 +1275,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
                 }
 
                 public void testAllFilesPresentInEnumEntry() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/enumEntry"), Pattern.compile("^([^\\.]+)\\.after\\.kt.*$"), null, true);
+                    KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/enumEntry"), Pattern.compile("^([^\\.]+)\\.after\\.kt.*$"), null, true);
                 }
 
                 @TestMetadata("Enum.after.kt")
@@ -1282,7 +1293,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
                 }
 
                 public void testAllFilesPresentInIndices() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/indices"), Pattern.compile("^([^\\.]+)\\.after\\.kt.*$"), null, true);
+                    KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/indices"), Pattern.compile("^([^\\.]+)\\.after\\.kt.*$"), null, true);
                 }
 
                 @TestMetadata("IndicesAccess.after.kt")
@@ -1300,7 +1311,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
                 }
 
                 public void testAllFilesPresentInLambdaParameters() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/lambdaParameters"), Pattern.compile("^([^\\.]+)\\.after\\.kt.*$"), null, true);
+                    KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/lambdaParameters"), Pattern.compile("^([^\\.]+)\\.after\\.kt.*$"), null, true);
                 }
 
                 @TestMetadata("LambdaParameterList.after.kt")
@@ -1318,7 +1329,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
                 }
 
                 public void testAllFilesPresentInTypeArguments() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/typeArguments"), Pattern.compile("^([^\\.]+)\\.after\\.kt.*$"), null, true);
+                    KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/typeArguments"), Pattern.compile("^([^\\.]+)\\.after\\.kt.*$"), null, true);
                 }
 
                 @TestMetadata("TypeArgumentList.after.kt")
@@ -1336,7 +1347,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
                 }
 
                 public void testAllFilesPresentInTypeParameters() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/typeParameters"), Pattern.compile("^([^\\.]+)\\.after\\.kt.*$"), null, true);
+                    KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/typeParameters"), Pattern.compile("^([^\\.]+)\\.after\\.kt.*$"), null, true);
                 }
 
                 @TestMetadata("TypeParameterList.after.kt")
@@ -1354,7 +1365,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
                 }
 
                 public void testAllFilesPresentInValueArguments() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/valueArguments"), Pattern.compile("^([^\\.]+)\\.after\\.kt.*$"), null, true);
+                    KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/valueArguments"), Pattern.compile("^([^\\.]+)\\.after\\.kt.*$"), null, true);
                 }
 
                 @TestMetadata("ArgumentListChopAsNeeded.after.kt")
@@ -1387,7 +1398,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
                 }
 
                 public void testAllFilesPresentInValueParameters() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/valueParameters"), Pattern.compile("^([^\\.]+)\\.after\\.kt.*$"), null, true);
+                    KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/valueParameters"), Pattern.compile("^([^\\.]+)\\.after\\.kt.*$"), null, true);
                 }
 
                 @TestMetadata("LambdaValueParameters.after.kt")
@@ -1425,7 +1436,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
                 }
 
                 public void testAllFilesPresentInWhenEntry() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/whenEntry"), Pattern.compile("^([^\\.]+)\\.after\\.kt.*$"), null, true);
+                    KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/whenEntry"), Pattern.compile("^([^\\.]+)\\.after\\.kt.*$"), null, true);
                 }
 
                 @TestMetadata("WhenEntry.after.kt")
@@ -1445,7 +1456,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
         }
 
         public void testAllFilesPresentInFormatterCallSite() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.kt.*$"), null, true);
+            KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.kt.*$"), null, true);
         }
 
         @TestMetadata("idea/testData/formatter/trailingComma/collectionLiteralExpression")
@@ -1457,7 +1468,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
             }
 
             public void testAllFilesPresentInCollectionLiteralExpression() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/collectionLiteralExpression"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.kt.*$"), null, true);
+                KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/collectionLiteralExpression"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.kt.*$"), null, true);
             }
 
             @TestMetadata("CollectionLiteralInAnnotation.call.after.kt")
@@ -1475,7 +1486,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
             }
 
             public void testAllFilesPresentInDestructuringDeclarations() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/destructuringDeclarations"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.kt.*$"), null, true);
+                KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/destructuringDeclarations"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.kt.*$"), null, true);
             }
         }
 
@@ -1488,7 +1499,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
             }
 
             public void testAllFilesPresentInEnumEntry() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/enumEntry"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.kt.*$"), null, true);
+                KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/enumEntry"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.kt.*$"), null, true);
             }
         }
 
@@ -1501,7 +1512,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
             }
 
             public void testAllFilesPresentInIndices() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/indices"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.kt.*$"), null, true);
+                KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/indices"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.kt.*$"), null, true);
             }
 
             @TestMetadata("IndicesAccess.call.after.kt")
@@ -1519,7 +1530,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
             }
 
             public void testAllFilesPresentInLambdaParameters() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/lambdaParameters"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.kt.*$"), null, true);
+                KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/lambdaParameters"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.kt.*$"), null, true);
             }
 
             @TestMetadata("LambdaParameterList.call.after.kt")
@@ -1537,7 +1548,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
             }
 
             public void testAllFilesPresentInTypeArguments() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/typeArguments"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.kt.*$"), null, true);
+                KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/typeArguments"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.kt.*$"), null, true);
             }
 
             @TestMetadata("TypeArgumentList.call.after.kt")
@@ -1555,7 +1566,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
             }
 
             public void testAllFilesPresentInTypeParameters() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/typeParameters"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.kt.*$"), null, true);
+                KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/typeParameters"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.kt.*$"), null, true);
             }
 
             @TestMetadata("TypeParameterList.call.after.kt")
@@ -1573,7 +1584,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
             }
 
             public void testAllFilesPresentInValueArguments() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/valueArguments"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.kt.*$"), null, true);
+                KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/valueArguments"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.kt.*$"), null, true);
             }
 
             @TestMetadata("ArgumentListWrapAsNeeded.call.after.kt")
@@ -1591,7 +1602,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
             }
 
             public void testAllFilesPresentInValueParameters() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/valueParameters"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.kt.*$"), null, true);
+                KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/valueParameters"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.kt.*$"), null, true);
             }
 
             @TestMetadata("ParameterListWrapAsNeeded.call.after.kt")
@@ -1609,7 +1620,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
             }
 
             public void testAllFilesPresentInWhenEntry() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/whenEntry"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.kt.*$"), null, true);
+                KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/whenEntry"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.kt.*$"), null, true);
             }
         }
     }
@@ -1623,7 +1634,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
         }
 
         public void testAllFilesPresentInFormatterInverted() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter"), Pattern.compile("^([^\\.]+)\\.after\\.inv\\.kt.*$"), null, true);
+            KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter"), Pattern.compile("^([^\\.]+)\\.after\\.inv\\.kt.*$"), null, true);
         }
 
         @TestMetadata("AnonymousInitializersLineBreak.after.inv.kt")
@@ -1895,7 +1906,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
             }
 
             public void testAllFilesPresentInCallChain() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/callChain"), Pattern.compile("^([^\\.]+)\\.after\\.inv\\.kt.*$"), null, true);
+                KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/callChain"), Pattern.compile("^([^\\.]+)\\.after\\.inv\\.kt.*$"), null, true);
             }
 
             @TestMetadata("CallChainWrapping.after.inv.kt")
@@ -1948,7 +1959,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
             }
 
             public void testAllFilesPresentInFileAnnotations() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/fileAnnotations"), Pattern.compile("^([^\\.]+)\\.after\\.inv\\.kt.*$"), null, true);
+                KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/fileAnnotations"), Pattern.compile("^([^\\.]+)\\.after\\.inv\\.kt.*$"), null, true);
             }
         }
 
@@ -1961,7 +1972,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
             }
 
             public void testAllFilesPresentInModifierList() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/modifierList"), Pattern.compile("^([^\\.]+)\\.after\\.inv\\.kt.*$"), null, true);
+                KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/modifierList"), Pattern.compile("^([^\\.]+)\\.after\\.inv\\.kt.*$"), null, true);
             }
         }
 
@@ -1974,7 +1985,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
             }
 
             public void testAllFilesPresentInParameterList() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/parameterList"), Pattern.compile("^([^\\.]+)\\.after\\.inv\\.kt.*$"), null, true);
+                KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/parameterList"), Pattern.compile("^([^\\.]+)\\.after\\.inv\\.kt.*$"), null, true);
             }
 
             @TestMetadata("DefaultParameterValues.after.inv.kt")
@@ -1992,7 +2003,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
             }
 
             public void testAllFilesPresentInTrailingComma() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma"), Pattern.compile("^([^\\.]+)\\.after\\.inv\\.kt.*$"), null, true);
+                KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma"), Pattern.compile("^([^\\.]+)\\.after\\.inv\\.kt.*$"), null, true);
             }
 
             @TestMetadata("idea/testData/formatter/trailingComma/collectionLiteralExpression")
@@ -2004,7 +2015,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
                 }
 
                 public void testAllFilesPresentInCollectionLiteralExpression() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/collectionLiteralExpression"), Pattern.compile("^([^\\.]+)\\.after\\.inv\\.kt.*$"), null, true);
+                    KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/collectionLiteralExpression"), Pattern.compile("^([^\\.]+)\\.after\\.inv\\.kt.*$"), null, true);
                 }
 
                 @TestMetadata("CollectionLiteralInAnnotation.after.inv.kt")
@@ -2022,7 +2033,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
                 }
 
                 public void testAllFilesPresentInDestructuringDeclarations() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/destructuringDeclarations"), Pattern.compile("^([^\\.]+)\\.after\\.inv\\.kt.*$"), null, true);
+                    KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/destructuringDeclarations"), Pattern.compile("^([^\\.]+)\\.after\\.inv\\.kt.*$"), null, true);
                 }
 
                 @TestMetadata("DestructuringDeclarationsInLambda.after.inv.kt")
@@ -2045,7 +2056,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
                 }
 
                 public void testAllFilesPresentInEnumEntry() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/enumEntry"), Pattern.compile("^([^\\.]+)\\.after\\.inv\\.kt.*$"), null, true);
+                    KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/enumEntry"), Pattern.compile("^([^\\.]+)\\.after\\.inv\\.kt.*$"), null, true);
                 }
 
                 @TestMetadata("Enum.after.inv.kt")
@@ -2063,7 +2074,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
                 }
 
                 public void testAllFilesPresentInIndices() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/indices"), Pattern.compile("^([^\\.]+)\\.after\\.inv\\.kt.*$"), null, true);
+                    KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/indices"), Pattern.compile("^([^\\.]+)\\.after\\.inv\\.kt.*$"), null, true);
                 }
 
                 @TestMetadata("IndicesAccess.after.inv.kt")
@@ -2081,7 +2092,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
                 }
 
                 public void testAllFilesPresentInLambdaParameters() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/lambdaParameters"), Pattern.compile("^([^\\.]+)\\.after\\.inv\\.kt.*$"), null, true);
+                    KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/lambdaParameters"), Pattern.compile("^([^\\.]+)\\.after\\.inv\\.kt.*$"), null, true);
                 }
 
                 @TestMetadata("LambdaParameterList.after.inv.kt")
@@ -2099,7 +2110,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
                 }
 
                 public void testAllFilesPresentInTypeArguments() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/typeArguments"), Pattern.compile("^([^\\.]+)\\.after\\.inv\\.kt.*$"), null, true);
+                    KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/typeArguments"), Pattern.compile("^([^\\.]+)\\.after\\.inv\\.kt.*$"), null, true);
                 }
 
                 @TestMetadata("TypeArgumentList.after.inv.kt")
@@ -2117,7 +2128,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
                 }
 
                 public void testAllFilesPresentInTypeParameters() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/typeParameters"), Pattern.compile("^([^\\.]+)\\.after\\.inv\\.kt.*$"), null, true);
+                    KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/typeParameters"), Pattern.compile("^([^\\.]+)\\.after\\.inv\\.kt.*$"), null, true);
                 }
 
                 @TestMetadata("TypeParameterList.after.inv.kt")
@@ -2135,7 +2146,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
                 }
 
                 public void testAllFilesPresentInValueArguments() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/valueArguments"), Pattern.compile("^([^\\.]+)\\.after\\.inv\\.kt.*$"), null, true);
+                    KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/valueArguments"), Pattern.compile("^([^\\.]+)\\.after\\.inv\\.kt.*$"), null, true);
                 }
 
                 @TestMetadata("ArgumentListChopAsNeeded.after.inv.kt")
@@ -2168,7 +2179,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
                 }
 
                 public void testAllFilesPresentInValueParameters() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/valueParameters"), Pattern.compile("^([^\\.]+)\\.after\\.inv\\.kt.*$"), null, true);
+                    KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/valueParameters"), Pattern.compile("^([^\\.]+)\\.after\\.inv\\.kt.*$"), null, true);
                 }
 
                 @TestMetadata("LambdaValueParameters.after.inv.kt")
@@ -2206,7 +2217,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
                 }
 
                 public void testAllFilesPresentInWhenEntry() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/whenEntry"), Pattern.compile("^([^\\.]+)\\.after\\.inv\\.kt.*$"), null, true);
+                    KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/whenEntry"), Pattern.compile("^([^\\.]+)\\.after\\.inv\\.kt.*$"), null, true);
                 }
 
                 @TestMetadata("WhenEntry.after.inv.kt")
@@ -2226,7 +2237,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
         }
 
         public void testAllFilesPresentInFormatterInvertedCallSite() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.inv\\.kt.*$"), null, true);
+            KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.inv\\.kt.*$"), null, true);
         }
 
         @TestMetadata("idea/testData/formatter/trailingComma/collectionLiteralExpression")
@@ -2238,7 +2249,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
             }
 
             public void testAllFilesPresentInCollectionLiteralExpression() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/collectionLiteralExpression"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.inv\\.kt.*$"), null, true);
+                KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/collectionLiteralExpression"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.inv\\.kt.*$"), null, true);
             }
 
             @TestMetadata("CollectionLiteralInAnnotation.call.after.inv.kt")
@@ -2256,7 +2267,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
             }
 
             public void testAllFilesPresentInDestructuringDeclarations() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/destructuringDeclarations"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.inv\\.kt.*$"), null, true);
+                KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/destructuringDeclarations"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.inv\\.kt.*$"), null, true);
             }
         }
 
@@ -2269,7 +2280,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
             }
 
             public void testAllFilesPresentInEnumEntry() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/enumEntry"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.inv\\.kt.*$"), null, true);
+                KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/enumEntry"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.inv\\.kt.*$"), null, true);
             }
         }
 
@@ -2282,7 +2293,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
             }
 
             public void testAllFilesPresentInIndices() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/indices"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.inv\\.kt.*$"), null, true);
+                KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/indices"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.inv\\.kt.*$"), null, true);
             }
 
             @TestMetadata("IndicesAccess.call.after.inv.kt")
@@ -2300,7 +2311,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
             }
 
             public void testAllFilesPresentInLambdaParameters() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/lambdaParameters"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.inv\\.kt.*$"), null, true);
+                KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/lambdaParameters"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.inv\\.kt.*$"), null, true);
             }
 
             @TestMetadata("LambdaParameterList.call.after.inv.kt")
@@ -2318,7 +2329,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
             }
 
             public void testAllFilesPresentInTypeArguments() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/typeArguments"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.inv\\.kt.*$"), null, true);
+                KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/typeArguments"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.inv\\.kt.*$"), null, true);
             }
 
             @TestMetadata("TypeArgumentList.call.after.inv.kt")
@@ -2336,7 +2347,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
             }
 
             public void testAllFilesPresentInTypeParameters() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/typeParameters"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.inv\\.kt.*$"), null, true);
+                KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/typeParameters"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.inv\\.kt.*$"), null, true);
             }
 
             @TestMetadata("TypeParameterList.call.after.inv.kt")
@@ -2354,7 +2365,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
             }
 
             public void testAllFilesPresentInValueArguments() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/valueArguments"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.inv\\.kt.*$"), null, true);
+                KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/valueArguments"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.inv\\.kt.*$"), null, true);
             }
 
             @TestMetadata("ArgumentListWrapAsNeeded.call.after.inv.kt")
@@ -2372,7 +2383,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
             }
 
             public void testAllFilesPresentInValueParameters() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/valueParameters"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.inv\\.kt.*$"), null, true);
+                KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/valueParameters"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.inv\\.kt.*$"), null, true);
             }
 
             @TestMetadata("ParameterListWrapAsNeeded.call.after.inv.kt")
@@ -2390,7 +2401,7 @@ public class FormatterTestGenerated extends AbstractFormatterTest {
             }
 
             public void testAllFilesPresentInWhenEntry() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/whenEntry"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.inv\\.kt.*$"), null, true);
+                KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/formatter/trailingComma/whenEntry"), Pattern.compile("^([^\\.]+)\\.call\\.after\\.inv\\.kt.*$"), null, true);
             }
         }
     }

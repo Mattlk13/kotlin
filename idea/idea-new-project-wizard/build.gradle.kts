@@ -13,6 +13,7 @@ dependencies {
     compileOnly(intellijCoreDep())
     compileOnly(intellijDep())
     compileOnly(intellijPluginDep("gradle"))
+    compileOnly(intellijPluginDep("gradle-java"))
 
     testImplementation(projectTests(":idea"))
     testImplementation(project(":libraries:tools:new-project-wizard:new-project-wizard-cli"))
@@ -23,7 +24,7 @@ dependencies {
     testImplementation(intellijDep())
     testImplementation(intellijPluginDep("gradle"))
 
-
+    testImplementation(projectTests(":idea:idea-gradle"))
 
     testRuntimeOnly(toolsJar())
     testRuntimeOnly(project(":plugins:kapt3-idea"))
@@ -33,8 +34,11 @@ dependencies {
     testRuntimeOnly(project(":kotlinx-serialization-ide-plugin"))
     testRuntimeOnly(project(":kotlin-reflect"))
     testRuntimeOnly(project(":plugins:annotation-based-compiler-plugins-ide-support"))
+    testRuntimeOnly(project(":plugins:base-compiler-plugins-ide-support"))
     testRuntimeOnly(project(":kotlin-gradle-statistics"))
     testRuntimeOnly(project(":kotlin-scripting-idea"))
+    testRuntimeOnly(project(":plugins:parcelize:parcelize-ide"))
+    testRuntimeOnly(project(":plugins:lombok:lombok-ide-plugin"))
     testRuntimeOnly(intellijRuntimeAnnotations())
 
 
@@ -43,15 +47,9 @@ dependencies {
         compileOnly(intellijPluginDep("maven"))
     }
 
-    Platform[191].orLower {
-        compileOnly(intellijDep()) { includeJars("java-api", "java-impl") }
-    }
-
-    Platform[192].orHigher {
-        compileOnly(intellijPluginDep("java")) { includeJars("java-api", "java-impl") }
-        testCompileOnly(intellijPluginDep("java")) { includeJars("java-api", "java-impl") }
-        testRuntimeOnly(intellijPluginDep("java")) { includeJars("java-api") }
-    }
+    compileOnly(intellijPluginDep("java"))
+    testCompileOnly(intellijPluginDep("java"))
+    testRuntimeOnly(intellijPluginDep("java"))
 }
 
 sourceSets {
@@ -64,4 +62,5 @@ testsJar()
 projectTest {
     dependsOn(":dist")
     workingDir = rootDir
+    systemProperty("cacheRedirectorEnabled", findProperty("cacheRedirectorEnabled")?.toString()?.toBoolean() == true)
 }

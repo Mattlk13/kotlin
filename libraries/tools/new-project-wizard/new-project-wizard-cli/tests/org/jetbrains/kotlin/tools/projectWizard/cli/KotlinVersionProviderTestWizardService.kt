@@ -5,13 +5,38 @@
 
 package org.jetbrains.kotlin.tools.projectWizard.cli
 
+import org.jetbrains.kotlin.tools.projectWizard.Versions
+import org.jetbrains.kotlin.tools.projectWizard.core.service.EapVersionDownloader
+import org.jetbrains.kotlin.tools.projectWizard.core.service.WizardKotlinVersion
+import org.jetbrains.kotlin.tools.projectWizard.core.service.KotlinVersionKind
 import org.jetbrains.kotlin.tools.projectWizard.core.service.KotlinVersionProviderService
-import org.jetbrains.kotlin.tools.projectWizard.settings.version.Version
+import org.jetbrains.kotlin.tools.projectWizard.plugins.kotlin.ProjectKind
+import org.jetbrains.kotlin.tools.projectWizard.settings.buildsystem.*
 
-class KotlinVersionProviderTestWizardService : KotlinVersionProviderService, TestWizardService {
-    override fun getKotlinVersion(): Version = TEST_KOTLIN_VERSION
+class KotlinVersionProviderTestWizardService() : KotlinVersionProviderService(), TestWizardService {
+    private val useCacheRedirector
+        get() = System.getProperty("cacheRedirectorEnabled")?.toBoolean() == true
+
+
+    override fun getKotlinVersion(projectKind: ProjectKind): WizardKotlinVersion =
+        kotlinVersionWithDefaultValues(
+            when (projectKind) {
+                ProjectKind.COMPOSE -> Versions.KOTLIN_VERSION_FOR_COMPOSE
+                else -> TEST_KOTLIN_VERSION
+            }
+        )
+
+    override fun getDevVersionRepository(): Repository =
+        if (useCacheRedirector) KOTLIN_DEV_BINTRAY_WITH_CACHE_REDIRECTOR
+        else super.getDevVersionRepository()
 
     companion object {
-        val TEST_KOTLIN_VERSION = Version("1.4.0-dev-5730")
+        private const val CACHE_REDIRECTOR_JETBRAINS_SPACE_URL = "https://cache-redirector.jetbrains.com/maven.pkg.jetbrains.space"
+
+        val KOTLIN_DEV_BINTRAY_WITH_CACHE_REDIRECTOR = CustomMavenRepositoryImpl("kotlin/p/kotlin/dev", CACHE_REDIRECTOR_JETBRAINS_SPACE_URL)
+
+        val TEST_KOTLIN_VERSION by lazy {
+            EapVersionDownloader.getLatestEapVersion()!!
+        }
     }
 }

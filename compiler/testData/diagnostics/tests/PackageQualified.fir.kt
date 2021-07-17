@@ -1,31 +1,30 @@
-// !WITH_NEW_INFERENCE
-// FILE: b.kt
+// FILE: a.kt
 
 
 package foobar.a
     import java.*
 
     val a : java.util.List<Int>? = null
-    val a2 : util.List<Int>? = null
-    val a3 : LinkedList<Int>? = null
+    val a2 : <!UNRESOLVED_REFERENCE!>util.List<Int><!>? = null
+    val a3 : <!UNRESOLVED_REFERENCE!>LinkedList<Int><!>? = null
 
 // FILE: b.kt
 package foobar
 
 abstract class Foo<T>() {
-    abstract val x : T<Int>
+    abstract val x : T<!TYPE_ARGUMENTS_NOT_ALLOWED!><Int><!>
 }
 
-// FILE: b.kt
+// FILE: c.kt
 package foobar.a
     import java.util.*
 
-    val b : List<Int>? = a
-    val b1 : util.List<Int>? = a
+    val b : List<Int>? = <!INITIALIZER_TYPE_MISMATCH!>a<!>
+    val b1 : <!UNRESOLVED_REFERENCE!>util.List<Int><!>? = a
 
-// FILE: b.kt
+// FILE: d.kt
 package foobar
-val x1 = <!UNRESOLVED_REFERENCE!>a<!>.<!UNRESOLVED_REFERENCE!>a<!>
+val x1 = <!UNRESOLVED_REFERENCE!>a<!>.a
 val x2 = foobar.a.a
 
 val y1 = foobar.a.b

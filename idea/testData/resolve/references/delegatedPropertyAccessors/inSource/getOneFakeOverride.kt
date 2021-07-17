@@ -1,9 +1,7 @@
-// IGNORE_FIR
-
 var x : Int <caret>by Baz()
 
 interface Foo {
-  fun getValue(p1: Any?, p2: Any?): Int = 1
+  operator fun getValue(p1: Any?, p2: Any?): Int = 1
 }
 
 class Baz: Foo

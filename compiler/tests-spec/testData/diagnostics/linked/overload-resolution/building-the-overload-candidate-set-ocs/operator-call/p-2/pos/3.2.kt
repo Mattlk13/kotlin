@@ -6,15 +6,15 @@
  * KOTLIN DIAGNOSTICS SPEC TEST (POSITIVE)
  *
  * SPEC VERSION: 0.1-268
- * PLACE: overload-resolution, building-the-overload-candidate-set-ocs, operator-call -> paragraph 2 -> sentence 3
- * RELEVANT PLACES: overload-resolution, building-the-overload-candidate-set-ocs, call-with-an-explicit-receiver -> paragraph 6 -> sentence 2
+ * MAIN LINK: overload-resolution, building-the-overload-candidate-set-ocs, operator-call -> paragraph 2 -> sentence 3
+ * PRIMARY LINKS: overload-resolution, building-the-overload-candidate-set-ocs, call-with-an-explicit-receiver -> paragraph 6 -> sentence 2
  * overload-resolution, building-the-overload-candidate-set-ocs, operator-call -> paragraph 4 -> sentence 1
  * NUMBER: 2
  * DESCRIPTION: Non-extension member callables
  */
 
 
-// FILE: LibCase1.kt
+// FILE: LibCase11.kt
 // TESTCASE NUMBER: 1
 package libPackage
 import testPackCase1.Case
@@ -26,7 +26,7 @@ operator fun Case.E.plus(value: Int) =  Inv()
 operator fun Case.Inv.invoke(i: Int) = 1
 
 
-// FILE: TestCase1.kt
+// FILE: TestCase11.kt
 // TESTCASE NUMBER: 1
 package testPackCase1
 import libPackage.plus
@@ -53,7 +53,7 @@ class Case() {
     }
 }
 
-// FILE: LibCase1.kt
+// FILE: LibCase12.kt
 // TESTCASE NUMBER: 2
 package libPackage
 import testPackCase2.Case
@@ -64,7 +64,7 @@ operator fun Case.E.plus(value: Int) =  Inv()
 operator fun Case.Inv.invoke(i: Int) = 1
 
 
-// FILE: TestCase1.kt
+// FILE: TestCase12.kt
 // TESTCASE NUMBER: 2
 package testPackCase2
 import libPackage.plus

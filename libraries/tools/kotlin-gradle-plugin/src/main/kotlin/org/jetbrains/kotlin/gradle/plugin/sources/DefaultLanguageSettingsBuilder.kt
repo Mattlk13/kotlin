@@ -6,10 +6,10 @@
 package org.jetbrains.kotlin.gradle.plugin.sources
 
 import org.gradle.api.InvalidUserDataException
+import org.gradle.api.Project
 import org.gradle.api.file.FileCollection
 import org.gradle.api.provider.Provider
-import org.gradle.api.tasks.TaskProvider
-import org.gradle.api.tasks.compile.AbstractCompile
+import org.gradle.api.tasks.SourceTask
 import org.jetbrains.kotlin.config.ApiVersion
 import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.config.LanguageVersion
@@ -18,10 +18,12 @@ import org.jetbrains.kotlin.gradle.plugin.LanguageSettingsBuilder
 import org.jetbrains.kotlin.gradle.plugin.statistics.KotlinBuildStatsService
 import org.jetbrains.kotlin.gradle.tasks.AbstractKotlinCompile
 import org.jetbrains.kotlin.gradle.tasks.AbstractKotlinNativeCompile
+import org.jetbrains.kotlin.gradle.utils.SingleWarningPerBuild
+import org.jetbrains.kotlin.project.model.LanguageSettings
 import org.jetbrains.kotlin.statistics.metrics.BooleanMetrics
 import org.jetbrains.kotlin.statistics.metrics.StringMetrics
 
-internal class DefaultLanguageSettingsBuilder : LanguageSettingsBuilder {
+internal class DefaultLanguageSettingsBuilder(@Transient private val project: Project) : LanguageSettingsBuilder {
     private var languageVersionImpl: LanguageVersion? = null
 
     override var languageVersion: String?
@@ -60,23 +62,45 @@ internal class DefaultLanguageSettingsBuilder : LanguageSettingsBuilder {
         enabledLanguageFeaturesImpl += languageFeature
     }
 
-    private val experimentalAnnotationsInUseImpl = mutableSetOf<String>()
+    private val optInAnnotationsInUseImpl = mutableSetOf<String>()
 
-    override val experimentalAnnotationsInUse: Set<String> = experimentalAnnotationsInUseImpl
+    override val optInAnnotationsInUse: Set<String> = optInAnnotationsInUseImpl
+
+    override val experimentalAnnotationsInUse: Set<String>
+        get() {
+            SingleWarningPerBuild.deprecation(
+                project,
+                "Kotlin language settings property",
+                "experimentalAnnotationsInUse",
+                "optInAnnotationsInUse"
+            )
+            return optInAnnotationsInUse
+        }
+
+    override fun optInAnnotation(name: String) {
+        optInAnnotationsInUseImpl += name
+    }
 
     override fun useExperimentalAnnotation(name: String) {
-        experimentalAnnotationsInUseImpl += name
+        SingleWarningPerBuild.deprecation(
+            project,
+            "Kotlin language settings function",
+            "useExperimentalAnnotation",
+            "optInAnnotation"
+        )
+        optInAnnotation(name)
     }
 
     /* A Kotlin task that is responsible for code analysis of the owner of this language settings builder. */
-    var compilerPluginOptionsTask: Lazy<AbstractCompile?> = lazyOf(null)
+    @Transient // not needed during Gradle Instant Execution
+    var compilerPluginOptionsTask: Lazy<SourceTask?> = lazyOf(null)
 
     val compilerPluginArguments: List<String>?
         get() {
             val pluginOptionsTask = compilerPluginOptionsTask.value ?: return null
             return when (pluginOptionsTask) {
                 is AbstractKotlinCompile<*> -> pluginOptionsTask.pluginOptions
-                is AbstractKotlinNativeCompile<*> -> pluginOptionsTask.compilerPluginOptions
+                is AbstractKotlinNativeCompile<*, *> -> pluginOptionsTask.compilerPluginOptions
                 else -> error("Unexpected task: $pluginOptionsTask")
             }.arguments
         }
@@ -86,7 +110,7 @@ internal class DefaultLanguageSettingsBuilder : LanguageSettingsBuilder {
             val pluginClasspathTask = compilerPluginOptionsTask.value ?: return null
             return when (pluginClasspathTask) {
                 is AbstractKotlinCompile<*> -> pluginClasspathTask.pluginClasspath
-                is AbstractKotlinNativeCompile<*> -> pluginClasspathTask.compilerPluginClasspath ?: pluginClasspathTask.project.files()
+                is AbstractKotlinNativeCompile<*, *> -> pluginClasspathTask.compilerPluginClasspath ?: pluginClasspathTask.project.files()
                 else -> error("Unexpected task: $pluginClasspathTask")
             }
         }
@@ -98,7 +122,7 @@ internal class DefaultLanguageSettingsBuilder : LanguageSettingsBuilder {
 }
 
 internal fun applyLanguageSettingsToKotlinOptions(
-    languageSettingsBuilder: LanguageSettingsBuilder,
+    languageSettingsBuilder: LanguageSettings,
     kotlinOptions: KotlinCommonOptions
 ) = with(kotlinOptions) {
     languageVersion = languageVersion ?: languageSettingsBuilder.languageVersion
@@ -113,10 +137,10 @@ internal fun applyLanguageSettingsToKotlinOptions(
             add("-XXLanguage:+$featureName")
         }
     
-        languageSettingsBuilder.experimentalAnnotationsInUse.forEach { annotationName ->
+        languageSettingsBuilder.optInAnnotationsInUse.forEach { annotationName ->
             add("-Xopt-in=$annotationName")
         }
-    
+
         if (languageSettingsBuilder is DefaultLanguageSettingsBuilder) {
             addAll(languageSettingsBuilder.freeCompilerArgs)
         }
@@ -131,7 +155,16 @@ internal fun applyLanguageSettingsToKotlinOptions(
     }
 }
 
-private val apiVersionValues = ApiVersion.run { listOf(KOTLIN_1_0, KOTLIN_1_1, KOTLIN_1_2, KOTLIN_1_3, KOTLIN_1_4) }
+private val apiVersionValues = ApiVersion.run {
+    listOf(
+        KOTLIN_1_0,
+        KOTLIN_1_1,
+        KOTLIN_1_2,
+        KOTLIN_1_3,
+        KOTLIN_1_4,
+        KOTLIN_1_5
+    )
+}
 
 internal fun parseLanguageVersionSetting(versionString: String) = LanguageVersion.fromVersionString(versionString)
 internal fun parseApiVersionSettings(versionString: String) = apiVersionValues.find { it.versionString == versionString }

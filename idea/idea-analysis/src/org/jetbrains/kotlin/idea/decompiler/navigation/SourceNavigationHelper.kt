@@ -14,20 +14,23 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiClass
 import com.intellij.psi.search.GlobalSearchScope
+import com.intellij.psi.search.ProjectScope
 import com.intellij.psi.stubs.StringStubIndexExtension
 import com.intellij.util.containers.ContainerUtil
 import gnu.trove.THashSet
 import org.jetbrains.annotations.TestOnly
+import org.jetbrains.kotlin.asJava.finder.JavaElementFinder
 import org.jetbrains.kotlin.descriptors.CallableDescriptor
+import org.jetbrains.kotlin.fileClasses.JvmMultifileClassPartInfo
+import org.jetbrains.kotlin.fileClasses.fileClassInfo
+import org.jetbrains.kotlin.fileClasses.javaFileFacadeFqName
 import org.jetbrains.kotlin.idea.caches.project.BinaryModuleInfo
+import org.jetbrains.kotlin.idea.caches.project.ScriptDependenciesInfo
 import org.jetbrains.kotlin.idea.caches.project.getBinaryLibrariesModuleInfos
 import org.jetbrains.kotlin.idea.caches.project.getLibrarySourcesModuleInfos
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
 import org.jetbrains.kotlin.idea.decompiler.navigation.MemberMatching.*
-import org.jetbrains.kotlin.idea.stubindex.KotlinFullClassNameIndex
-import org.jetbrains.kotlin.idea.stubindex.KotlinTopLevelFunctionFqnNameIndex
-import org.jetbrains.kotlin.idea.stubindex.KotlinTopLevelPropertyFqnNameIndex
-import org.jetbrains.kotlin.idea.stubindex.KotlinTopLevelTypeAliasFqNameIndex
+import org.jetbrains.kotlin.idea.stubindex.*
 import org.jetbrains.kotlin.idea.util.ProjectRootsUtil
 import org.jetbrains.kotlin.idea.util.isExpectDeclaration
 import org.jetbrains.kotlin.lexer.KtTokens
@@ -35,7 +38,6 @@ import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.debugText.getDebugText
 import org.jetbrains.kotlin.platform.isCommon
-import org.jetbrains.kotlin.utils.addToStdlib.firstNotNullResult
 
 object SourceNavigationHelper {
     private val LOG = Logger.getInstance(SourceNavigationHelper::class.java)
@@ -63,13 +65,33 @@ object SourceNavigationHelper {
                 val additionalScope = binaryModuleInfos.flatMap {
                     it.associatedCommonLibraries()
                 }.mapNotNull { it.sourcesModuleInfo?.sourceScope() }.union()
-                primaryScope + additionalScope
+
+                if (binaryModuleInfos.any { it is ScriptDependenciesInfo }) {
+                    // NOTE: this is a workaround for https://github.com/gradle/gradle/issues/13783:
+                    // script configuration for *.gradle.kts files doesn't include sources for included plugins
+                    primaryScope + additionalScope + ProjectScope.getContentScope(containingFile.project)
+                } else {
+                    primaryScope + additionalScope
+                }
             }
 
-            NavigationKind.SOURCES_TO_CLASS_FILES -> getLibrarySourcesModuleInfos(
-                declaration.project,
-                vFile
-            ).map { it.binariesModuleInfo.binariesScope() }.union()
+            NavigationKind.SOURCES_TO_CLASS_FILES -> {
+                if (containingFile.fileClassInfo is JvmMultifileClassPartInfo) {
+                    // if the asked element is multifile classs, it might be compiled into .kotlin_metadata and .class
+                    // but we don't have support of metadata declarations in light classes and in reference search (without
+                    // acceptOverrides). That's why we include only .class jar in the scope.
+                    val psiClass = JavaElementFinder.getInstance(containingFile.project)
+                        .findClass(containingFile.javaFileFacadeFqName.asString(), declaration.resolveScope)
+                    if (psiClass != null) {
+                        return getBinaryLibrariesModuleInfos(declaration.project, psiClass.containingFile.virtualFile)
+                            .map { it.binariesScope() }.union()
+                    }
+                }
+                getLibrarySourcesModuleInfos(
+                    declaration.project,
+                    vFile
+                ).map { it.binariesModuleInfo.binariesScope() }.union()
+            }
         }
     }
 
@@ -190,8 +212,8 @@ object SourceNavigationHelper {
         index: StringStubIndexExtension<T>
     ): T? {
         val classFqName = entity.fqName ?: return null
-        return targetScopes(entity, navigationKind).firstNotNullResult { scope ->
-            index.get(classFqName.asString(), entity.project, scope).minBy { it.isExpectDeclaration() }
+        return targetScopes(entity, navigationKind).firstNotNullOfOrNull { scope ->
+            index.get(classFqName.asString(), entity.project, scope).minByOrNull { it.isExpectDeclaration() }
         }
     }
 
@@ -244,6 +266,7 @@ object SourceNavigationHelper {
             }
 
             override fun contains(file: VirtualFile): Boolean {
+                if (file == vFile) return false
                 val entries = idx.getOrderEntriesForFile(file)
                 return entries.any { orderEntries.contains(it) }
             }

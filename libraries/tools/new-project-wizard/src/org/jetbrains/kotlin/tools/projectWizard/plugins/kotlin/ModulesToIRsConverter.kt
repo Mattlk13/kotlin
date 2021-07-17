@@ -5,21 +5,24 @@ import kotlinx.collections.immutable.toPersistentList
 
 
 import org.jetbrains.kotlin.tools.projectWizard.core.*
+import org.jetbrains.kotlin.tools.projectWizard.core.service.WizardKotlinVersion
 import org.jetbrains.kotlin.tools.projectWizard.ir.buildsystem.*
 import org.jetbrains.kotlin.tools.projectWizard.moduleConfigurators.*
+import org.jetbrains.kotlin.tools.projectWizard.plugins.StructurePlugin
 import org.jetbrains.kotlin.tools.projectWizard.plugins.buildSystem.BuildSystemType
+import org.jetbrains.kotlin.tools.projectWizard.plugins.buildSystem.buildSystemType
 import org.jetbrains.kotlin.tools.projectWizard.plugins.buildSystem.gradle.GradlePlugin
 import org.jetbrains.kotlin.tools.projectWizard.plugins.buildSystem.isGradle
 import org.jetbrains.kotlin.tools.projectWizard.plugins.templates.TemplatesPlugin
 import org.jetbrains.kotlin.tools.projectWizard.settings.buildsystem.*
-import org.jetbrains.kotlin.tools.projectWizard.settings.version.Version
 import java.nio.file.Path
+import java.util.*
 
 data class ModulesToIrConversionData(
     val rootModules: List<Module>,
     val projectPath: Path,
     val projectName: String,
-    val kotlinVersion: Version,
+    val kotlinVersion: WizardKotlinVersion,
     val buildSystemType: BuildSystemType,
     val pomIr: PomIR
 ) {
@@ -27,6 +30,11 @@ data class ModulesToIrConversionData(
     val isSingleRootModuleMode = rootModules.size == 1
 
     val moduleByPath = rootModules.withAllSubModules(includeSourcesets = true).associateBy(Module::path)
+
+    fun getDependentModules(from: Module): TaskResult<List<Module>> =
+        from.dependencies.mapSequence { to ->
+            moduleByPath[to.path].toResult { InvalidModuleDependencyError(from.name, to.path.toString()) }
+        }
 }
 
 private data class ModulesToIrsState(
@@ -74,7 +82,13 @@ class ModulesToIRsConverter(
             module.configurator == AndroidSinglePlatformModuleConfigurator
         }
 
-        rootModules.mapSequence { module ->
+        allModules.mapSequenceIgnore { module ->
+            forModuleEachDependency(module) { from, to, dependencyType ->
+                with(dependencyType) {
+                    runArbitraryTaskBeforeIRsCreated(from, to)
+                }
+            }
+        } andThen rootModules.mapSequence { module ->
             createBuildFileForModule(
                 module,
                 initialState.copy(parentModuleHasTransitivelySpecifiedKotlinVersion = parentModuleHasKotlinVersion)
@@ -90,13 +104,15 @@ class ModulesToIRsConverter(
         }
     }
 
-    private fun createRootBuildFile(): BuildFileIR = with(data) {
+    private fun Reader.createRootBuildFile(): BuildFileIR = with(data) {
         BuildFileIR(
             projectName,
             projectPath,
             RootFileModuleStructureIR(persistentListOf()),
             emptyList(),
             pomIr,
+            isRoot = true,
+            renderPomIr = StructurePlugin.renderPomIR.settingValue,
             rootBuildFileIrs.toPersistentList()
         )
     }
@@ -111,47 +127,32 @@ class ModulesToIRsConverter(
         else -> Success(emptyList())
     }
 
+    private fun <T : Any> forModuleEachDependency(
+        from: Module,
+        action: suspend ComputeContext<NoState>.(from: Module, to: Module, dependencyType: ModuleDependencyType) -> TaskResult<T>
+    ): TaskResult<List<T>> {
+        return from.dependencies.mapComputeM { dependency ->
+            val to = data.moduleByPath.getValue(dependency.path)
+            val (dependencyType) = ModuleDependencyType.getPossibleDependencyType(from, to)
+                .toResult { InvalidModuleDependencyError(from, to) }
+            action(from, to, dependencyType)
+        }.sequence()
+    }
+
     private fun Writer.createSinglePlatformModule(
         module: Module,
         configurator: SinglePlatformModuleConfigurator,
         state: ModulesToIrsState
     ): TaskResult<List<BuildFileIR>> = computeM {
         val modulePath = calculatePathForModule(module, state.parentPath)
-        val (moduleDependencies) = module.dependencies.mapCompute { dependency ->
-            val to = data.moduleByPath.getValue(dependency.path)
-            val (dependencyType) = ModuleDependencyType.getPossibleDependencyType(module, to)
-                .toResult { InvalidModuleDependencyError(module, to) }
-
-            with(dependencyType) {
-                @Suppress("DEPRECATION")
-                with(unsafeSettingWriter) {
-                    runArbitraryTask(
-                        module,
-                        to,
-                        to.path.considerSingleRootModuleMode(data.isSingleRootModuleMode).asPath(),
-                        data
-                    ).ensure()
-                }
-                irsToAddToModules.getOrPut(to) { mutableListOf() } += createToIRs(module, to, data).get()
-                createDependencyIrs(module, to, data)
-            }
-        }.sequence().map { it.flatten() }
+        val (moduleDependencies) = createModuleDependencies(module)
         mutateProjectStructureByModuleConfigurator(module, modulePath)
         val buildFileIR = run {
             if (!configurator.needCreateBuildFile) return@run null
             val dependenciesIRs = buildPersistenceList<BuildSystemIR> {
                 +moduleDependencies
                 with(configurator) { +createModuleIRs(this@createSinglePlatformModule, data, module) }
-                addIfNotNull(
-                    configurator.createStdlibType(data, module)?.let { stdlibType ->
-                        KotlinStdlibDependencyIR(
-                            type = stdlibType,
-                            isInMppModule = false,
-                            version = data.kotlinVersion,
-                            dependencyType = DependencyType.MAIN
-                        )
-                    }
-                )
+                addIfNotNull(addSdtLibForNonGradleSignleplatformModule(module))
             }
 
             val moduleIr = SingleplatformModuleIR(
@@ -178,6 +179,8 @@ class ModulesToIRsConverter(
                 ),
                 listOf(module),
                 data.pomIr.copy(artifactId = module.name),
+                isRoot = false, /* TODO */
+                renderPomIr = StructurePlugin.renderPomIR.settingValue,
                 createBuildFileIRs(module, state)
             ).also {
                 moduleToBuildFile[module] = it
@@ -198,70 +201,87 @@ class ModulesToIRsConverter(
     private fun Writer.createMultiplatformModule(
         module: Module,
         state: ModulesToIrsState
-    ): TaskResult<List<BuildFileIR>> = with(data) {
-        val modulePath = calculatePathForModule(module, state.parentPath)
-        mutateProjectStructureByModuleConfigurator(module, modulePath)
-        val targetIrs = module.subModules.flatMap { subModule ->
-            with(subModule.configurator as TargetConfigurator) { createTargetIrs(subModule) }
-        }
-
-        val targetModuleIrs = module.subModules.map { target ->
-            createTargetModule(target, modulePath)
-        }
-
-        return BuildFileIR(
-            projectName,
-            modulePath,
-            MultiplatformModulesStructureIR(
-                targetIrs,
-                targetModuleIrs,
-                persistentListOf()
-            ),
-            module.subModules + module,
-            pomIr,
-            buildPersistenceList {
-                +createBuildFileIRs(module, state)
-                module.subModules.forEach { +createBuildFileIRs(it, state) }
+    ): TaskResult<List<BuildFileIR>> = compute {
+        with(data) {
+            val modulePath = calculatePathForModule(module, state.parentPath)
+            mutateProjectStructureByModuleConfigurator(module, modulePath)
+            val targetIrs = module.subModules.flatMap { subModule ->
+                with(subModule.configurator as TargetConfigurator) { createTargetIrs(subModule) }
             }
-        ).also { buildFile ->
-            moduleToBuildFile[module] = buildFile
-            module.subModules.forEach { subModule ->
-                moduleToBuildFile[subModule] = buildFile
-            }
-        }.asSingletonList().asSuccess()
 
+            val (targetModuleIrs) = module.subModules.mapSequence { target ->
+                createTargetModule(target, modulePath)
+            }
+
+            BuildFileIR(
+                projectName,
+                modulePath,
+                MultiplatformModulesStructureIR(
+                    targetIrs,
+                    FakeMultiplatformModuleIR(
+                        module.name,
+                        modulePath,
+                        module.template,
+                        targetModuleIrs,
+                        module,
+                    ),
+                    targetModuleIrs,
+                    persistentListOf()
+                ),
+                module.subModules + module,
+                pomIr,
+                isRoot = false,
+                renderPomIr = StructurePlugin.renderPomIR.settingValue,
+                buildPersistenceList {
+                    +createBuildFileIRs(module, state)
+                    module.subModules.forEach { +createBuildFileIRs(it, state) }
+                }
+            ).also { buildFile ->
+                moduleToBuildFile[module] = buildFile
+                module.subModules.forEach { subModule ->
+                    moduleToBuildFile[subModule] = buildFile
+                }
+            }.asSingletonList()
+        }
     }
 
-    private fun Writer.createTargetModule(target: Module, modulePath: Path): MultiplatformModuleIR {
+    private fun Writer.createModuleDependencies(module: Module): TaskResult<List<BuildSystemIR>> =
+        forModuleEachDependency(module) { from, to, dependencyType ->
+            with(dependencyType) {
+                @Suppress("DEPRECATION")
+                unsafeSettingWriter {
+                    runArbitraryTask(
+                        module,
+                        to,
+                        to.path.considerSingleRootModuleMode(data.isSingleRootModuleMode).asPath(),
+                        data
+                    ).ensure()
+                }
+                irsToAddToModules.getOrPut(to) { mutableListOf() } += createToIRs(module, to, data).get()
+                createDependencyIrs(module, to, data).asSuccess()
+            }
+        }.map { it.flatten() }
+
+    private fun Writer.createTargetModule(target: Module, modulePath: Path): TaskResult<MultiplatformModuleIR> = compute {
+        val (moduleDependencies) = createModuleDependencies(target)
         mutateProjectStructureByModuleConfigurator(target, modulePath)
         val sourcesetss = target.sourcesets.map { sourceset ->
-            val sourcesetName = target.name + sourceset.sourcesetType.name.capitalize()
-            val sourcesetIrs = buildList<BuildSystemIR> {
-                if (sourceset.sourcesetType == SourcesetType.main) {
-                    addIfNotNull(
-                        target.configurator.createStdlibType(data, target)?.let { stdlibType ->
-                            KotlinStdlibDependencyIR(
-                                type = stdlibType,
-                                isInMppModule = true,
-                                version = data.kotlinVersion,
-                                dependencyType = DependencyType.MAIN
-                            )
-                        }
-                    )
-                }
-            }
+            val sourcesetName = target.name + sourceset.sourcesetType.name.replaceFirstChar(Char::uppercaseChar)
             MultiplatformSourcesetIR(
                 sourceset.sourcesetType,
                 modulePath / Defaults.SRC_DIR / sourcesetName,
                 target.name,
-                sourcesetIrs.toPersistentList(),
+                persistentListOf(),
                 sourceset
             )
         }
-        return MultiplatformModuleIR(
+        MultiplatformModuleIR(
             target.name,
             modulePath,
-            with(target.configurator) { createModuleIRs(this@createTargetModule, data, target) }.toPersistentList(),
+            buildPersistenceList {
+                +moduleDependencies
+                with(target.configurator) { +createModuleIRs(this@createTargetModule, data, target) }
+            },
             target.template,
             target,
             sourcesetss
@@ -274,12 +294,29 @@ class ModulesToIRsConverter(
     ): TaskResult<Unit> = with(module.configurator) {
         compute {
             rootBuildFileIrs += createRootBuildFileIrs(data)
+            module.template?.let { template ->
+                rootBuildFileIrs += with(template) { createRootBuildFileIrs() }
+            }
             runArbitraryTask(data, module, modulePath).ensure()
-            TemplatesPlugin::addFileTemplates.execute(createTemplates(data, module, modulePath)).ensure()
+            TemplatesPlugin.addFileTemplates.execute(createTemplates(data, module, modulePath)).ensure()
             if (this@with is GradleModuleConfigurator) {
-                GradlePlugin::settingsGradleFileIRs.addValues(createSettingsGradleIRs(module)).ensure()
+                GradlePlugin.settingsGradleFileIRs.addValues(
+                    createSettingsGradleIRs(this@mutateProjectStructureByModuleConfigurator, module, data)
+                ).ensure()
             }
         }
+    }
+
+    private fun Reader.addSdtLibForNonGradleSignleplatformModule(module: Module): KotlinStdlibDependencyIR? {
+        // for gradle stdlib is added by default KT-38221
+        if (buildSystemType.isGradle) return null
+        val stdlibType = module.configurator.createStdlibType(data, module) ?: return null
+        return KotlinStdlibDependencyIR(
+            type = stdlibType,
+            isInMppModule = false,
+            kotlinVersion = data.kotlinVersion,
+            dependencyType = DependencyType.MAIN
+        )
     }
 
     private fun Reader.createBuildFileIRs(
@@ -298,5 +335,8 @@ class ModulesToIRsConverter(
             }
         addIfNotNull(kotlinPlugin)
         +with(module.configurator) { createBuildFileIRs(this@createBuildFileIRs, data, module) }
+            .let {
+                module.template?.run { updateBuildFileIRs(it) } ?: it
+            }
     }
 }

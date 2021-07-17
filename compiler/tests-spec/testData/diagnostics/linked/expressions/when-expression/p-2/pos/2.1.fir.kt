@@ -1,15 +1,5 @@
 // SKIP_TXT
 
-/*
- * KOTLIN DIAGNOSTICS SPEC TEST (POSITIVE)
- *
- * SPEC VERSION: 0.1-100
- * PLACE: expressions, when-expression -> paragraph 2 -> sentence 2
- * NUMBER: 1
- * DESCRIPTION: When without bound value, various boolean values in the when condition.
- * HELPERS: typesProvider, enumClasses, sealedClasses, classes
- */
-
 // TESTCASE NUMBER: 1
 fun case_1(value_1: Boolean, value_2: Long): Int {
     return when {
@@ -83,7 +73,7 @@ fun case_6(value_1: Any) {
         value_1 is String -> {}
         value_1 is Number -> {}
         value_1 is Float -> {}
-        value_1 is Any -> {}
+        <!USELESS_IS_CHECK!>value_1 is Any<!> -> {}
     }
 }
 
@@ -95,8 +85,8 @@ fun case_7(value_1: Any) {
     when {
         value_1 !is Number -> {}
         value_1 is Float -> {}
-        value_1 is Number -> {}
-        value_1 is Any -> {}
+        <!USELESS_IS_CHECK!>value_1 is Number<!> -> {}
+        <!USELESS_IS_CHECK!>value_1 is Any<!> -> {}
     }
 }
 

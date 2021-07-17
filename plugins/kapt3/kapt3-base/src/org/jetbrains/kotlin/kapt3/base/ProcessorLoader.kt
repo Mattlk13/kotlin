@@ -14,11 +14,11 @@ import org.jetbrains.kotlin.kapt3.base.util.KaptLogger
 import org.jetbrains.kotlin.kapt3.base.util.info
 import java.io.Closeable
 import java.io.File
-import java.lang.reflect.Field
-import java.lang.reflect.Modifier
+import java.io.InputStream
 import java.net.URLClassLoader
-import java.util.*
+import java.util.zip.ZipFile
 import javax.annotation.processing.Processor
+import kotlin.collections.LinkedHashSet
 
 class LoadedProcessors(val processors: List<IncrementalProcessor>, val classLoader: ClassLoader)
 
@@ -26,14 +26,13 @@ open class ProcessorLoader(private val options: KaptOptions, private val logger:
     private var annotationProcessingClassLoader: URLClassLoader? = null
 
     fun loadProcessors(parentClassLoader: ClassLoader = ClassLoader.getSystemClassLoader()): LoadedProcessors {
-        clearJarURLCache()
-
         val classpath = LinkedHashSet<File>().apply {
             addAll(options.processingClasspath)
             if (options[KaptFlag.INCLUDE_COMPILE_CLASSPATH]) {
                 addAll(options.compileClasspath)
             }
         }
+
         val classLoader = URLClassLoader(classpath.map { it.toURI().toURL() }.toTypedArray(), parentClassLoader)
         this.annotationProcessingClassLoader = classLoader
 
@@ -42,7 +41,7 @@ open class ProcessorLoader(private val options: KaptOptions, private val logger:
             options.processors.mapNotNull { tryLoadProcessor(it, classLoader) }
         } else {
             logger.info("Need to discovery annotation processors in the AP classpath")
-            doLoadProcessors(classLoader)
+            doLoadProcessors(classpath, classLoader)
         }
 
         if (processors.isEmpty()) {
@@ -76,13 +75,62 @@ open class ProcessorLoader(private val options: KaptOptions, private val logger:
         }
     }
 
-    open fun doLoadProcessors(classLoader: URLClassLoader): List<Processor> {
-        return ServiceLoader.load(Processor::class.java, classLoader).toList()
+    open fun doLoadProcessors(classpath: LinkedHashSet<File>, classLoader: ClassLoader): List<Processor> {
+        val processorNames = mutableSetOf<String>()
+
+        fun processSingleInput(input: InputStream) {
+            val lines = input.bufferedReader().lineSequence()
+            lines.forEach { line ->
+                val processedLine = line.substringBefore("#").trim()
+                if (processedLine.isNotEmpty()) {
+                    processorNames.add(processedLine)
+                }
+            }
+        }
+        // Do not use ServiceLoader as it uses JarFileFactory cache which is not cleared
+        // properly. This may cause issues on Windows.
+        // Previously, JarFileFactory caches were manually cleaned, but that caused race conditions,
+        // as JarFileFactory was shared between concurrent runs in the same class loader.
+        // See https://youtrack.jetbrains.com/issue/KT-34604 for more details. Similar issue
+        // is also https://youtrack.jetbrains.com/issue/KT-22513.
+        val serviceFile = "META-INF/services/javax.annotation.processing.Processor"
+        for (file in classpath) {
+            when {
+                file.isDirectory -> {
+                    file.resolve(serviceFile).takeIf { it.isFile }?.let {
+                        processSingleInput(it.inputStream())
+                    }
+                }
+                file.isFile && file.extension.equals("jar", ignoreCase = true) -> {
+                    ZipFile(file).use { zipFile ->
+                        zipFile.getEntry(serviceFile)?.let { zipEntry ->
+                            zipFile.getInputStream(zipEntry).use {
+                                processSingleInput(it)
+                            }
+                        }
+                    }
+                }
+                else -> {
+                    logger.info("$file cannot be used to locate $serviceFile file.")
+                }
+            }
+        }
+
+        return processorNames.mapNotNull { tryLoadProcessor(it, classLoader) }
     }
 
     private fun tryLoadProcessor(fqName: String, classLoader: ClassLoader): Processor? {
+        val providedClassloader = options.processingClassLoader?.takeIf { !options.separateClassloaderForProcessors.contains(fqName) }
+        val classLoaderToUse = if (providedClassloader != null) {
+            logger.info { "Use provided ClassLoader for processor '$fqName'" }
+            providedClassloader
+        } else {
+            logger.info { "Use own ClassLoader for processor '$fqName'" }
+            classLoader
+        }
+
         val annotationProcessorClass = try {
-            Class.forName(fqName, true, classLoader)
+            Class.forName(fqName, true, classLoaderToUse)
         } catch (e: Throwable) {
             logger.warn("Can't find annotation processor class $fqName: ${e.message}")
             return null
@@ -104,28 +152,5 @@ open class ProcessorLoader(private val options: KaptOptions, private val logger:
 
     override fun close() {
         annotationProcessingClassLoader?.close()
-        clearJarURLCache()
-    }
-}
-
-// Copied from com.intellij.ide.ClassUtilCore
-private fun clearJarURLCache() {
-    fun clearMap(cache: Field) {
-        cache.isAccessible = true
-
-        if (!Modifier.isFinal(cache.modifiers)) {
-            cache.set(null, hashMapOf<Any, Any>())
-        } else {
-            val map = cache.get(null) as MutableMap<*, *>
-            map.clear()
-        }
-    }
-
-    try {
-        val jarFileFactory = Class.forName("sun.net.www.protocol.jar.JarFileFactory")
-
-        clearMap(jarFileFactory.getDeclaredField("fileCache"))
-        clearMap(jarFileFactory.getDeclaredField("urlCache"))
-    } catch (ignore: Exception) {
     }
 }

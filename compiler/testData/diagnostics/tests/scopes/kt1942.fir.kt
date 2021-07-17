@@ -14,6 +14,6 @@ import a.C
 
 class A : C() {
     fun test() {
-        val v = <!INAPPLICABLE_CANDIDATE!>myValue<!>
+        val v = <!INVISIBLE_REFERENCE!>myValue<!>
     }
 }

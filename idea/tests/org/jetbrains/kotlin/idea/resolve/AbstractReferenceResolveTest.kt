@@ -1,11 +1,12 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.resolve
 
 import com.google.common.collect.Lists
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiPolyVariantReference
 import com.intellij.psi.PsiReference
@@ -16,8 +17,10 @@ import org.jetbrains.kotlin.idea.completion.test.configureWithExtraFile
 import org.jetbrains.kotlin.idea.test.KotlinLightPlatformCodeInsightFixtureTestCase
 import org.jetbrains.kotlin.idea.test.KotlinWithJdkAndRuntimeLightProjectDescriptor
 import org.jetbrains.kotlin.idea.test.PluginTestCaseBase
+import org.jetbrains.kotlin.idea.util.application.runReadAction
 import org.jetbrains.kotlin.test.InTextDirectivesUtils
 import org.jetbrains.kotlin.test.util.renderAsGotoImplementation
+import org.jetbrains.kotlin.test.utils.IgnoreTests
 import org.junit.Assert
 import kotlin.test.assertTrue
 
@@ -32,7 +35,14 @@ abstract class AbstractReferenceResolveTest : KotlinLightPlatformCodeInsightFixt
     protected open fun doTest(path: String) {
         assert(path.endsWith(".kt")) { path }
         myFixture.configureWithExtraFile(path, ".Data")
-        performChecks()
+        val controlDirective = if (isFirPlugin()) {
+            IgnoreTests.DIRECTIVES.IGNORE_FIR
+        } else {
+            IgnoreTests.DIRECTIVES.IGNORE_FE10
+        }
+        IgnoreTests.runTestIfNotDisabledByFileDirective(testDataFile().toPath(), controlDirective) {
+            performChecks()
+        }
     }
 
     protected fun performChecks() {
@@ -66,7 +76,9 @@ abstract class AbstractReferenceResolveTest : KotlinLightPlatformCodeInsightFixt
             assertTrue(psiReference is PsiPolyVariantReference)
             psiReference as PsiPolyVariantReference
 
-            val results = wrapReference(psiReference).multiResolve(true)
+            val results = executeOnPooledThreadInReadAction {
+                wrapReference(psiReference).multiResolve(true)
+            }
 
             val actualResolvedTo = Lists.newArrayList<String>()
             for (result in results) {
@@ -128,7 +140,7 @@ abstract class AbstractReferenceResolveTest : KotlinLightPlatformCodeInsightFixt
         ) {
             val expectedString = expectedResolveData.referenceString
             if (psiReference != null) {
-                val resolvedTo = psiReference.resolve()
+                val resolvedTo = executeOnPooledThreadInReadAction { psiReference.resolve() }
                 if (resolvedTo != null) {
                     checkResolvedTo(resolvedTo)
                     val resolvedToElementStr = replacePlaceholders(resolvedTo.renderAsGotoImplementation())
@@ -161,3 +173,6 @@ abstract class AbstractReferenceResolveTest : KotlinLightPlatformCodeInsightFixt
         }
     }
 }
+
+private fun <R> executeOnPooledThreadInReadAction(action: () -> R): R =
+    ApplicationManager.getApplication().executeOnPooledThread<R> { runReadAction(action) }.get()

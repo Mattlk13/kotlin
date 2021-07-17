@@ -91,7 +91,7 @@ class ParametersBuilder private constructor() {
     }
 
     fun buildParameters(): Parameters {
-        var nextDeclarationIndex = (params.maxBy { it.declarationIndex }?.declarationIndex ?: -1) + 1
+        var nextDeclarationIndex = (params.maxOfOrNull { it.declarationIndex } ?: -1) + 1
 
         return Parameters(params.map { param ->
             if (param is CapturedParamInfo) {
@@ -106,23 +106,6 @@ class ParametersBuilder private constructor() {
         @JvmStatic
         fun newBuilder(): ParametersBuilder {
             return ParametersBuilder()
-        }
-
-        @JvmOverloads
-        @JvmStatic
-        fun initializeBuilderFrom(
-            objectType: Type, descriptor: String, inlineLambda: LambdaInfo? = null, isStatic: Boolean = false
-        ): ParametersBuilder {
-            val builder = newBuilder()
-            if (inlineLambda?.hasDispatchReceiver != false && !isStatic) {
-                //skipped this for inlined lambda cause it will be removed
-                builder.addThis(objectType, inlineLambda != null).functionalArgument = inlineLambda
-            }
-
-            for (type in Type.getArgumentTypes(descriptor)) {
-                builder.addNextParameter(type, false)
-            }
-            return builder
         }
     }
 }

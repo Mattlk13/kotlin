@@ -16,9 +16,11 @@
 
 package org.jetbrains.kotlin.context
 
+import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.project.Project
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
+import org.jetbrains.kotlin.descriptors.ModuleCapability
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
 import org.jetbrains.kotlin.descriptors.PackageFragmentProvider
 import org.jetbrains.kotlin.descriptors.impl.ModuleDescriptorImpl
@@ -86,9 +88,9 @@ class MutableModuleContextImpl(
 
 fun GlobalContext(debugName: String): GlobalContextImpl {
     val tracker = ExceptionTracker()
-    return GlobalContextImpl(LockBasedStorageManager.createWithExceptionHandling(debugName, tracker) {
+    return GlobalContextImpl(LockBasedStorageManager.createWithExceptionHandling(debugName, tracker, {
         ProgressManager.checkCanceled()
-    }, tracker)
+    }, { throw ProcessCanceledException(it) }), tracker)
 }
 
 fun ProjectContext(project: Project, debugName: String): ProjectContext = ProjectContextImpl(project, GlobalContext(debugName))
@@ -102,8 +104,9 @@ fun ContextForNewModule(
     projectContext: ProjectContext,
     moduleName: Name,
     builtIns: KotlinBuiltIns,
-    platform: TargetPlatform?
+    platform: TargetPlatform?,
+    capabilities: Map<ModuleCapability<*>, Any?> = emptyMap(),
 ): MutableModuleContext {
-    val module = ModuleDescriptorImpl(moduleName, projectContext.storageManager, builtIns, platform)
+    val module = ModuleDescriptorImpl(moduleName, projectContext.storageManager, builtIns, platform, capabilities)
     return MutableModuleContextImpl(module, projectContext)
 }

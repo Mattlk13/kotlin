@@ -19,10 +19,10 @@ package org.jetbrains.kotlin.psi2ir.generators
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.ir.builders.Scope
+import org.jetbrains.kotlin.ir.declarations.IrFunction
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.expressions.impl.*
 import org.jetbrains.kotlin.ir.symbols.IrSymbol
-import org.jetbrains.kotlin.ir.util.referenceFunction
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.endOffset
 import org.jetbrains.kotlin.psi.psiUtil.pureEndOffset
@@ -36,7 +36,6 @@ import org.jetbrains.kotlin.resolve.bindingContextUtil.isUsedAsResultOfLambda
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
 import org.jetbrains.kotlin.resolve.descriptorUtil.getSuperClassOrAny
 import org.jetbrains.kotlin.types.KotlinType
-import java.util.*
 
 class BodyGenerator(
     val scopeOwnerSymbol: IrSymbol,
@@ -54,7 +53,7 @@ class BodyGenerator(
     fun generateFunctionBody(ktBody: KtExpression): IrBody {
         val statementGenerator = createStatementGenerator()
 
-        val irBlockBody = IrBlockBodyImpl(ktBody.startOffsetSkippingComments, ktBody.endOffset)
+        val irBlockBody = context.irFactory.createBlockBody(ktBody.startOffsetSkippingComments, ktBody.endOffset)
         if (ktBody is KtBlockExpression) {
             statementGenerator.generateStatements(ktBody.statements, irBlockBody)
         } else {
@@ -71,13 +70,13 @@ class BodyGenerator(
     }
 
     fun generateExpressionBody(ktExpression: KtExpression): IrExpressionBody =
-        IrExpressionBodyImpl(createStatementGenerator().generateExpression(ktExpression))
+        context.irFactory.createExpressionBody(createStatementGenerator().generateExpression(ktExpression))
 
     fun generateLambdaBody(ktFun: KtFunctionLiteral): IrBody {
         val statementGenerator = createStatementGenerator()
 
         val ktBody = ktFun.bodyExpression!!
-        val irBlockBody = IrBlockBodyImpl(ktBody.startOffsetSkippingComments, ktBody.endOffset)
+        val irBlockBody = context.irFactory.createBlockBody(ktBody.startOffsetSkippingComments, ktBody.endOffset)
 
         for (ktParameter in ktFun.valueParameters) {
             val ktDestructuringDeclaration = ktParameter.destructuringDeclaration ?: continue
@@ -112,7 +111,7 @@ class BodyGenerator(
                     ktBody.startOffsetSkippingComments, ktBody.endOffset,
                     IrGetObjectValueImpl(
                         ktBody.startOffsetSkippingComments, ktBody.endOffset, context.irBuiltIns.unitType,
-                        context.symbolTable.referenceClass(context.builtIns.unit)
+                        context.irBuiltIns.unitClass
                     )
                 )
             )
@@ -122,16 +121,16 @@ class BodyGenerator(
     }
 
     private fun generateReturnExpression(startOffset: Int, endOffset: Int, returnValue: IrExpression): IrReturnImpl {
-        val returnTarget = (scopeOwner as? CallableDescriptor) ?: throw AssertionError("'return' in a non-callable: $scopeOwner")
+        val returnTarget = scopeOwnerSymbol.owner as? IrFunction ?: throw AssertionError("'return' in a non-callable: $scopeOwner")
         return IrReturnImpl(
             startOffset, endOffset, context.irBuiltIns.nothingType,
-            context.symbolTable.referenceFunction(returnTarget),
+            returnTarget.symbol,
             returnValue
         )
     }
 
     fun generateSecondaryConstructorBody(ktConstructor: KtSecondaryConstructor): IrBody {
-        val irBlockBody = IrBlockBodyImpl(ktConstructor.startOffsetSkippingComments, ktConstructor.endOffset)
+        val irBlockBody = context.irFactory.createBlockBody(ktConstructor.startOffsetSkippingComments, ktConstructor.endOffset)
 
         generateDelegatingConstructorCall(irBlockBody, ktConstructor)
 
@@ -142,7 +141,7 @@ class BodyGenerator(
         return irBlockBody
     }
 
-    private fun generateDelegatingConstructorCall(irBlockBody: IrBlockBodyImpl, ktConstructor: KtSecondaryConstructor) {
+    private fun generateDelegatingConstructorCall(irBlockBody: IrBlockBody, ktConstructor: KtSecondaryConstructor) {
         val constructorDescriptor = scopeOwner as ClassConstructorDescriptor
 
         val statementGenerator = createStatementGenerator()
@@ -177,7 +176,7 @@ class BodyGenerator(
         loopTable[expression]
 
     fun generatePrimaryConstructorBody(ktClassOrObject: KtPureClassOrObject): IrBody {
-        val irBlockBody = IrBlockBodyImpl(ktClassOrObject.pureStartOffset, ktClassOrObject.pureEndOffset)
+        val irBlockBody = context.irFactory.createBlockBody(ktClassOrObject.pureStartOffset, ktClassOrObject.pureEndOffset)
 
         generateSuperConstructorCall(irBlockBody, ktClassOrObject)
 
@@ -194,7 +193,7 @@ class BodyGenerator(
     }
 
     fun generateSecondaryConstructorBodyWithNestedInitializers(ktConstructor: KtSecondaryConstructor): IrBody {
-        val irBlockBody = IrBlockBodyImpl(ktConstructor.startOffsetSkippingComments, ktConstructor.endOffset)
+        val irBlockBody = context.irFactory.createBlockBody(ktConstructor.startOffsetSkippingComments, ktConstructor.endOffset)
 
         generateDelegatingConstructorCall(irBlockBody, ktConstructor)
 
@@ -214,15 +213,20 @@ class BodyGenerator(
         return irBlockBody
     }
 
-    private fun generateSuperConstructorCall(irBlockBody: IrBlockBodyImpl, ktClassOrObject: KtPureClassOrObject) {
+    private fun generateSuperConstructorCall(body: IrBlockBody, ktClassOrObject: KtPureClassOrObject) {
         val classDescriptor = ktClassOrObject.findClassDescriptor(context.bindingContext)
+
+        context.extensions.createCustomSuperConstructorCall(ktClassOrObject, classDescriptor, context)?.let {
+            body.statements.add(it)
+            return
+        }
 
         when (classDescriptor.kind) {
             // enums can't be synthetic
-            ClassKind.ENUM_CLASS -> generateEnumSuperConstructorCall(irBlockBody, ktClassOrObject as KtClassOrObject, classDescriptor)
+            ClassKind.ENUM_CLASS -> generateEnumSuperConstructorCall(body, ktClassOrObject as KtClassOrObject, classDescriptor)
 
             ClassKind.ENUM_ENTRY -> {
-                irBlockBody.statements.add(
+                body.statements.add(
                     generateEnumEntrySuperConstructorCall(ktClassOrObject as KtEnumEntry, classDescriptor)
                 )
             }
@@ -234,11 +238,12 @@ class BodyGenerator(
                 (ktClassOrObject as? KtClassOrObject)?.getSuperTypeList()?.let { ktSuperTypeList ->
                     for (ktSuperTypeListEntry in ktSuperTypeList.entries) {
                         if (ktSuperTypeListEntry is KtSuperTypeCallEntry) {
-                            val superConstructorCall = statementGenerator.pregenerateCall(getResolvedCall(ktSuperTypeListEntry)!!)
+                            val resolvedCall = getResolvedCall(ktSuperTypeListEntry) ?: continue
+                            val superConstructorCall = statementGenerator.pregenerateCall(resolvedCall)
                             val irSuperConstructorCall = CallGenerator(statementGenerator).generateDelegatingConstructorCall(
                                 ktSuperTypeListEntry.startOffsetSkippingComments, ktSuperTypeListEntry.endOffset, superConstructorCall
                             )
-                            irBlockBody.statements.add(irSuperConstructorCall)
+                            body.statements.add(irSuperConstructorCall)
                             return
                         }
                     }
@@ -250,15 +255,15 @@ class BodyGenerator(
                 assert(KotlinBuiltIns.isAny(superClass)) {
                     "$classDescriptor: Super class should be any: $superClass"
                 }
-                generateAnySuperConstructorCall(irBlockBody, ktClassOrObject)
+                generateAnySuperConstructorCall(body, ktClassOrObject)
             }
         }
     }
 
-    private fun generateAnySuperConstructorCall(irBlockBody: IrBlockBodyImpl, ktElement: KtPureElement) {
-        val anyConstructor = context.builtIns.any.constructors.single()
-        irBlockBody.statements.add(
-            IrDelegatingConstructorCallImpl(
+    private fun generateAnySuperConstructorCall(body: IrBlockBody, ktElement: KtPureElement) {
+        val anyConstructor = context.irBuiltIns.anyClass.descriptor.constructors.single()
+        body.statements.add(
+            IrDelegatingConstructorCallImpl.fromSymbolDescriptor(
                 ktElement.pureStartOffset, ktElement.pureEndOffset,
                 context.irBuiltIns.unitType,
                 context.symbolTable.referenceConstructor(anyConstructor)
@@ -266,14 +271,10 @@ class BodyGenerator(
         )
     }
 
-    private fun generateEnumSuperConstructorCall(
-        irBlockBody: IrBlockBodyImpl,
-        ktElement: KtElement,
-        classDescriptor: ClassDescriptor
-    ) {
-        val enumConstructor = context.builtIns.enum.constructors.single()
-        irBlockBody.statements.add(
-            IrEnumConstructorCallImpl(
+    private fun generateEnumSuperConstructorCall(body: IrBlockBody, ktElement: KtElement, classDescriptor: ClassDescriptor) {
+        val enumConstructor = context.irBuiltIns.enumClass.descriptor.constructors.single()
+        body.statements.add(
+            IrEnumConstructorCallImpl.fromSymbolDescriptor(
                 ktElement.startOffsetSkippingComments, ktElement.endOffset,
                 context.irBuiltIns.unitType,
                 context.symbolTable.referenceConstructor(enumConstructor),
@@ -291,7 +292,7 @@ class BodyGenerator(
     fun generateEnumEntryInitializer(ktEnumEntry: KtEnumEntry, enumEntryDescriptor: ClassDescriptor): IrExpression {
         if (ktEnumEntry.declarations.isNotEmpty()) {
             val enumEntryConstructor = enumEntryDescriptor.unsubstitutedPrimaryConstructor!!
-            return IrEnumConstructorCallImpl(
+            return IrEnumConstructorCallImpl.fromSymbolDescriptor(
                 ktEnumEntry.startOffsetSkippingComments, ktEnumEntry.endOffset,
                 context.irBuiltIns.unitType,
                 context.symbolTable.referenceConstructor(enumEntryConstructor),

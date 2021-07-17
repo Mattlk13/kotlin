@@ -6,13 +6,14 @@
 package org.jetbrains.kotlin.ir.backend.js.lower
 
 import org.jetbrains.kotlin.backend.common.BodyLoweringPass
+import org.jetbrains.kotlin.backend.common.ir.isPure
 import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.backend.js.JsIrBackendContext
 import org.jetbrains.kotlin.ir.backend.js.ir.JsIrArithBuilder
 import org.jetbrains.kotlin.ir.backend.js.ir.JsIrBuilder
-import org.jetbrains.kotlin.ir.backend.js.utils.isPure
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrDeclaration
+import org.jetbrains.kotlin.ir.declarations.IrDeclarationBase
 import org.jetbrains.kotlin.ir.declarations.IrDeclarationParent
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.expressions.impl.IrCompositeImpl
@@ -38,14 +39,15 @@ class TypeOperatorLowering(val context: JsIrBackendContext) : BodyLoweringPass {
     private val devMode = context.devMode
 
     //NOTE: Should we define JS-own functions similar to current implementation?
-    private val throwCCE = context.ir.symbols.ThrowTypeCastException
-    private val throwNPE = context.ir.symbols.ThrowNullPointerException
+    private val throwCCE = context.ir.symbols.throwTypeCastException
+    private val throwNPE = context.ir.symbols.throwNullPointerException
 
     private val eqeq = context.irBuiltIns.eqeqSymbol
 
     private val isInterfaceSymbol get() = context.intrinsics.isInterfaceSymbol
     private val isArraySymbol get() = context.intrinsics.isArraySymbol
     private val isSuspendFunctionSymbol = context.intrinsics.isSuspendFunctionSymbol
+
     //    private val isCharSymbol get() = context.intrinsics.isCharSymbol
     private val isObjectSymbol get() = context.intrinsics.isObjectSymbol
 
@@ -62,9 +64,11 @@ class TypeOperatorLowering(val context: JsIrBackendContext) : BodyLoweringPass {
     private val litFalse: IrExpression get() = JsIrBuilder.buildBoolean(context.irBuiltIns.booleanType, false)
     private val litNull: IrExpression get() = JsIrBuilder.buildNull(context.irBuiltIns.nothingNType)
 
+    private val icUtils = context.inlineClassesUtils
+
     override fun lower(irBody: IrBody, container: IrDeclaration) {
         irBody.transformChildren(object : IrElementTransformer<IrDeclarationParent> {
-            override fun visitDeclaration(declaration: IrDeclaration, data: IrDeclarationParent) =
+            override fun visitDeclaration(declaration: IrDeclarationBase, data: IrDeclarationParent) =
                 super.visitDeclaration(declaration, declaration as? IrDeclarationParent ?: data)
 
             override fun visitTypeOperator(expression: IrTypeOperatorCall, data: IrDeclarationParent): IrExpression {
@@ -100,7 +104,7 @@ class TypeOperatorLowering(val context: JsIrBackendContext) : BodyLoweringPass {
             }
 
             private fun needBoxingOrUnboxing(fromType: IrType, toType: IrType): Boolean {
-                return ((fromType.getInlinedClass() != null) xor (toType.getInlinedClass() != null)) || (fromType.isUnit() && !toType.isUnit())
+                return ((icUtils.getInlinedClass(fromType) != null) xor (icUtils.getInlinedClass(toType) != null)) || (fromType.isUnit() && !toType.isUnit())
             }
 
             private fun IrTypeOperatorCall.wrapWithUnsafeCast(arg: IrExpression): IrExpression {
@@ -196,9 +200,9 @@ class TypeOperatorLowering(val context: JsIrBackendContext) : BodyLoweringPass {
                 value: IrExpression,
                 newStatements: MutableList<IrStatement>,
                 declaration: IrDeclarationParent
-            ): () -> IrExpressionWithCopy {
+            ): () -> IrExpression {
                 return if (value.isPure(anyVariable = true, checkFields = false)) {
-                    { value.deepCopyWithSymbols() as IrExpressionWithCopy }
+                    { value.deepCopyWithSymbols() }
                 } else {
                     val varDeclaration = JsIrBuilder.buildVar(value.type, declaration, initializer = value)
                     newStatements += varDeclaration
@@ -206,7 +210,7 @@ class TypeOperatorLowering(val context: JsIrBackendContext) : BodyLoweringPass {
                 }
             }
 
-            private fun generateTypeCheck(argument: () -> IrExpressionWithCopy, toType: IrType): IrExpression {
+            private fun generateTypeCheck(argument: () -> IrExpression, toType: IrType): IrExpression {
                 val toNotNullable = toType.makeNotNull()
                 val argumentInstance = argument()
                 val instanceCheck = generateTypeCheckNonNull(argumentInstance, toNotNullable)
@@ -226,7 +230,7 @@ class TypeOperatorLowering(val context: JsIrBackendContext) : BodyLoweringPass {
                 }
             }
 
-            private fun generateTypeCheckNonNull(argument: IrExpressionWithCopy, toType: IrType): IrExpression {
+            private fun generateTypeCheckNonNull(argument: IrExpression, toType: IrType): IrExpression {
                 assert(!toType.isMarkedNullable())
                 return when {
                     toType is IrDynamicType -> argument
@@ -256,7 +260,7 @@ class TypeOperatorLowering(val context: JsIrBackendContext) : BodyLoweringPass {
                 putValueArgument(0, argument)
             }
 
-            private fun generateTypeCheckWithTypeParameter(argument: IrExpressionWithCopy, toType: IrType): IrExpression {
+            private fun generateTypeCheckWithTypeParameter(argument: IrExpression, toType: IrType): IrExpression {
                 val typeParameterSymbol =
                     (toType.classifierOrNull as? IrTypeParameterSymbol) ?: error("expected type parameter, but $toType")
 
@@ -266,7 +270,9 @@ class TypeOperatorLowering(val context: JsIrBackendContext) : BodyLoweringPass {
                 // assert(!typeParameter.isReified) { "reified parameters have to be lowered before" }
 
                 return typeParameter.superTypes.fold<IrType, IrExpression?>(null) { r, t ->
-                    val check = generateTypeCheckNonNull(argument.copy(), t.makeNotNull())
+                    val copy = argument.shallowCopyOrNull()
+                        ?: argument.deepCopyWithSymbols()
+                    val check = generateTypeCheckNonNull(copy, t.makeNotNull())
 
                     if (r == null) {
                         check
@@ -352,8 +358,8 @@ class TypeOperatorLowering(val context: JsIrBackendContext) : BodyLoweringPass {
                 val isNullable = expression.argument.type.isNullable()
                 val toType = expression.typeOperand
 
-                fun maskOp(arg: IrExpression, mask: IrExpression, shift: IrExpressionWithCopy) = calculator.run {
-                    shr(shl(and(arg, mask), shift), shift.copy())
+                fun maskOp(arg: IrExpression, mask: IrExpression, shift: IrConst<*>) = calculator.run {
+                    shr(shl(and(arg, mask), shift), shift.shallowCopy())
                 }
 
                 val newStatements = mutableListOf<IrStatement>()

@@ -6,13 +6,12 @@
 package org.jetbrains.kotlin.fir.resolve.calls
 
 import org.jetbrains.kotlin.fir.PrivateForInline
-import org.jetbrains.kotlin.fir.resolve.inference.InferenceComponents
+import org.jetbrains.kotlin.resolve.calls.tower.CandidateApplicability
+import org.jetbrains.kotlin.resolve.calls.tower.isSuccess
 import kotlin.coroutines.Continuation
 
 abstract class CheckerSink {
-    abstract fun reportApplicability(new: CandidateApplicability)
-
-    abstract val components: InferenceComponents
+    abstract fun reportDiagnostic(diagnostic: ResolutionDiagnostic)
 
     abstract val needYielding: Boolean
 
@@ -27,17 +26,18 @@ suspend inline fun CheckerSink.yieldIfNeed() {
     }
 }
 
-suspend inline fun CheckerSink.yieldApplicability(new: CandidateApplicability) {
-    reportApplicability(new)
+suspend inline fun CheckerSink.yieldDiagnostic(diagnostic: ResolutionDiagnostic) {
+    reportDiagnostic(diagnostic)
     yieldIfNeed()
 }
 
-class CheckerSinkImpl(override val components: InferenceComponents, var continuation: Continuation<Unit>? = null) : CheckerSink() {
-    var current = CandidateApplicability.RESOLVED
-        private set
-
-    override fun reportApplicability(new: CandidateApplicability) {
-        if (new < current) current = new
+class CheckerSinkImpl(
+    private val candidate: Candidate,
+    var continuation: Continuation<Unit>? = null,
+    val stopOnFirstError: Boolean = true,
+) : CheckerSink() {
+    override fun reportDiagnostic(diagnostic: ResolutionDiagnostic) {
+        candidate.addDiagnostic(diagnostic)
     }
 
     @PrivateForInline
@@ -47,6 +47,11 @@ class CheckerSinkImpl(override val components: InferenceComponents, var continua
     }
 
     override val needYielding: Boolean
-        get() = current < CandidateApplicability.SYNTHETIC_RESOLVED
+        get() = stopOnFirstError && !candidate.isSuccessful
+}
 
+fun CheckerSink.reportDiagnosticIfNotNull(diagnostic: ResolutionDiagnostic?) {
+    if (diagnostic != null) {
+        reportDiagnostic(diagnostic)
+    }
 }

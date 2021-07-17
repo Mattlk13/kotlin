@@ -1,20 +1,24 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.gradle.targets.js.ir
 
 import org.gradle.api.DomainObjectSet
+import org.gradle.api.GradleException
 import org.gradle.api.Project
 import org.gradle.api.plugins.ExtensionAware
 import org.jetbrains.kotlin.gradle.plugin.KotlinCompilation
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinJsCompilation
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinTargetWithBinaries
+import org.jetbrains.kotlin.gradle.plugin.mpp.isMain
 import org.jetbrains.kotlin.gradle.targets.js.KotlinJsTarget
-import org.jetbrains.kotlin.gradle.targets.js.dsl.KotlinJsBinaryType
-import org.jetbrains.kotlin.gradle.targets.js.dsl.KotlinJsBinaryType.DEVELOPMENT
-import org.jetbrains.kotlin.gradle.targets.js.dsl.KotlinJsBinaryType.PRODUCTION
+import org.jetbrains.kotlin.gradle.targets.js.dsl.Distribution
+import org.jetbrains.kotlin.gradle.targets.js.dsl.KotlinJsBinaryMode
+import org.jetbrains.kotlin.gradle.targets.js.dsl.KotlinJsBinaryMode.DEVELOPMENT
+import org.jetbrains.kotlin.gradle.targets.js.dsl.KotlinJsBinaryMode.PRODUCTION
+import org.jetbrains.kotlin.gradle.targets.js.subtargets.DefaultDistribution
 import org.jetbrains.kotlin.gradle.targets.js.subtargets.KotlinJsSubTarget
 import org.jetbrains.kotlin.gradle.utils.lowerCamelCaseName
 import javax.inject.Inject
@@ -38,7 +42,7 @@ constructor(
     @JvmOverloads
     fun executable(
         compilation: KotlinJsCompilation = defaultCompilation
-    ) {
+    ): List<JsBinary> {
         if (target is KotlinJsIrTarget) {
             target.whenBrowserConfigured {
                 (this as KotlinJsIrSubTarget).produceExecutable()
@@ -48,12 +52,12 @@ constructor(
                 (this as KotlinJsIrSubTarget).produceExecutable()
             }
 
-            compilation.binaries.executableIrInternal(compilation)
+            return compilation.binaries.executableIrInternal(compilation)
         }
 
         if (target is KotlinJsTarget) {
             target.irTarget
-                ?.let { throw IllegalStateException("Unfortunately you can't use `executable()` with 'both' compiler type") }
+                ?.let { throw IllegalStateException("Can't use `executable()` with 'both' compiler type") }
 
             target.whenBrowserConfigured {
                 (this as KotlinJsSubTarget).produceExecutable()
@@ -63,41 +67,73 @@ constructor(
                 (this as KotlinJsSubTarget).produceExecutable()
             }
 
-            compilation.binaries.executableLegacyInternal(compilation)
+            return compilation.binaries.executableLegacyInternal(compilation)
         }
+
+        throw GradleException("Target should be either KotlinJsTarget or KotlinJsIrTarget, but found $target")
     }
 
-    internal fun executableIrInternal(compilation: KotlinJsCompilation) = createBinaries(
+    internal fun executableIrInternal(compilation: KotlinJsCompilation): List<JsBinary> = createBinaries(
         compilation = compilation,
-        jsBinaryType = JsBinaryType.EXECUTABLE,
+        jsBinaryType = KotlinJsBinaryType.EXECUTABLE,
         create = ::Executable
     )
 
     private fun executableLegacyInternal(compilation: KotlinJsCompilation) = createBinaries(
         compilation = compilation,
-        jsBinaryType = JsBinaryType.EXECUTABLE,
-        create = { compilation, name, type ->
+        jsBinaryType = KotlinJsBinaryType.EXECUTABLE,
+        create = { jsCompilation, name, type ->
             object : JsBinary {
-                override val compilation: KotlinJsCompilation = compilation
+                override val compilation: KotlinJsCompilation = jsCompilation
                 override val name: String = name
-                override val type: KotlinJsBinaryType = type
+                override val mode: KotlinJsBinaryMode = type
+                override val distribution: Distribution = DefaultDistribution(jsCompilation.target.project)
             }
         }
     )
 
+    // For Groovy DSL
+    @JvmOverloads
+    fun library(
+        compilation: KotlinJsCompilation = defaultCompilation
+    ): List<JsBinary> {
+        if (target is KotlinJsIrTarget) {
+            target.whenBrowserConfigured {
+                (this as KotlinJsIrSubTarget).produceLibrary()
+            }
+
+            target.whenNodejsConfigured {
+                (this as KotlinJsIrSubTarget).produceLibrary()
+            }
+
+            return createBinaries(
+                compilation = compilation,
+                jsBinaryType = KotlinJsBinaryType.LIBRARY,
+                create = ::Library
+            )
+        }
+
+        throw GradleException(
+            """
+            Library can be produced only for IR compiler.
+            Use `kotlin.js.compiler=ir` Gradle property or `js(IR)` target declaration.
+            """
+        )
+    }
+
     internal fun getIrBinaries(
-        type: KotlinJsBinaryType
+        mode: KotlinJsBinaryMode
     ): DomainObjectSet<JsIrBinary> =
         withType(JsIrBinary::class.java)
-            .matching { it.type == type }
+            .matching { it.mode == mode }
 
     private fun <T : JsBinary> createBinaries(
         compilation: KotlinJsCompilation,
-        types: Collection<KotlinJsBinaryType> = listOf(PRODUCTION, DEVELOPMENT),
-        jsBinaryType: JsBinaryType,
-        create: (compilation: KotlinJsCompilation, name: String, type: KotlinJsBinaryType) -> T
-    ) {
-        types.forEach {
+        modes: Collection<KotlinJsBinaryMode> = listOf(PRODUCTION, DEVELOPMENT),
+        jsBinaryType: KotlinJsBinaryType,
+        create: (compilation: KotlinJsCompilation, name: String, mode: KotlinJsBinaryMode) -> T
+    ) =
+        modes.map {
             createBinary(
                 compilation,
                 it,
@@ -105,43 +141,44 @@ constructor(
                 create
             )
         }
-    }
 
     private fun <T : JsBinary> createBinary(
         compilation: KotlinJsCompilation,
-        type: KotlinJsBinaryType,
-        jsBinaryType: JsBinaryType,
-        create: (compilation: KotlinJsCompilation, name: String, type: KotlinJsBinaryType) -> T
-    ) {
+        mode: KotlinJsBinaryMode,
+        jsBinaryType: KotlinJsBinaryType,
+        create: (compilation: KotlinJsCompilation, name: String, mode: KotlinJsBinaryMode) -> T
+    ): JsBinary {
         val name = generateBinaryName(
             compilation,
-            type,
+            mode,
             jsBinaryType
         )
 
         if (name in binaryNames) {
-            return
+            return single { it.name == name }
         }
 
         binaryNames.add(name)
 
-        val binary = create(compilation, name, type)
+        val binary = create(compilation, name, mode)
         add(binary)
         // Allow accessing binaries as properties of the container in Groovy DSL.
         if (this is ExtensionAware) {
             extensions.add(binary.name, binary)
         }
+
+        return binary
     }
 
     companion object {
         internal fun generateBinaryName(
             compilation: KotlinJsCompilation,
-            type: KotlinJsBinaryType,
-            jsBinaryType: JsBinaryType?
+            mode: KotlinJsBinaryMode,
+            jsBinaryType: KotlinJsBinaryType?
         ) =
             lowerCamelCaseName(
-                compilation.name.let { if (it == KotlinCompilation.MAIN_COMPILATION_NAME) null else it },
-                type.name.toLowerCase(),
+                if (compilation.isMain()) null else compilation.name,
+                mode.name.toLowerCase(),
                 jsBinaryType?.name?.toLowerCase()
             )
     }

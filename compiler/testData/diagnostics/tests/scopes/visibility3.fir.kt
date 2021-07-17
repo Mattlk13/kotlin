@@ -26,17 +26,17 @@ package a
 fun test() {
     val y = makeA()
     y.bar()
-    <!INAPPLICABLE_CANDIDATE!>foo<!>()
+    <!INVISIBLE_REFERENCE!>foo<!>()
 
-    val u : A = <!INAPPLICABLE_CANDIDATE!>A<!>()
+    val u : A = <!INVISIBLE_REFERENCE!>A<!>()
 
-    val z = <!INAPPLICABLE_CANDIDATE!>x<!>
-    <!INAPPLICABLE_CANDIDATE!>x<!> = 30
+    val z = <!INVISIBLE_REFERENCE!>x<!>
+    <!INVISIBLE_REFERENCE!>x<!> = 30
 
-    val po = <!INAPPLICABLE_CANDIDATE!>PO<!>
+    val po = <!INVISIBLE_REFERENCE!>PO<!>
 }
 
-class B : <!EXPOSED_SUPER_CLASS, INAPPLICABLE_CANDIDATE!>A<!>() {}
+class B : <!EXPOSED_SUPER_CLASS, INVISIBLE_REFERENCE!>A<!>() {}
 
 class Q {
     class W {

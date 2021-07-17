@@ -13,14 +13,18 @@ import org.jetbrains.kotlin.tools.projectWizard.ir.buildsystem.GradleRootProject
 import org.jetbrains.kotlin.tools.projectWizard.ir.buildsystem.ModuleDependencyIR
 import org.jetbrains.kotlin.tools.projectWizard.ir.buildsystem.gradle.*
 import org.jetbrains.kotlin.tools.projectWizard.moduleConfigurators.*
+import org.jetbrains.kotlin.tools.projectWizard.mpp.mppSources
 import org.jetbrains.kotlin.tools.projectWizard.plugins.buildSystem.isGradle
+import org.jetbrains.kotlin.tools.projectWizard.plugins.kotlin.ModuleSubType
 import org.jetbrains.kotlin.tools.projectWizard.plugins.kotlin.ModulesToIrConversionData
-import org.jetbrains.kotlin.tools.projectWizard.plugins.kotlin.isIOS
 import org.jetbrains.kotlin.tools.projectWizard.plugins.printer.GradlePrinter
 import org.jetbrains.kotlin.tools.projectWizard.plugins.projectPath
 import org.jetbrains.kotlin.tools.projectWizard.plugins.templates.TemplatesPlugin
+import org.jetbrains.kotlin.tools.projectWizard.settings.JavaPackage
+import org.jetbrains.kotlin.tools.projectWizard.settings.javaPackage
 import org.jetbrains.kotlin.tools.projectWizard.templates.FileTemplate
 import org.jetbrains.kotlin.tools.projectWizard.templates.FileTemplateDescriptor
+import org.jetbrains.kotlin.tools.projectWizard.templates.asSrcOf
 import java.nio.file.Path
 import kotlin.reflect.KClass
 
@@ -50,11 +54,17 @@ sealed class ModuleDependencyType(
         }.asSingletonList()
     }
 
-    open fun SettingsWriter.runArbitraryTask(
+    open fun Writer.runArbitraryTask(
         from: Module,
         to: Module,
         toModulePath: Path,
         data: ModulesToIrConversionData
+    ): TaskResult<Unit> =
+        UNIT_SUCCESS
+
+    open fun Writer.runArbitraryTaskBeforeIRsCreated(
+        from: Module,
+        to: Module,
     ): TaskResult<Unit> =
         UNIT_SUCCESS
 
@@ -71,6 +81,19 @@ sealed class ModuleDependencyType(
         to = MppModuleConfigurator::class
     )
 
+    object JVMSinglePlatformToMPP : ModuleDependencyType(
+        from = JvmSinglePlatformModuleConfigurator::class,
+        to = MppModuleConfigurator::class
+    )
+
+    object JVMTargetToMPP : ModuleDependencyType(
+        from = JvmTargetConfigurator::class,
+        to = MppModuleConfigurator::class
+    ) {
+        override fun additionalAcceptanceChecker(from: Module, to: Module): Boolean =
+            from !in to.subModules
+    }
+
     object IOSToMppSinglePlatformToMPP : ModuleDependencyType(
         from = IOSSinglePlatformModuleConfigurator::class,
         to = MppModuleConfigurator::class
@@ -78,21 +101,35 @@ sealed class ModuleDependencyType(
         override fun createDependencyIrs(from: Module, to: Module, data: ModulesToIrConversionData): List<BuildSystemIR> =
             emptyList()
 
-        override fun SettingsWriter.runArbitraryTask(
+        override fun Writer.runArbitraryTask(
             from: Module,
             to: Module,
             toModulePath: Path,
             data: ModulesToIrConversionData
-        ): TaskResult<Unit> = withSettingsOf(from) {
-            IOSSinglePlatformModuleConfigurator.dependentModule.reference
-                .setValue(IOSSinglePlatformModuleConfigurator.DependentModuleReference(to))
-            val dummyFilePath = Defaults.SRC_DIR / "${to.iosTargetSafe()!!.name}Main" / to.configurator.kotlinDirectoryName / "dummyFile.kt"
-            TemplatesPlugin::addFileTemplate.execute(
-                FileTemplate(
-                    FileTemplateDescriptor("ios/dummyFile.kt", dummyFilePath),
-                    projectPath / toModulePath
+        ): TaskResult<Unit> = compute {
+            inContextOfModuleConfigurator(from) {
+                IOSSinglePlatformModuleConfigurator.dependentModule.reference.update {
+                    IOSSinglePlatformModuleConfigurator.DependentModuleReference(to).asSuccess()
+                }
+            }.ensure()
+            addDummyFileIfNeeded(to, toModulePath).ensure()
+        }
+
+        private fun Writer.addDummyFileIfNeeded(
+            to: Module,
+            toModulePath: Path,
+        ): TaskResult<Unit> {
+            val needDummyFile = false/*TODO*/
+            return if (needDummyFile) {
+                val dummyFilePath =
+                    Defaults.SRC_DIR / "${to.iosTargetSafe()!!.name}Main" / to.configurator.kotlinDirectoryName / "dummyFile.kt"
+                TemplatesPlugin.addFileTemplate.execute(
+                    FileTemplate(
+                        FileTemplateDescriptor("ios/dummyFile.kt", dummyFilePath),
+                        projectPath / toModulePath
+                    )
                 )
-            )
+            } else UNIT_SUCCESS
         }
 
         override fun additionalAcceptanceChecker(from: Module, to: Module): Boolean =
@@ -116,11 +153,23 @@ sealed class ModuleDependencyType(
                         "?:",
                         const("DEBUG")
                     )
-                    "framework" createValue raw {
-                        +"kotlin.targets."
+                    "sdkName" createValue GradleBinaryExpressionIR(
+                        raw { +"System.getenv("; +"SDK_NAME".quotified; +")" },
+                        "?:",
+                        const("iphonesimulator")
+                    )
+                    "targetName" createValue raw {
+                        +iosTargetName.quotified
                         when (dsl) {
-                            GradlePrinter.GradleDsl.KOTLIN -> +"""getByName<KotlinNativeTarget>("$iosTargetName")"""
-                            GradlePrinter.GradleDsl.GROOVY -> +iosTargetName
+                            GradlePrinter.GradleDsl.KOTLIN -> +""" + if (sdkName.startsWith("iphoneos")) "Arm64" else "X64""""
+                            GradlePrinter.GradleDsl.GROOVY -> +""" + (sdkName.startsWith('iphoneos') ? 'Arm64' : 'X64')"""
+                        }
+                    }
+                    "framework" createValue raw {
+                        +"kotlin.targets"
+                        when (dsl) {
+                            GradlePrinter.GradleDsl.KOTLIN -> +""".getByName<KotlinNativeTarget>(targetName)"""
+                            GradlePrinter.GradleDsl.GROOVY -> +"""[targetName]"""
                         }
                         +".binaries.getFramework(mode)"
                     };
@@ -141,7 +190,9 @@ sealed class ModuleDependencyType(
     companion object {
         private val ALL = listOf(
             JVMSinglePlatformToJVMSinglePlatform,
+            JVMSinglePlatformToMPP,
             AndroidSinglePlatformToMPP,
+            JVMTargetToMPP,
             IOSToMppSinglePlatformToMPP
         )
 

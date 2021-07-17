@@ -13,15 +13,17 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiFile
 import org.jetbrains.kotlin.idea.core.script.*
+import org.jetbrains.kotlin.idea.core.script.configuration.CompositeScriptConfigurationManager
 import org.jetbrains.kotlin.idea.core.script.configuration.DefaultScriptConfigurationManagerExtensions
 import org.jetbrains.kotlin.idea.core.script.configuration.loader.FileContentsDependentConfigurationLoader
 import org.jetbrains.kotlin.idea.core.script.configuration.testingBackgroundExecutor
 import org.jetbrains.kotlin.idea.core.script.configuration.utils.testScriptConfigurationNotification
 import org.jetbrains.kotlin.idea.util.application.runWriteAction
 import org.jetbrains.kotlin.psi.KtFile
+import java.io.File
 
 abstract class AbstractScriptConfigurationLoadingTest : AbstractScriptConfigurationTest() {
-    lateinit var scriptConfigurationManager: ScriptConfigurationManager
+    lateinit var scriptConfigurationManager: CompositeScriptConfigurationManager
 
     companion object {
         private var occurredLoadings = 0
@@ -41,7 +43,7 @@ abstract class AbstractScriptConfigurationLoadingTest : AbstractScriptConfigurat
         testScriptConfigurationNotification = true
         ApplicationManager.getApplication().isScriptChangesNotifierDisabled = false
 
-        scriptConfigurationManager = ServiceManager.getService(project, ScriptConfigurationManager::class.java)
+        scriptConfigurationManager = ServiceManager.getService(project, ScriptConfigurationManager::class.java) as CompositeScriptConfigurationManager
     }
 
     override fun tearDown() {
@@ -65,6 +67,18 @@ abstract class AbstractScriptConfigurationLoadingTest : AbstractScriptConfigurat
 
     override fun loadScriptConfigurationSynchronously(script: VirtualFile) {
         // do nothings
+    }
+
+    protected inline fun <reified T : Any> copyFromTestdataToProject(file: String): T {
+        createFileAndSyncDependencies(File(file))
+        return (myFile as? T) ?: error("Couldn't configure project by $file")
+    }
+
+    protected fun createFileInProject(path: String): File {
+        val file = File(project.basePath, path)
+        file.parentFile.mkdirs()
+        file.createNewFile()
+        return file
     }
 
     protected fun assertAndDoAllBackgroundTasks() {
@@ -103,7 +117,7 @@ abstract class AbstractScriptConfigurationLoadingTest : AbstractScriptConfigurat
     protected fun makeChanges(contents: String, file: KtFile = myFile as KtFile) {
         changeContents(contents)
 
-        scriptConfigurationManager.updater.ensureUpToDatedConfigurationSuggested(file)
+        scriptConfigurationManager.default.ensureUpToDatedConfigurationSuggested(file)
     }
 
     protected fun changeContents(contents: String, file: PsiFile = myFile) {
@@ -141,7 +155,7 @@ abstract class AbstractScriptConfigurationLoadingTest : AbstractScriptConfigurat
         occurredLoadings = 0
     }
 
-    protected fun assertAndLoadInitialConfiguration(file: KtFile = myFile as KtFile) {
+    protected open fun assertAndLoadInitialConfiguration(file: KtFile = myFile as KtFile) {
         assertNull(scriptConfigurationManager.getConfiguration(file))
         assertAndDoAllBackgroundTasks()
         assertSingleLoading()

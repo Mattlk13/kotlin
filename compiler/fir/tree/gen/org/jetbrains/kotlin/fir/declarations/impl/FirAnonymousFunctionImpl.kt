@@ -1,25 +1,31 @@
 /*
- * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2021 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.fir.declarations.impl
 
-import org.jetbrains.kotlin.contracts.description.InvocationKind
+import org.jetbrains.kotlin.contracts.description.EventOccurrencesRange
 import org.jetbrains.kotlin.fir.FirLabel
-import org.jetbrains.kotlin.fir.FirSession
+import org.jetbrains.kotlin.fir.FirModuleData
 import org.jetbrains.kotlin.fir.FirSourceElement
+import org.jetbrains.kotlin.fir.declarations.DeprecationsPerUseSite
 import org.jetbrains.kotlin.fir.declarations.FirAnonymousFunction
 import org.jetbrains.kotlin.fir.declarations.FirDeclarationAttributes
 import org.jetbrains.kotlin.fir.declarations.FirDeclarationOrigin
+import org.jetbrains.kotlin.fir.declarations.FirDeclarationStatus
 import org.jetbrains.kotlin.fir.declarations.FirResolvePhase
 import org.jetbrains.kotlin.fir.declarations.FirTypeParameter
 import org.jetbrains.kotlin.fir.declarations.FirValueParameter
+import org.jetbrains.kotlin.fir.declarations.InlineStatus
+import org.jetbrains.kotlin.fir.declarations.impl.FirResolvedDeclarationStatusImpl
 import org.jetbrains.kotlin.fir.expressions.FirAnnotationCall
 import org.jetbrains.kotlin.fir.expressions.FirBlock
 import org.jetbrains.kotlin.fir.references.FirControlFlowGraphReference
 import org.jetbrains.kotlin.fir.symbols.impl.FirAnonymousFunctionSymbol
+import org.jetbrains.kotlin.fir.types.ConeKotlinType
 import org.jetbrains.kotlin.fir.types.FirTypeRef
+import org.jetbrains.kotlin.serialization.deserialization.descriptors.DeserializedContainerSource
 import org.jetbrains.kotlin.fir.visitors.*
 
 /*
@@ -29,23 +35,28 @@ import org.jetbrains.kotlin.fir.visitors.*
 
 internal class FirAnonymousFunctionImpl(
     override val source: FirSourceElement?,
-    override val session: FirSession,
+    override val moduleData: FirModuleData,
     override val origin: FirDeclarationOrigin,
+    override val attributes: FirDeclarationAttributes,
     override val annotations: MutableList<FirAnnotationCall>,
     override var returnTypeRef: FirTypeRef,
     override var receiverTypeRef: FirTypeRef?,
-    override var controlFlowGraphReference: FirControlFlowGraphReference,
+    override var deprecation: DeprecationsPerUseSite?,
+    override val containerSource: DeserializedContainerSource?,
+    override val dispatchReceiverType: ConeKotlinType?,
+    override var controlFlowGraphReference: FirControlFlowGraphReference?,
     override val valueParameters: MutableList<FirValueParameter>,
     override var body: FirBlock?,
-    override var typeRef: FirTypeRef,
     override val symbol: FirAnonymousFunctionSymbol,
     override var label: FirLabel?,
-    override var invocationKind: InvocationKind?,
+    override var invocationKind: EventOccurrencesRange?,
+    override var inlineStatus: InlineStatus,
     override val isLambda: Boolean,
     override val typeParameters: MutableList<FirTypeParameter>,
+    override var typeRef: FirTypeRef,
 ) : FirAnonymousFunction() {
     override var resolvePhase: FirResolvePhase = FirResolvePhase.DECLARATIONS
-    override val attributes: FirDeclarationAttributes = FirDeclarationAttributes()
+    override var status: FirDeclarationStatus = FirResolvedDeclarationStatusImpl.DEFAULT_STATUS_FOR_STATUSLESS_DECLARATIONS
 
     init {
         symbol.bind(this)
@@ -54,25 +65,27 @@ internal class FirAnonymousFunctionImpl(
     override fun <R, D> acceptChildren(visitor: FirVisitor<R, D>, data: D) {
         annotations.forEach { it.accept(visitor, data) }
         returnTypeRef.accept(visitor, data)
+        status.accept(visitor, data)
         receiverTypeRef?.accept(visitor, data)
-        controlFlowGraphReference.accept(visitor, data)
+        controlFlowGraphReference?.accept(visitor, data)
         valueParameters.forEach { it.accept(visitor, data) }
         body?.accept(visitor, data)
-        typeRef.accept(visitor, data)
         label?.accept(visitor, data)
         typeParameters.forEach { it.accept(visitor, data) }
+        typeRef.accept(visitor, data)
     }
 
     override fun <D> transformChildren(transformer: FirTransformer<D>, data: D): FirAnonymousFunctionImpl {
         transformAnnotations(transformer, data)
         transformReturnTypeRef(transformer, data)
+        transformStatus(transformer, data)
         transformReceiverTypeRef(transformer, data)
-        transformControlFlowGraphReference(transformer, data)
+        controlFlowGraphReference = controlFlowGraphReference?.transform(transformer, data)
         transformValueParameters(transformer, data)
-        body = body?.transformSingle(transformer, data)
-        typeRef = typeRef.transformSingle(transformer, data)
-        label = label?.transformSingle(transformer, data)
-        typeParameters.transformInplace(transformer, data)
+        transformBody(transformer, data)
+        label = label?.transform(transformer, data)
+        transformTypeParameters(transformer, data)
+        typeRef = typeRef.transform(transformer, data)
         return this
     }
 
@@ -82,22 +95,32 @@ internal class FirAnonymousFunctionImpl(
     }
 
     override fun <D> transformReturnTypeRef(transformer: FirTransformer<D>, data: D): FirAnonymousFunctionImpl {
-        returnTypeRef = returnTypeRef.transformSingle(transformer, data)
+        returnTypeRef = returnTypeRef.transform(transformer, data)
+        return this
+    }
+
+    override fun <D> transformStatus(transformer: FirTransformer<D>, data: D): FirAnonymousFunctionImpl {
+        status = status.transform(transformer, data)
         return this
     }
 
     override fun <D> transformReceiverTypeRef(transformer: FirTransformer<D>, data: D): FirAnonymousFunctionImpl {
-        receiverTypeRef = receiverTypeRef?.transformSingle(transformer, data)
-        return this
-    }
-
-    override fun <D> transformControlFlowGraphReference(transformer: FirTransformer<D>, data: D): FirAnonymousFunctionImpl {
-        controlFlowGraphReference = controlFlowGraphReference.transformSingle(transformer, data)
+        receiverTypeRef = receiverTypeRef?.transform(transformer, data)
         return this
     }
 
     override fun <D> transformValueParameters(transformer: FirTransformer<D>, data: D): FirAnonymousFunctionImpl {
         valueParameters.transformInplace(transformer, data)
+        return this
+    }
+
+    override fun <D> transformBody(transformer: FirTransformer<D>, data: D): FirAnonymousFunctionImpl {
+        body = body?.transform(transformer, data)
+        return this
+    }
+
+    override fun <D> transformTypeParameters(transformer: FirTransformer<D>, data: D): FirAnonymousFunctionImpl {
+        typeParameters.transformInplace(transformer, data)
         return this
     }
 
@@ -113,16 +136,32 @@ internal class FirAnonymousFunctionImpl(
         receiverTypeRef = newReceiverTypeRef
     }
 
+    override fun replaceDeprecation(newDeprecation: DeprecationsPerUseSite?) {
+        deprecation = newDeprecation
+    }
+
+    override fun replaceControlFlowGraphReference(newControlFlowGraphReference: FirControlFlowGraphReference?) {
+        controlFlowGraphReference = newControlFlowGraphReference
+    }
+
     override fun replaceValueParameters(newValueParameters: List<FirValueParameter>) {
         valueParameters.clear()
         valueParameters.addAll(newValueParameters)
     }
 
-    override fun replaceTypeRef(newTypeRef: FirTypeRef) {
-        typeRef = newTypeRef
+    override fun replaceBody(newBody: FirBlock?) {
+        body = newBody
     }
 
-    override fun replaceInvocationKind(newInvocationKind: InvocationKind?) {
+    override fun replaceInvocationKind(newInvocationKind: EventOccurrencesRange?) {
         invocationKind = newInvocationKind
+    }
+
+    override fun replaceInlineStatus(newInlineStatus: InlineStatus) {
+        inlineStatus = newInlineStatus
+    }
+
+    override fun replaceTypeRef(newTypeRef: FirTypeRef) {
+        typeRef = newTypeRef
     }
 }

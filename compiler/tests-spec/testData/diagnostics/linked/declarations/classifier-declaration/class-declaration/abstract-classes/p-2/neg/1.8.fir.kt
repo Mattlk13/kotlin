@@ -3,19 +3,6 @@
 // SKIP_TXT
 // FULL_JDK
 
-/*
- * KOTLIN DIAGNOSTICS SPEC TEST (NEGATIVE)
- *
- * SPEC VERSION: 0.1-213
- * PLACE: declarations, classifier-declaration, class-declaration, abstract-classes -> paragraph 2 -> sentence 1
- * RELEVANT PLACES: inheritance, overriding -> paragraph 7 -> sentence 1
- * NUMBER: 8
- * DESCRIPTION: Abstract classes may contain one or more abstract members, which should be implemented in a subtype of this abstract class
- * ISSUES: KT-27825
- */
-
-
-
 // MODULE: base
 // FILE: AbstractClassCase1.kt
 package base
@@ -33,7 +20,7 @@ abstract class AbstractClassCase1() {
     public abstract val pub1: String
 }
 
-class Case1 : AbstractClassCase1(){
+<!INVISIBLE_ABSTRACT_MEMBER_FROM_SUPER!>class Case1<!> : AbstractClassCase1(){
     override fun prot() {}
 
     override fun int() {
@@ -53,13 +40,13 @@ class Case1 : AbstractClassCase1(){
 
 fun case1(){
     val a = Case1()
-    a.<!INAPPLICABLE_CANDIDATE!>priv<!>()
-    a.prot()
+    a.<!INVISIBLE_REFERENCE!>priv<!>()
+    a.<!INVISIBLE_REFERENCE!>prot<!>()
     a.int()
     a.pub()
 
-    a.<!INAPPLICABLE_CANDIDATE!>priv1<!>
-    a.prot1
+    a.<!INVISIBLE_REFERENCE!>priv1<!>
+    a.<!INVISIBLE_REFERENCE!>prot1<!>
     a.int1
     a.pub1
 }
@@ -72,13 +59,13 @@ import base.*
 // TESTCASE NUMBER: 2
 fun case2() {
     val a = Case1()
-    a.<!INAPPLICABLE_CANDIDATE!>priv<!>()
-    a.prot()
-    a.int()
+    a.<!INVISIBLE_REFERENCE!>priv<!>()
+    a.<!INVISIBLE_REFERENCE!>prot<!>()
+    a.<!INVISIBLE_REFERENCE!>int<!>()
     a.pub()
 
-    a.<!INAPPLICABLE_CANDIDATE!>priv1<!>
-    a.prot1
-    a.int1
+    a.<!INVISIBLE_REFERENCE!>priv1<!>
+    a.<!INVISIBLE_REFERENCE!>prot1<!>
+    a.<!INVISIBLE_REFERENCE!>int1<!>
     a.pub1
 }

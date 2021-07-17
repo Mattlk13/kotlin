@@ -19,23 +19,24 @@ package org.jetbrains.kotlin.psi2ir.generators
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.impl.LocalVariableDescriptor
 import org.jetbrains.kotlin.descriptors.impl.SyntheticFieldDescriptor
+import org.jetbrains.kotlin.ir.declarations.IrVariable
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.expressions.impl.*
 import org.jetbrains.kotlin.ir.types.IrDynamicType
 import org.jetbrains.kotlin.ir.types.IrType
-import org.jetbrains.kotlin.ir.util.referenceFunction
 import org.jetbrains.kotlin.ir.util.render
 import org.jetbrains.kotlin.psi.KtElement
 import org.jetbrains.kotlin.psi.psiUtil.endOffset
 import org.jetbrains.kotlin.psi.psiUtil.startOffsetSkippingComments
 import org.jetbrains.kotlin.psi2ir.intermediate.*
+import org.jetbrains.kotlin.psi2ir.resolveFakeOverride
 import org.jetbrains.kotlin.psi2ir.unwrappedGetMethod
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedValueArgument
 import org.jetbrains.kotlin.resolve.calls.tasks.isDynamic
 import org.jetbrains.kotlin.resolve.calls.util.FakeCallableDescriptorForObject
 import org.jetbrains.kotlin.resolve.descriptorUtil.classValueType
-import org.jetbrains.kotlin.types.*
+import org.jetbrains.kotlin.types.KotlinType
 import java.util.*
 
 class CallGenerator(statementGenerator: StatementGenerator) : StatementGeneratorExtension(statementGenerator) {
@@ -86,13 +87,14 @@ class CallGenerator(statementGenerator: StatementGenerator) : StatementGenerator
         endOffset: Int,
         descriptor: DeclarationDescriptor,
         resolvedCall: ResolvedCall<*>?,
-        origin: IrStatementOrigin?
+        origin: IrStatementOrigin?,
+        irType: IrType? = null
     ): IrExpression =
         when (descriptor) {
             is FakeCallableDescriptorForObject ->
-                generateValueReference(startOffset, endOffset, descriptor.getReferencedDescriptor(), resolvedCall, origin)
+                generateValueReference(startOffset, endOffset, descriptor.getReferencedDescriptor(), resolvedCall, origin, irType)
             is TypeAliasDescriptor ->
-                generateValueReference(startOffset, endOffset, descriptor.classDescriptor!!, null, origin)
+                generateValueReference(startOffset, endOffset, descriptor.classDescriptor!!, null, origin, irType)
             is ClassDescriptor -> {
                 val classValueType = descriptor.classValueType!!
                 statementGenerator.generateSingletonReference(descriptor, startOffset, endOffset, classValueType)
@@ -107,7 +109,7 @@ class CallGenerator(statementGenerator: StatementGenerator) : StatementGenerator
                 IrGetFieldImpl(startOffset, endOffset, field, fieldType, receiver?.load())
             }
             is VariableDescriptor ->
-                generateGetVariable(startOffset, endOffset, descriptor, getTypeArguments(resolvedCall), origin)
+                generateGetVariable(startOffset, endOffset, descriptor, getTypeArguments(resolvedCall), origin, irType)
             else ->
                 TODO("Unexpected callable descriptor: $descriptor ${descriptor::class.java.simpleName}")
         }
@@ -117,27 +119,34 @@ class CallGenerator(statementGenerator: StatementGenerator) : StatementGenerator
         endOffset: Int,
         descriptor: VariableDescriptor,
         typeArguments: Map<TypeParameterDescriptor, KotlinType>?,
-        origin: IrStatementOrigin? = null
+        origin: IrStatementOrigin? = null,
+        irType: IrType? = null
     ) =
-        @Suppress("DEPRECATION")
         if (descriptor is LocalVariableDescriptor && descriptor.isDelegated) {
             val getterDescriptor = descriptor.getter!!
-            val getterSymbol = context.symbolTable.referenceFunction(getterDescriptor.original)
-            IrCallImpl(
-                startOffset, endOffset, descriptor.type.toIrType(), getterSymbol, origin ?: IrStatementOrigin.GET_LOCAL_PROPERTY
+            val getterSymbol = context.symbolTable.referenceSimpleFunction(getterDescriptor.original)
+            IrCallImpl.fromSymbolDescriptor(
+                startOffset, endOffset, descriptor.type.toIrType(), getterSymbol, origin = origin ?: IrStatementOrigin.GET_LOCAL_PROPERTY
             ).apply {
                 context.callToSubstitutedDescriptorMap[this] = getterDescriptor
                 putTypeArguments(typeArguments) { it.toIrType() }
             }
-        } else
-            IrGetValueImpl(startOffset, endOffset, descriptor.type.toIrType(), context.symbolTable.referenceValue(descriptor), origin)
+        } else {
+            val getValue =
+                IrGetValueImpl(startOffset, endOffset, descriptor.type.toIrType(), context.symbolTable.referenceValue(descriptor), origin)
+            if (irType != null) {
+                IrTypeOperatorCallImpl(startOffset, endOffset, irType, IrTypeOperator.IMPLICIT_CAST, irType, getValue)
+            } else {
+                getValue
+            }
+        }
 
     fun generateDelegatingConstructorCall(startOffset: Int, endOffset: Int, call: CallBuilder): IrExpression =
         call.callReceiver.call { dispatchReceiver, extensionReceiver ->
             val descriptor = call.descriptor as? ClassConstructorDescriptor
                 ?: throw AssertionError("Class constructor expected: ${call.descriptor}")
             val constructorSymbol = context.symbolTable.referenceConstructor(descriptor.original)
-            val irCall = IrDelegatingConstructorCallImpl(
+            val irCall = IrDelegatingConstructorCallImpl.fromSymbolDescriptor(
                 startOffset, endOffset,
                 context.irBuiltIns.unitType,
                 constructorSymbol
@@ -159,9 +168,12 @@ class CallGenerator(statementGenerator: StatementGenerator) : StatementGenerator
         return call.callReceiver.call { dispatchReceiver, extensionReceiver ->
             if (dispatchReceiver != null) throw AssertionError("Dispatch receiver should be null: $dispatchReceiver")
             if (extensionReceiver != null) throw AssertionError("Extension receiver should be null: $extensionReceiver")
-            val constructorSymbol = context.symbolTable.referenceConstructor(constructorDescriptor.original)
+            val descriptor = constructorDescriptor.original
+            val constructorSymbol = context.symbolTable.referenceConstructor(descriptor)
             val returnType = constructorDescriptor.returnType.toIrType()
-            val irCall = IrEnumConstructorCallImpl(startOffset, endOffset, returnType, constructorSymbol)
+            val irCall = IrEnumConstructorCallImpl(
+                startOffset, endOffset, returnType, constructorSymbol, descriptor.typeParametersCount, descriptor.valueParameters.size
+            )
             context.callToSubstitutedDescriptorMap[irCall] = constructorDescriptor
             addParametersToCall(startOffset, endOffset, call, irCall, irCall.type)
         }
@@ -174,12 +186,15 @@ class CallGenerator(statementGenerator: StatementGenerator) : StatementGenerator
         call: CallBuilder
     ): IrExpression {
         val getMethodDescriptor = descriptor.unwrappedGetMethod
-        val superQualifierSymbol = call.superQualifier?.let { context.symbolTable.referenceClass(it) }
         val irType = descriptor.type.toIrType()
 
         return if (getMethodDescriptor == null) {
             call.callReceiver.call { dispatchReceiverValue, _ ->
-                val fieldSymbol = context.symbolTable.referenceField(descriptor.original)
+                val superQualifierSymbol = (call.superQualifier ?: descriptor.containingDeclaration as? ClassDescriptor)?.let {
+                    if (it is ScriptDescriptor) null // otherwise it creates a reference to script as class; TODO: check if correct
+                    else context.symbolTable.referenceClass(it)
+                }
+                val fieldSymbol = context.symbolTable.referenceField(descriptor.resolveFakeOverride().original)
                 IrGetFieldImpl(
                     startOffset, endOffset,
                     fieldSymbol,
@@ -190,6 +205,7 @@ class CallGenerator(statementGenerator: StatementGenerator) : StatementGenerator
                 ).also { context.callToSubstitutedDescriptorMap[it] = descriptor }
             }
         } else {
+            val superQualifierSymbol = call.superQualifier?.let { context.symbolTable.referenceClass(it) }
             call.callReceiver.adjustForCallee(getMethodDescriptor).call { dispatchReceiverValue, extensionReceiverValue ->
                 if (descriptor.isDynamic()) {
                     val dispatchReceiver = getDynamicExpressionReceiver(dispatchReceiverValue, extensionReceiverValue, descriptor)
@@ -201,7 +217,7 @@ class CallGenerator(statementGenerator: StatementGenerator) : StatementGenerator
                         dispatchReceiver
                     )
                 } else {
-                    val getterSymbol = context.symbolTable.referenceFunction(getMethodDescriptor.original)
+                    val getterSymbol = context.symbolTable.referenceSimpleFunction(getMethodDescriptor.original)
                     IrCallImpl(
                         startOffset, endOffset,
                         irType,
@@ -327,13 +343,13 @@ class CallGenerator(statementGenerator: StatementGenerator) : StatementGenerator
                         )
                 }
             } else {
-                val originalSymbol = context.symbolTable.referenceFunction(functionDescriptor.original)
-                IrCallImpl(
+                val originalSymbol = context.symbolTable.referenceSimpleFunction(functionDescriptor.original)
+                IrCallImpl.fromSymbolDescriptor(
                     startOffset, endOffset,
                     irType,
                     originalSymbol,
-                    origin,
-                    call.superQualifier?.let { context.symbolTable.referenceClass(it) }
+                    origin = origin,
+                    superQualifierSymbol = call.superQualifier?.let { context.symbolTable.referenceClass(it) }
                 ).run {
                     context.callToSubstitutedDescriptorMap[this] = functionDescriptor
                     putTypeArguments(call.typeArguments) { it.toIrType() }
@@ -368,48 +384,41 @@ class CallGenerator(statementGenerator: StatementGenerator) : StatementGenerator
         call: CallBuilder,
         irResultType: IrType
     ): IrExpression {
-        val resolvedCall = call.original
-
-        val valueArgumentsInEvaluationOrder = resolvedCall.valueArguments.values
-        val valueParameters = resolvedCall.resultingDescriptor.valueParameters
-
         val irBlock = IrBlockImpl(startOffset, endOffset, irResultType, IrStatementOrigin.ARGUMENTS_REORDERING_FOR_CALL)
 
-        val valueArgumentsToValueParameters = HashMap<ResolvedValueArgument, ValueParameterDescriptor>()
-        for ((index, valueArgument) in resolvedCall.valueArgumentsByIndex!!.withIndex()) {
-            val valueParameter = valueParameters[index]
-            valueArgumentsToValueParameters[valueArgument] = valueParameter
-        }
-
-        val irArgumentValues = HashMap<ValueParameterDescriptor, IntermediateValue>()
-
-        for (valueArgument in valueArgumentsInEvaluationOrder) {
-            val valueParameter = valueArgumentsToValueParameters[valueArgument]!!
-            val irArgument = call.getValueArgument(valueParameter) ?: continue
-            val irArgumentValue = if (irArgument.hasNoSideEffects())
-                generateExpressionValue(irArgument.type) { irArgument }    // Computing a lambda has no side effects, can generate in place
+        fun IrExpression.freeze(nameHint: String) =
+            if (isUnchanging())
+                this
             else
-                scope.createTemporaryVariableInBlock(context, irArgument, irBlock, valueParameter.name.asString())
-            irArgumentValues[valueParameter] = irArgumentValue
-        }
+                scope.createTemporaryVariableInBlock(context, this, irBlock, nameHint).load()
 
-        resolvedCall.valueArgumentsByIndex!!.forEachIndexed { index, _ ->
-            val valueParameter = valueParameters[index]
-            irCall.putValueArgument(index, irArgumentValues[valueParameter]?.load())
-        }
+        irCall.dispatchReceiver = irCall.dispatchReceiver?.freeze("\$this")
+        irCall.extensionReceiver = irCall.extensionReceiver?.freeze("\$receiver")
 
+        val resolvedCall = call.original
+        val valueParameters = resolvedCall.resultingDescriptor.valueParameters
+        val valueArgumentsToIndex = HashMap<ResolvedValueArgument, Int>()
+        for ((index, valueArgument) in resolvedCall.valueArgumentsByIndex!!.withIndex()) {
+            valueArgumentsToIndex[valueArgument] = index
+        }
+        for (valueArgument in resolvedCall.valueArguments.values) {
+            val index = valueArgumentsToIndex[valueArgument]!!
+            val irArgument = call.getValueArgument(valueParameters[index]) ?: continue
+            irCall.putValueArgument(index, irArgument.freeze(valueParameters[index].name.asString()))
+        }
         irBlock.statements.add(irCall)
-
         return irBlock
     }
 }
 
-fun IrExpression.hasNoSideEffects() =
+fun IrExpression.isUnchanging() =
     this is IrFunctionExpression ||
-            (this is IrCallableReference && dispatchReceiver == null && extensionReceiver == null) ||
+            (this is IrCallableReference<*> && dispatchReceiver == null && extensionReceiver == null) ||
             this is IrClassReference ||
             this is IrConst<*> ||
-            this is IrGetValue
+            (this is IrGetValue && !symbol.owner.let { it is IrVariable && it.isVar })
+
+fun IrExpression.hasNoSideEffects() = isUnchanging() || this is IrGetValue
 
 fun CallGenerator.generateCall(ktElement: KtElement, call: CallBuilder, origin: IrStatementOrigin? = null) =
     generateCall(ktElement.startOffsetSkippingComments, ktElement.endOffset, call, origin)

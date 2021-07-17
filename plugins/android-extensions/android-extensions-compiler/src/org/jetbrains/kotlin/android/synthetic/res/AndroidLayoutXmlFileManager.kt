@@ -17,7 +17,6 @@
 package org.jetbrains.kotlin.android.synthetic.res
 
 import com.intellij.openapi.module.Module
-import com.intellij.openapi.module.ModuleServiceManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileManager
@@ -71,7 +70,7 @@ abstract class AndroidLayoutXmlFileManager(val project: Project) {
         val resDirectories = variant.resDirectories.map { fileManager.findFileByUrl("file://$it") }
         val allChildren = resDirectories.flatMap { it?.getAllChildren() ?: listOf() }
 
-        val allLayoutFiles = allChildren.filter { it.parent.name.startsWith("layout") && it.name.toLowerCase().endsWith(".xml") }
+        val allLayoutFiles = allChildren.filter { it.parent.name.startsWith("layout") && it.name.lowercase().endsWith(".xml") }
         val allLayoutPsiFiles = allLayoutFiles.fold(ArrayList<PsiFile>(allLayoutFiles.size)) { list, file ->
             val psiFile = psiManager.findFile(file)
             if (psiFile?.parent != null) {
@@ -145,7 +144,8 @@ abstract class AndroidLayoutXmlFileManager(val project: Project) {
 
     companion object {
         fun getInstance(module: Module): AndroidLayoutXmlFileManager? {
-            val service = ModuleServiceManager.getService(module, AndroidLayoutXmlFileManager::class.java)
+            @Suppress("DEPRECATION")
+            val service = com.intellij.openapi.module.ModuleServiceManager.getService(module, AndroidLayoutXmlFileManager::class.java)
             return service ?: module.getComponent(AndroidLayoutXmlFileManager::class.java)
         }
     }

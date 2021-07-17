@@ -5,8 +5,10 @@ import org.jetbrains.annotations.Nls
 import org.jetbrains.annotations.NonNls
 import org.jetbrains.kotlin.tools.projectWizard.KotlinNewProjectWizardBundle
 import org.jetbrains.kotlin.tools.projectWizard.core.*
+import org.jetbrains.kotlin.tools.projectWizard.core.entity.PipelineTask
+import org.jetbrains.kotlin.tools.projectWizard.core.entity.properties.Property
 import org.jetbrains.kotlin.tools.projectWizard.core.entity.ValidationResult
-import org.jetbrains.kotlin.tools.projectWizard.core.entity.settings.reference
+import org.jetbrains.kotlin.tools.projectWizard.core.entity.settings.PluginSetting
 import org.jetbrains.kotlin.tools.projectWizard.core.service.BuildSystemAvailabilityWizardService
 import org.jetbrains.kotlin.tools.projectWizard.core.service.FileSystemWizardService
 import org.jetbrains.kotlin.tools.projectWizard.core.service.ProjectImportingWizardService
@@ -21,94 +23,126 @@ import org.jetbrains.kotlin.tools.projectWizard.plugins.printer.printBuildFile
 import org.jetbrains.kotlin.tools.projectWizard.plugins.projectPath
 import org.jetbrains.kotlin.tools.projectWizard.plugins.templates.TemplatesPlugin
 import org.jetbrains.kotlin.tools.projectWizard.settings.DisplayableSettingItem
+import org.jetbrains.kotlin.tools.projectWizard.settings.buildsystem.DefaultRepository
 import org.jetbrains.kotlin.tools.projectWizard.settings.buildsystem.Repository
 import org.jetbrains.kotlin.tools.projectWizard.settings.buildsystem.updateBuildFiles
 
 abstract class BuildSystemPlugin(context: Context) : Plugin(context) {
-    val type by enumSetting<BuildSystemType>(
-        KotlinNewProjectWizardBundle.message("plugin.buildsystem.setting.type"),
-        GenerationPhase.FIRST_STEP
-    ) {
-        isSavable = true
-        filter = { _, type ->
-            val service = service<BuildSystemAvailabilityWizardService>()
-            service.isAvailable(type)
-        }
+    override val path = pluginPath
 
-        validate { buildSystemType ->
-            if (!buildSystemType.isGradle
-                && KotlinPlugin::projectKind.reference.notRequiredSettingValue != ProjectKind.Singleplatform
-            ) {
-                val projectKind = KotlinPlugin::projectKind.reference.notRequiredSettingValue?.text?.capitalize()
-                    ?: KotlinNewProjectWizardBundle.message("project")
-                ValidationResult.ValidationError(
-                    KotlinNewProjectWizardBundle.message(
-                        "plugin.buildsystem.setting.type.error.wrong.project.kind",
-                        projectKind,
-                        buildSystemType.fullText
+    companion object : PluginSettingsOwner() {
+        override val pluginPath = "buildSystem"
+
+        val type by enumSetting<BuildSystemType>(
+            KotlinNewProjectWizardBundle.message("plugin.buildsystem.setting.type"),
+            GenerationPhase.FIRST_STEP,
+        ) {
+            isSavable = true
+            filter = { _, type ->
+                val service = service<BuildSystemAvailabilityWizardService>()
+                service.isAvailable(type)
+            }
+
+            validate { buildSystemType ->
+                val projectKind = KotlinPlugin.projectKind.notRequiredSettingValue ?: ProjectKind.Multiplatform
+                when (buildSystemType) {
+                    in projectKind.supportedBuildSystems -> ValidationResult.OK
+                    else -> ValidationResult.ValidationError(
+                        KotlinNewProjectWizardBundle.message(
+                            "plugin.buildsystem.setting.type.error.wrong.project.kind",
+                            projectKind.shortName.replaceFirstChar(Char::uppercaseChar),
+                            buildSystemType.fullText
+                        )
                     )
-                )
-            } else ValidationResult.OK
+                }
+            }
         }
-    }
 
-    val buildSystemData by property<List<BuildSystemData>>(emptyList())
+        val buildSystemData by property<List<BuildSystemData>>(emptyList())
 
-    val buildFiles by listProperty<BuildFileIR>()
+        val buildFiles by listProperty<BuildFileIR>()
 
-    val pluginRepositoreis by listProperty<Repository>()
+        val pluginRepositoreis by listProperty<Repository>()
 
-    val takeRepositoriesFromDependencies by pipelineTask(GenerationPhase.PROJECT_GENERATION) {
-        runBefore(BuildSystemPlugin::createModules)
-        runAfter(TemplatesPlugin::postApplyTemplatesToModules)
+        val takeRepositoriesFromDependencies by pipelineTask(GenerationPhase.PROJECT_GENERATION) {
+            runBefore(createModules)
+            runAfter(TemplatesPlugin.postApplyTemplatesToModules)
 
-        withAction {
-            updateBuildFiles { buildFile ->
-                val dependenciesOfModule = buildList<LibraryDependencyIR> {
-                    buildFile.modules.modules.forEach { module ->
-                        if (module is SingleplatformModuleIR) module.sourcesets.forEach { sourceset ->
-                            +sourceset.irs.filterIsInstance<LibraryDependencyIR>()
+            withAction {
+                updateBuildFiles { buildFile ->
+                    val dependenciesOfModule = buildList<LibraryDependencyIR> {
+                        buildFile.modules.modules.forEach { module ->
+                            if (module is SingleplatformModuleIR) module.sourcesets.forEach { sourceset ->
+                                +sourceset.irs.filterIsInstance<LibraryDependencyIR>()
+                            }
+                            +module.irs.filterIsInstance<LibraryDependencyIR>()
                         }
-                        +module.irs.filterIsInstance<LibraryDependencyIR>()
                     }
+                    val repositoriesToAdd = dependenciesOfModule.mapNotNull { dependency ->
+                        dependency.artifact.safeAs<MavenArtifact>()?.repository?.let(::RepositoryIR)
+                    }
+                    buildFile.withIrs(repositoriesToAdd).asSuccess()
                 }
-                val repositoriesToAdd = dependenciesOfModule.mapNotNull { dependency ->
-                    dependency.artifact.safeAs<MavenArtifact>()?.repository?.let(::RepositoryIR)
+            }
+        }
+
+        val createModules by pipelineTask(GenerationPhase.PROJECT_GENERATION) {
+            runAfter(StructurePlugin.createProjectDir)
+            withAction {
+                val fileSystem = service<FileSystemWizardService>()
+                val data = buildSystemData.propertyValue.first { it.type == buildSystemType }
+                val buildFileData = data.buildFileData ?: return@withAction UNIT_SUCCESS
+                buildFiles.propertyValue.mapSequenceIgnore { buildFile ->
+                    fileSystem.createFile(
+                        buildFile.directoryPath / buildFileData.buildFileName,
+                        buildFileData.createPrinter().printBuildFile { buildFile.render(this) }
+                    )
                 }
-                buildFile.withIrs(repositoriesToAdd).asSuccess()
+            }
+        }
+
+        val importProject by pipelineTask(GenerationPhase.PROJECT_IMPORT) {
+            runAfter(createModules)
+            withAction {
+                val data = buildSystemData.propertyValue.first { it.type == buildSystemType }
+                service<ProjectImportingWizardService> { service -> service.isSuitableFor(data.type) }
+                    .importProject(this, StructurePlugin.projectPath.settingValue, allIRModules, buildSystemType)
             }
         }
     }
 
-    val createModules by pipelineTask(GenerationPhase.PROJECT_GENERATION) {
-        runAfter(StructurePlugin::createProjectDir)
-        withAction {
-            val fileSystem = service<FileSystemWizardService>()
-            val data = BuildSystemPlugin::buildSystemData.propertyValue.first { it.type == buildSystemType }
-            val buildFileData = data.buildFileData ?: return@withAction UNIT_SUCCESS
-            BuildSystemPlugin::buildFiles.propertyValue.mapSequenceIgnore { buildFile ->
-                fileSystem.createFile(
-                    buildFile.directoryPath / buildFileData.buildFileName,
-                    buildFileData.createPrinter().printBuildFile { buildFile.render(this) }
-                )
-            }
-        }
-    }
+    override val settings: List<PluginSetting<*, *>> = listOf(
+        type,
+    )
+    override val pipelineTasks: List<PipelineTask> = listOf(
+        takeRepositoriesFromDependencies,
+        createModules,
+        importProject,
+    )
+    override val properties: List<Property<*>> = listOf(
+        buildSystemData,
+        buildFiles,
+        pluginRepositoreis
+    )
+}
 
-    val importProject by pipelineTask(GenerationPhase.PROJECT_IMPORT) {
-        runAfter(BuildSystemPlugin::createModules)
-        withAction {
-            val data = BuildSystemPlugin::buildSystemData.propertyValue.first { it.type == buildSystemType }
-            service<ProjectImportingWizardService> { service -> service.isSuitableFor(data.type) }
-                .importProject(this, StructurePlugin::projectPath.reference.settingValue, allIRModules, buildSystemType)
-        }
-    }
+fun Reader.getPluginRepositoriesWithDefaultOnes(): List<Repository> {
+    val allRepositories = BuildSystemPlugin.pluginRepositoreis.propertyValue + buildSystemType.getDefaultPluginRepositories()
+    return allRepositories.filterOutOnlyDefaultPluginRepositories(buildSystemType)
+}
 
-    protected fun addBuildSystemData(data: BuildSystemData) = pipelineTask(GenerationPhase.PREPARE) {
-        runBefore(BuildSystemPlugin::createModules)
-        withAction {
-            BuildSystemPlugin::buildSystemData.addValues(data)
-        }
+private fun List<Repository>.filterOutOnlyDefaultPluginRepositories(buildSystem: BuildSystemType): List<Repository> {
+    val isAllDefault = all { it.isDefaultPluginRepository(buildSystem) }
+    return if (isAllDefault) emptyList() else this
+}
+
+private fun Repository.isDefaultPluginRepository(buildSystem: BuildSystemType) =
+    this in buildSystem.getDefaultPluginRepositories()
+
+fun PluginSettingsOwner.addBuildSystemData(data: BuildSystemData) = pipelineTask(GenerationPhase.PREPARE) {
+    runBefore(BuildSystemPlugin.createModules)
+    withAction {
+        BuildSystemPlugin.buildSystemData.addValues(data)
     }
 }
 
@@ -149,6 +183,10 @@ enum class BuildSystemType(
 
     override val greyText: String?
         get() = null
+
+    companion object {
+        val ALL_GRADLE = setOf(GradleKotlinDsl, GradleGroovyDsl)
+    }
 }
 
 val BuildSystemType.isGradle
@@ -156,12 +194,12 @@ val BuildSystemType.isGradle
             || this == BuildSystemType.GradleKotlinDsl
 
 val Reader.allIRModules
-    get() = BuildSystemPlugin::buildFiles.propertyValue.flatMap { buildFile ->
+    get() = BuildSystemPlugin.buildFiles.propertyValue.flatMap { buildFile ->
         buildFile.modules.modules
     }
 
 val Writer.allModulesPaths
-    get() = BuildSystemPlugin::buildFiles.propertyValue.flatMap { buildFile ->
+    get() = BuildSystemPlugin.buildFiles.propertyValue.flatMap { buildFile ->
         val paths = when (val structure = buildFile.modules) {
             is MultiplatformModulesStructureIR -> listOf(buildFile.directoryPath)
             else -> structure.modules.map { it.path }
@@ -174,7 +212,13 @@ val Writer.allModulesPaths
         }
     }
 
+fun BuildSystemType.getDefaultPluginRepositories(): List<DefaultRepository> = when (this) {
+    BuildSystemType.GradleKotlinDsl, BuildSystemType.GradleGroovyDsl -> listOf(DefaultRepository.GRADLE_PLUGIN_PORTAL)
+    BuildSystemType.Maven -> listOf(DefaultRepository.MAVEN_CENTRAL)
+    BuildSystemType.Jps -> emptyList()
+}
+
 
 val Reader.buildSystemType: BuildSystemType
-    get() = BuildSystemPlugin::type.reference.settingValue
+    get() = BuildSystemPlugin.type.settingValue
 

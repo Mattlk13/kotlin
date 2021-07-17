@@ -26,19 +26,19 @@ package b
 
 import a.MyJavaClass
 
-val mc1 = <!INAPPLICABLE_CANDIDATE!>MyJavaClass<!>()
+val <!EXPOSED_PROPERTY_TYPE!>mc1<!> = <!INVISIBLE_REFERENCE!>MyJavaClass<!>()
 
-val x = <!INAPPLICABLE_CANDIDATE!>MyJavaClass<!>.<!UNRESOLVED_REFERENCE!>staticMethod<!>()
-val y = <!INAPPLICABLE_CANDIDATE!>MyJavaClass<!>.<!UNRESOLVED_REFERENCE!>NestedClass<!>.<!UNRESOLVED_REFERENCE!>staticMethodOfNested<!>()
-val z = <!INAPPLICABLE_CANDIDATE!>MyJavaClass<!>.<!UNRESOLVED_REFERENCE!>NestedClass<!>()
+val x = <!INVISIBLE_REFERENCE!>MyJavaClass<!>.<!INVISIBLE_REFERENCE!>staticMethod<!>()
+val y = MyJavaClass.<!INVISIBLE_REFERENCE!>NestedClass<!>.<!INVISIBLE_REFERENCE!>staticMethodOfNested<!>()
+val <!EXPOSED_PROPERTY_TYPE!>z<!> = <!INVISIBLE_REFERENCE!>MyJavaClass<!>.<!INVISIBLE_REFERENCE!>NestedClass<!>()
 
 //FILE: c.kt
 package a.c
 
 import a.MyJavaClass
 
-val mc1 = <!INAPPLICABLE_CANDIDATE!>MyJavaClass<!>()
+val <!EXPOSED_PROPERTY_TYPE!>mc1<!> = <!INVISIBLE_REFERENCE!>MyJavaClass<!>()
 
-val x = <!INAPPLICABLE_CANDIDATE!>MyJavaClass<!>.<!UNRESOLVED_REFERENCE!>staticMethod<!>()
-val y = <!INAPPLICABLE_CANDIDATE!>MyJavaClass<!>.<!UNRESOLVED_REFERENCE!>NestedClass<!>.<!UNRESOLVED_REFERENCE!>staticMethodOfNested<!>()
-val z = <!INAPPLICABLE_CANDIDATE!>MyJavaClass<!>.<!UNRESOLVED_REFERENCE!>NestedClass<!>()
+val x = <!INVISIBLE_REFERENCE!>MyJavaClass<!>.<!INVISIBLE_REFERENCE!>staticMethod<!>()
+val y = MyJavaClass.<!INVISIBLE_REFERENCE!>NestedClass<!>.<!INVISIBLE_REFERENCE!>staticMethodOfNested<!>()
+val <!EXPOSED_PROPERTY_TYPE!>z<!> = <!INVISIBLE_REFERENCE!>MyJavaClass<!>.<!INVISIBLE_REFERENCE!>NestedClass<!>()

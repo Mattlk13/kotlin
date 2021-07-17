@@ -1,15 +1,15 @@
 package org.jetbrains.kotlin.tools.projectWizard.wizard.ui
 
 
+import com.intellij.openapi.application.ApplicationManager
 import org.jetbrains.kotlin.tools.projectWizard.core.Context
 import org.jetbrains.kotlin.tools.projectWizard.core.Reader
 import org.jetbrains.kotlin.tools.projectWizard.core.SettingsWriter
 import org.jetbrains.kotlin.tools.projectWizard.core.Writer
 import org.jetbrains.kotlin.tools.projectWizard.core.entity.ValidationResult
-import org.jetbrains.kotlin.tools.projectWizard.core.entity.settings.PluginSettingPropertyReference
 import org.jetbrains.kotlin.tools.projectWizard.core.entity.settings.SettingReference
 import org.jetbrains.kotlin.tools.projectWizard.core.entity.settings.SettingType
-import org.jetbrains.kotlin.tools.projectWizard.core.entity.settings.reference
+import javax.swing.JComponent
 
 abstract class Component : Displayable, ErrorNavigatable {
     private val subComponents = mutableListOf<Component>()
@@ -45,14 +45,12 @@ abstract class DynamicComponent(private val context: Context) : Component() {
             value?.let { setValue(it) }
         }
 
-
-    inline val <V : Any, reified T : SettingType<V>> PluginSettingPropertyReference<V, T>.value: V?
-        get() = reference.value
-
     init {
         write {
             eventManager.addSettingUpdaterEventListener { reference ->
-                if (isInitialized) onValueUpdated(reference)
+                if (isInitialized) ApplicationManager.getApplication().invokeLater {
+                    onValueUpdated(reference)
+                }
             }
         }
     }
@@ -70,11 +68,17 @@ abstract class DynamicComponent(private val context: Context) : Component() {
 }
 
 abstract class TitledComponent(context: Context) : DynamicComponent(context) {
-    open val forceLabelCenteringOffset: Int? = null
+    open val alignment: TitleComponentAlignment get() = TitleComponentAlignment.AlignAgainstMainComponent
     open val additionalComponentPadding: Int = 0
     open val maximumWidth: Int? = null
     abstract val title: String?
     open fun shouldBeShow(): Boolean = true
+}
+
+sealed class TitleComponentAlignment {
+    object AlignAgainstMainComponent : TitleComponentAlignment()
+    data class AlignAgainstSpecificComponent(val alignTarget: JComponent) : TitleComponentAlignment()
+    data class AlignFormTopWithPadding(val padding: Int) : TitleComponentAlignment()
 }
 
 interface FocusableComponent {

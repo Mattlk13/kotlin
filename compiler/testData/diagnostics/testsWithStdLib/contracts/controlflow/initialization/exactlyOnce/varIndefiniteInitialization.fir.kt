@@ -16,7 +16,7 @@ fun indefiniteVarReassignment(n: Int) {
     repeat(n) {
         myRun { x = 42 }
     }
-    x.inc()
+    <!UNINITIALIZED_VARIABLE!>x<!>.inc()
 }
 
 fun nonAnonymousLambdas() {
@@ -24,7 +24,7 @@ fun nonAnonymousLambdas() {
     var x: Int
     val initializer = { x = 42 }
     myRun(initializer)
-    x.inc()
+    <!UNINITIALIZED_VARIABLE!>x<!>.inc()
 }
 
 fun branchingIndetermineFlow(a: Any) {
@@ -39,13 +39,13 @@ fun branchingIndetermineFlow(a: Any) {
         myRun { x = 43 }
     }
 
-    x.inc()
+    <!UNINITIALIZED_VARIABLE!>x<!>.inc()
 }
 
 fun funWithUnknownInvocations(block: () -> Unit) = block()
 
 fun nestedIndefiniteAssignment() {
     val x: Int
-    funWithUnknownInvocations { myRun { x = 42 } }
-    x.inc()
+    funWithUnknownInvocations { myRun { <!CAPTURED_VAL_INITIALIZATION!>x<!> = 42 } }
+    <!UNINITIALIZED_VARIABLE!>x<!>.inc()
 }

@@ -83,7 +83,7 @@ class SignatureDumpingBuilderFactory(
             super.defineClass(origin, version, access, name, signature, superName, interfaces)
         }
 
-        override fun newMethod(origin: JvmDeclarationOrigin, access: Int, name: String, desc: String, signature: String?, exceptions: Array<out String>?): MethodVisitor {
+        override fun newMethod(origin: JvmDeclarationOrigin, access: Int, name: String, desc: String, signature: String?, exceptions: JvmMethodExceptionTypes): MethodVisitor {
             signatures += RawSignature(name, desc, MemberKind.METHOD) to origin.descriptor?.let {
                 if (it is CallableDescriptor) it.unwrapInitialDescriptorForSuspendFunction() else it
             }
@@ -140,8 +140,8 @@ private fun jsonEscape(value: String): String = buildString {
             '\r' -> append("\\r")
             '\"' -> append("\\\"")
             '\\' -> append("\\\\")
-            else -> if (ch.toInt() < 32) {
-                append("\\u" + Integer.toHexString(ch.toInt()).padStart(4, '0'))
+            else -> if (ch.code < 32) {
+                append("\\u" + Integer.toHexString(ch.code).padStart(4, '0'))
             }
             else {
                 append(ch)

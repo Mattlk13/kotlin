@@ -1,3 +1,4 @@
+// FIR_IDE_IGNORE
 // !LANGUAGE: +NewInference
 // !DIAGNOSTICS: -UNUSED_VARIABLE -ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE -UNUSED_VALUE -UNUSED_PARAMETER -UNUSED_EXPRESSION
 // SKIP_TXT
@@ -6,8 +7,8 @@
  * KOTLIN DIAGNOSTICS SPEC TEST (POSITIVE)
  *
  * SPEC VERSION: 0.1-313
- * PLACE: expressions, logical-disjunction-expression -> paragraph 2 -> sentence 1
- * RELEVANT PLACES: expressions, logical-disjunction-expression -> paragraph 2 -> sentence 2
+ * MAIN LINK: expressions, logical-disjunction-expression -> paragraph 2 -> sentence 1
+ * PRIMARY LINKS: expressions, logical-disjunction-expression -> paragraph 2 -> sentence 2
  * NUMBER: 1
  * DESCRIPTION:Both operands of a logical disjunction expression must have a type which is a subtype of kotlin.Boolean
  * HELPERS: checkType

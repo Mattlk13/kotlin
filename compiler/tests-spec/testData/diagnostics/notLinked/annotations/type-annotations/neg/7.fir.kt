@@ -1,13 +1,3 @@
-// !WITH_NEW_INFERENCE
-
-/*
- * KOTLIN DIAGNOSTICS NOT LINKED SPEC TEST (NEGATIVE)
- *
- * SECTIONS: annotations, type-annotations
- * NUMBER: 7
- * DESCRIPTION: Type annotations on a type in an anonymous object expression, with unresolved reference in parameters.
- * ISSUES: KT-28424
- */
 
 // TESTCASE NUMBER: 1, 2
 @Target(AnnotationTarget.TYPE)
@@ -27,4 +17,4 @@ val case_1 = object : TypeToken<@Ann(unresolved_reference) String>() {}
  */
 interface A
 
-val case_2 = object: @Ann(unresolved_reference) A {}
+val case_2 = object: @Ann(<!TOO_MANY_ARGUMENTS, UNRESOLVED_REFERENCE!>unresolved_reference<!>) A {}

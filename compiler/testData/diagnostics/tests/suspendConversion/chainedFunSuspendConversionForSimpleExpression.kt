@@ -1,3 +1,4 @@
+// FIR_IDENTICAL
 // !LANGUAGE: +SuspendConversion
 // !DIAGNOSTICS: -UNUSED_PARAMETER
 
@@ -9,5 +10,6 @@ fun foo(s: SuspendRunnable) {}
 
 fun test(f: () -> Unit) {
     foo { }
-    foo(<!TYPE_MISMATCH!>f<!>)
+    foo(f)
 }
+

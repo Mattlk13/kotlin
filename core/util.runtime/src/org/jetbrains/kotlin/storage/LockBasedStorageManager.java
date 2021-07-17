@@ -19,6 +19,7 @@ package org.jetbrains.kotlin.storage;
 import kotlin.Unit;
 import kotlin.jvm.functions.Function0;
 import kotlin.jvm.functions.Function1;
+import kotlin.jvm.functions.Function2;
 import kotlin.text.StringsKt;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -56,7 +57,7 @@ public class LockBasedStorageManager implements StorageManager {
     public static final StorageManager NO_LOCKS = new LockBasedStorageManager("NO_LOCKS", ExceptionHandlingStrategy.THROW, EmptySimpleLock.INSTANCE) {
         @NotNull
         @Override
-        protected <T> RecursionDetectedResult<T> recursionDetectedDefault() {
+        protected <K, V> RecursionDetectedResult<V> recursionDetectedDefault(@NotNull String source, K input) {
             return RecursionDetectedResult.fallThrough();
         }
     };
@@ -66,17 +67,18 @@ public class LockBasedStorageManager implements StorageManager {
             @NotNull String debugText,
             @NotNull ExceptionHandlingStrategy exceptionHandlingStrategy
     ) {
-        return createWithExceptionHandling(debugText, exceptionHandlingStrategy, null);
+        return createWithExceptionHandling(debugText, exceptionHandlingStrategy, null, null);
     }
 
     @NotNull
     public static LockBasedStorageManager createWithExceptionHandling(
             @NotNull String debugText,
             @NotNull ExceptionHandlingStrategy exceptionHandlingStrategy,
-            @Nullable Runnable checkCancelled
+            @Nullable Runnable checkCancelled,
+            @Nullable Function1<InterruptedException, Unit> interruptedExceptionHandler
     ) {
         return new LockBasedStorageManager(debugText, exceptionHandlingStrategy,
-                                           SimpleLock.Companion.simpleLock(checkCancelled));
+                                           SimpleLock.Companion.simpleLock(checkCancelled, interruptedExceptionHandler));
     }
 
     protected final SimpleLock lock;
@@ -94,11 +96,15 @@ public class LockBasedStorageManager implements StorageManager {
     }
 
     public LockBasedStorageManager(String debugText) {
-        this(debugText, null);
+        this(debugText, (Runnable) null, null);
     }
 
-    public LockBasedStorageManager(String debugText, @Nullable Runnable checkCancelled) {
-        this(debugText, ExceptionHandlingStrategy.THROW, SimpleLock.Companion.simpleLock(checkCancelled));
+    public LockBasedStorageManager(
+            String debugText,
+            @Nullable Runnable checkCancelled,
+            @Nullable Function1<InterruptedException, Unit> interruptedExceptionHandler
+    ) {
+        this(debugText, ExceptionHandlingStrategy.THROW, SimpleLock.Companion.simpleLock(checkCancelled, interruptedExceptionHandler));
     }
 
     @Override
@@ -122,9 +128,34 @@ public class LockBasedStorageManager implements StorageManager {
     @Override
     public <K, V> MemoizedFunctionToNotNull<K, V> createMemoizedFunction(
             @NotNull Function1<? super K, ? extends V> compute,
+            @NotNull Function2<? super K, ? super Boolean, ? extends V> onRecursiveCall
+    ) {
+        return createMemoizedFunction(compute, onRecursiveCall, LockBasedStorageManager.<K>createConcurrentHashMap());
+    }
+
+    @NotNull
+    @Override
+    public <K, V> MemoizedFunctionToNotNull<K, V> createMemoizedFunction(
+            @NotNull Function1<? super K, ? extends V> compute,
             @NotNull ConcurrentMap<K, Object> map
     ) {
         return new MapBasedMemoizedFunctionToNotNull<K, V>(this, map, compute);
+    }
+
+    @NotNull
+    @Override
+    public <K, V> MemoizedFunctionToNotNull<K, V> createMemoizedFunction(
+            @NotNull Function1<? super K, ? extends V> compute,
+            @NotNull final Function2<? super K, ? super Boolean, ? extends V> onRecursiveCall,
+            @NotNull ConcurrentMap<K, Object> map
+    ) {
+        return new MapBasedMemoizedFunctionToNotNull<K, V>(this, map, compute) {
+            @NotNull
+            @Override
+            protected RecursionDetectedResult<V> recursionDetected(K input, boolean firstTime) {
+                return RecursionDetectedResult.value(onRecursiveCall.invoke(input, firstTime));
+            }
+        };
     }
 
     @NotNull
@@ -273,8 +304,15 @@ public class LockBasedStorageManager implements StorageManager {
     }
 
     @NotNull
-    protected <T> RecursionDetectedResult<T> recursionDetectedDefault() {
-        throw sanitizeStackTrace(new IllegalStateException("Recursive call in a lazy value under " + this));
+    protected <K, V> RecursionDetectedResult<V> recursionDetectedDefault(@NotNull String source, K input) {
+        throw sanitizeStackTrace(
+                new AssertionError("Recursion detected " + source +
+                        (input == null
+                         ? ""
+                         : "on input: " + input
+                         ) + " under " + this
+                )
+        );
     }
 
     private static class RecursionDetectedResult<T> {
@@ -401,7 +439,7 @@ public class LockBasedStorageManager implements StorageManager {
          */
         @NotNull
         protected RecursionDetectedResult<T> recursionDetected(boolean firstTime) {
-            return storageManager.recursionDetectedDefault();
+            return storageManager.recursionDetectedDefault("in a lazy value", null);
         }
 
         protected void postCompute(T value) {
@@ -516,9 +554,22 @@ public class LockBasedStorageManager implements StorageManager {
             storageManager.lock.lock();
             try {
                 value = cache.get(input);
+
                 if (value == NotValue.COMPUTING) {
-                    throw recursionDetected(input);
+                    value = NotValue.RECURSION_WAS_DETECTED;
+                    RecursionDetectedResult<V> result = recursionDetected(input, /*firstTime = */ true);
+                    if (!result.isFallThrough()) {
+                        return result.getValue();
+                    }
                 }
+
+                if (value == NotValue.RECURSION_WAS_DETECTED) {
+                    RecursionDetectedResult<V> result = recursionDetected(input, /*firstTime = */ false);
+                    if (!result.isFallThrough()) {
+                        return result.getValue();
+                    }
+                }
+
                 if (value != null) return WrappedValues.unescapeExceptionOrNull(value);
 
                 AssertionError error = null;
@@ -562,10 +613,8 @@ public class LockBasedStorageManager implements StorageManager {
         }
 
         @NotNull
-        private AssertionError recursionDetected(K input) {
-            return sanitizeStackTrace(
-                    new AssertionError("Recursion detected on input: " + input + " under " + storageManager)
-            );
+        protected RecursionDetectedResult<V> recursionDetected(K input, boolean firstTime) {
+            return storageManager.recursionDetectedDefault("", input);
         }
 
         @NotNull

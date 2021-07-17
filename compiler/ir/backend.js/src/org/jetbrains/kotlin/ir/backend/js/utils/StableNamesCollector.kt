@@ -7,8 +7,8 @@ package org.jetbrains.kotlin.ir.backend.js.utils
 
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.declarations.IrConstructor
-import org.jetbrains.kotlin.ir.declarations.IrDeclaration
 import org.jetbrains.kotlin.ir.declarations.IrDeclarationWithName
+import org.jetbrains.kotlin.ir.declarations.IrDeclarationBase
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.util.isEffectivelyExternal
 import org.jetbrains.kotlin.ir.util.isPropertyAccessor
@@ -30,7 +30,7 @@ class StableNamesCollector : IrElementVisitorVoid {
         element.acceptChildrenVoid(this)
     }
 
-    override fun visitDeclaration(declaration: IrDeclaration) {
+    override fun visitDeclaration(declaration: IrDeclarationBase) {
         super.visitDeclaration(declaration)
 
         if (declaration !is IrDeclarationWithName)
@@ -73,8 +73,7 @@ class StableNamesCollector : IrElementVisitorVoid {
             return null
         }
 
-        val importedFromModuleOnly =
-            declaration.getJsModule() != null && !declaration.isJsNonModule()
+        val importedFromModuleOnly = declaration.isImportedFromModuleOnly()
 
         val jsName = declaration.getJsName()
         val jsQualifier = declaration.getJsQualifier()

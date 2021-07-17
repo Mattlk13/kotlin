@@ -1,3 +1,3 @@
 class Foo
 
-@Foo class Bar
+@<!NOT_AN_ANNOTATION_CLASS!>Foo<!> class Bar

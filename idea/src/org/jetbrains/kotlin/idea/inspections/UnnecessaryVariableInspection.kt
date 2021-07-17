@@ -16,8 +16,10 @@
 
 package org.jetbrains.kotlin.idea.inspections
 
+import com.intellij.codeInspection.ProblemHighlightType
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.project.Project
+import com.intellij.psi.impl.source.tree.LeafPsiElement
 import com.intellij.psi.search.LocalSearchScope
 import com.intellij.psi.search.searches.ReferencesSearch
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
@@ -27,20 +29,29 @@ import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToCall
 import org.jetbrains.kotlin.idea.core.NewDeclarationNameValidator
 import org.jetbrains.kotlin.idea.refactoring.inline.KotlinInlineValHandler
+import org.jetbrains.kotlin.idea.util.getLineCount
 import org.jetbrains.kotlin.idea.util.nameIdentifierTextRangeInThis
+import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.*
+import org.jetbrains.kotlin.psi.psiUtil.anyDescendantOfType
 import org.jetbrains.kotlin.psi.psiUtil.getNextSiblingIgnoringWhitespaceAndComments
 import org.jetbrains.kotlin.psi.psiUtil.getStrictParentOfType
 import org.jetbrains.kotlin.resolve.BindingContext.DECLARATION_TO_DESCRIPTOR
 import org.jetbrains.kotlin.resolve.BindingContext.REFERENCE_TARGET
 import org.jetbrains.kotlin.resolve.DescriptorToSourceUtils
 import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
+import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 
 class UnnecessaryVariableInspection : AbstractApplicabilityBasedInspection<KtProperty>(KtProperty::class.java) {
 
     override fun isApplicable(element: KtProperty) = statusFor(element) != null
 
     override fun inspectionHighlightRangeInElement(element: KtProperty) = element.nameIdentifierTextRangeInThis()
+
+    override fun inspectionHighlightType(element: KtProperty): ProblemHighlightType {
+        val hasMultiLineBlock = element.initializer?.hasMultiLineBlock() == true
+        return if (hasMultiLineBlock) ProblemHighlightType.INFORMATION else ProblemHighlightType.GENERIC_ERROR_OR_WARNING
+    }
 
     override fun inspectionText(element: KtProperty) = when (statusFor(element)) {
         Status.RETURN_ONLY -> KotlinBundle.message("variable.used.only.in.following.return.and.should.be.inlined")
@@ -59,6 +70,11 @@ class UnnecessaryVariableInspection : AbstractApplicabilityBasedInspection<KtPro
         KotlinInlineValHandler(withPrompt = false).inlineElement(project, editor, element)
     }
 
+    private fun LeafPsiElement.startsMultilineBlock(): Boolean =
+        node.elementType == KtTokens.LBRACE && parent.safeAs<KtExpression>()?.getLineCount()?.let { it > 1 } == true
+
+    private fun KtExpression.hasMultiLineBlock(): Boolean = anyDescendantOfType<LeafPsiElement> { it.startsMultilineBlock() }
+
     companion object {
         private enum class Status {
             RETURN_ONLY,
@@ -66,6 +82,7 @@ class UnnecessaryVariableInspection : AbstractApplicabilityBasedInspection<KtPro
         }
 
         private fun statusFor(property: KtProperty): Status? {
+            if (property.hasModifier(KtTokens.OVERRIDE_KEYWORD)) return null
             val enclosingElement = KtPsiUtil.getEnclosingElementForLocalDeclaration(property) ?: return null
             val initializer = property.initializer ?: return null
 
@@ -90,6 +107,11 @@ class UnnecessaryVariableInspection : AbstractApplicabilityBasedInspection<KtPro
                             )
                         )
                         if (!validator(copyName)) return false
+                        if (containingDeclaration is KtClassOrObject) {
+                            val enclosingBlock = enclosingElement as? KtBlockExpression
+                            val initializerDeclaration = DescriptorToSourceUtils.descriptorToDeclaration(initializerDescriptor)
+                            if (enclosingBlock?.statements?.none { it == initializerDeclaration } == true) return false
+                        }
                     }
                     return true
                 }

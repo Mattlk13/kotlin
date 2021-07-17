@@ -14,6 +14,7 @@ import com.intellij.util.PathUtil
 import org.jetbrains.kotlin.analyzer.ModuleInfo
 import org.jetbrains.kotlin.analyzer.PlatformAnalysisParameters
 import org.jetbrains.kotlin.analyzer.ResolverForModuleFactory
+import org.jetbrains.kotlin.analyzer.ResolverForProject
 import org.jetbrains.kotlin.builtins.DefaultBuiltIns
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.builtins.functions.functionInterfacePackageFragmentProvider
@@ -21,12 +22,14 @@ import org.jetbrains.kotlin.builtins.konan.KonanBuiltIns
 import org.jetbrains.kotlin.caches.resolve.IdePlatformKindResolution
 import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.context.ProjectContext
+import org.jetbrains.kotlin.descriptors.ModuleCapability
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
 import org.jetbrains.kotlin.descriptors.PackageFragmentProvider
 import org.jetbrains.kotlin.descriptors.impl.CompositePackageFragmentProvider
 import org.jetbrains.kotlin.descriptors.konan.DeserializedKlibModuleOrigin
 import org.jetbrains.kotlin.descriptors.konan.KlibModuleOrigin
 import org.jetbrains.kotlin.ide.konan.analyzer.NativeResolverForModuleFactory
+import org.jetbrains.kotlin.idea.caches.project.IdeaModuleInfo
 import org.jetbrains.kotlin.idea.caches.project.LibraryInfo
 import org.jetbrains.kotlin.idea.caches.project.SdkInfo
 import org.jetbrains.kotlin.idea.caches.project.lazyClosure
@@ -37,14 +40,14 @@ import org.jetbrains.kotlin.incremental.components.LookupTracker
 import org.jetbrains.kotlin.konan.library.KONAN_STDLIB_NAME
 import org.jetbrains.kotlin.konan.util.KlibMetadataFactories
 import org.jetbrains.kotlin.library.isInterop
-import org.jetbrains.kotlin.platform.TargetPlatform
-import org.jetbrains.kotlin.platform.impl.NativeIdePlatformKind
-import org.jetbrains.kotlin.resolve.ImplicitIntegerCoercion
-import org.jetbrains.kotlin.resolve.TargetEnvironment
 import org.jetbrains.kotlin.library.metadata.NullFlexibleTypeDeserializer
 import org.jetbrains.kotlin.library.nativeTargets
+import org.jetbrains.kotlin.platform.TargetPlatform
+import org.jetbrains.kotlin.platform.impl.NativeIdePlatformKind
 import org.jetbrains.kotlin.platform.konan.NativePlatforms
 import org.jetbrains.kotlin.platform.konan.NativePlatforms.nativePlatformByTargetNames
+import org.jetbrains.kotlin.resolve.ImplicitIntegerCoercion
+import org.jetbrains.kotlin.resolve.TargetEnvironment
 import org.jetbrains.kotlin.serialization.konan.impl.KlibMetadataModuleDescriptorFactoryImpl
 import org.jetbrains.kotlin.storage.StorageManager
 
@@ -91,10 +94,15 @@ class NativePlatformKindResolution : IdePlatformKindResolution {
 
     override val kind get() = NativeIdePlatformKind
 
-    override fun getKeyForBuiltIns(moduleInfo: ModuleInfo, sdkInfo: SdkInfo?): BuiltInsCacheKey = NativeBuiltInsCacheKey
+    override fun getKeyForBuiltIns(moduleInfo: ModuleInfo, sdkInfo: SdkInfo?, stdlibInfo: LibraryInfo?): BuiltInsCacheKey = NativeBuiltInsCacheKey
 
-    override fun createBuiltIns(moduleInfo: ModuleInfo, projectContext: ProjectContext, sdkDependency: SdkInfo?) =
-        createKotlinNativeBuiltIns(moduleInfo, projectContext)
+    override fun createBuiltIns(
+        moduleInfo: IdeaModuleInfo,
+        projectContext: ProjectContext,
+        resolverForProject: ResolverForProject<IdeaModuleInfo>,
+        sdkDependency: SdkInfo?,
+        stdlibDependency: LibraryInfo?,
+    ) = createKotlinNativeBuiltIns(moduleInfo, projectContext)
 
     private fun createKotlinNativeBuiltIns(moduleInfo: ModuleInfo, projectContext: ProjectContext): KotlinBuiltIns {
         val stdlibInfo = moduleInfo.findNativeStdlib() ?: return DefaultBuiltIns.Instance
@@ -111,8 +119,7 @@ class NativePlatformKindResolution : IdePlatformKindResolution {
 
         val languageVersionSettings = IDELanguageSettingsProvider.getLanguageVersionSettings(
             stdlibInfo,
-            project,
-            isReleaseCoroutines = false
+            project
         )
 
         val stdlibPackageFragmentProvider = createKlibPackageFragmentProvider(
@@ -129,7 +136,8 @@ class NativePlatformKindResolution : IdePlatformKindResolution {
                     functionInterfacePackageFragmentProvider(storageManager, builtInsModule),
                     (metadataFactories.DefaultDeserializedDescriptorFactory as KlibMetadataModuleDescriptorFactoryImpl)
                         .createForwardDeclarationHackPackagePartProvider(storageManager, builtInsModule)
-                )
+                ),
+                "CompositeProvider@NativeBuiltins for $builtInsModule"
             )
         )
 
@@ -153,9 +161,10 @@ class NativePlatformKindResolution : IdePlatformKindResolution {
 class NativeKlibLibraryInfo(project: Project, library: Library, libraryRoot: String) :
     AbstractKlibLibraryInfo(project, library, libraryRoot) {
 
+    // If you're changing this, please take a look at ideaModelDependencies as well
     val isStdlib: Boolean get() = libraryRoot.endsWith(KONAN_STDLIB_NAME)
 
-    override val capabilities: Map<ModuleDescriptor.Capability<*>, Any?>
+    override val capabilities: Map<ModuleCapability<*>, Any?>
         get() {
             val capabilities = super.capabilities.toMutableMap()
             capabilities += KlibModuleOrigin.CAPABILITY to DeserializedKlibModuleOrigin(resolvedKotlinLibrary)

@@ -18,6 +18,7 @@ import java.util.*
 
 class FirControlFlowGraphRenderVisitor(
     builder: StringBuilder,
+    private val renderLevels: Boolean = false
 ) : FirVisitorVoid() {
     companion object {
         private const val EDGE = " -> "
@@ -26,10 +27,12 @@ class FirControlFlowGraphRenderVisitor(
 
         private val EDGE_STYLE = EnumMap(
             mapOf(
-                EdgeKind.Simple to "",
-                EdgeKind.Dead to "[style=dotted]",
-                EdgeKind.Cfg to "[color=green]",
-                EdgeKind.Dfg to "[color=red]",
+                EdgeKind.Forward to "",
+                EdgeKind.DeadForward to "[style=dotted]",
+                EdgeKind.CfgForward to "[color=green]",
+                EdgeKind.DfgForward to "[color=red]",
+                EdgeKind.CfgBackward to "[color=green style=dashed]",
+                EdgeKind.DeadBackward to "[color=green style=dotted]"
             )
         )
     }
@@ -79,7 +82,13 @@ class FirControlFlowGraphRenderVisitor(
                 color = BLUE
             }
             val attributes = mutableListOf<String>()
-            attributes += "label=\"${node.render().replace("\"", "")}\""
+            val label = buildString {
+                append(node.render().replace("\"", ""))
+                if (renderLevels) {
+                    append(" [${node.level}]")
+                }
+            }
+            attributes += "label=\"$label\""
 
             fun fillColor(color: String) {
                 attributes += "style=\"filled\""
@@ -106,19 +115,52 @@ class FirControlFlowGraphRenderVisitor(
             if (node.followingNodes.isEmpty()) continue
 
             fun renderEdges(kind: EdgeKind) {
-                val edges = node.followingNodes.filter { node.outgoingEdges.getValue(it) == kind }
+                val edges = node.followingNodes.filter { node.outgoingEdges.getValue(it).kind == kind }
                 if (edges.isEmpty()) return
-                print(
-                    indices.getValue(node),
-                    EDGE,
-                    edges.joinToString(prefix = "{", postfix = "}", separator = " ") { indices.getValue(it).toString() }
-                )
-                EDGE_STYLE.getValue(kind).takeIf { it.isNotBlank() }?.let { printWithNoIndent(" $it") }
-                printlnWithNoIndent(";")
+
+                fun renderEdgesWithoutLabel(edges: List<CFGNode<*>>) {
+                    print(
+                        indices.getValue(node),
+                        EDGE,
+                        edges.joinToString(prefix = "{", postfix = "}", separator = " ") { indices.getValue(it).toString() }
+                    )
+                    EDGE_STYLE.getValue(kind).takeIf { it.isNotBlank() }?.let { printWithNoIndent(" $it") }
+                    printlnWithNoIndent(";")
+                }
+
+                if (edges.any { node.outgoingEdges[it]?.label?.label != null }) {
+                    val edgeGroups = edges.groupBy { node.outgoingEdges[it]?.label?.label != null }
+                    edgeGroups[false]?.let { renderEdgesWithoutLabel(it) }
+                    for (edge in edgeGroups[true]!!) {
+                        print(
+                            indices.getValue(node),
+                            EDGE,
+                            "{", indices.getValue(edge), "}"
+                        )
+                        EDGE_STYLE.getValue(kind).takeIf { it.isNotBlank() }?.let { printWithNoIndent(" $it") }
+                        print("[label=${node.outgoingEdges[edge]!!.label}]")
+                        printlnWithNoIndent(";")
+                    }
+                } else {
+                    renderEdgesWithoutLabel(edges)
+                }
             }
 
             for (kind in EdgeKind.values()) {
                 renderEdges(kind)
+            }
+
+            if (node is CFGNodeWithCfgOwner<*>) {
+                val subNodes = node.subGraphs
+                if (subNodes.isNotEmpty()) {
+                    print(
+                        indices.getValue(node),
+                        EDGE,
+                        subNodes.mapNotNull { indices[it.enterNode] }.joinToString(prefix = "{", postfix = "}", separator = " ")
+                    )
+                    printWithNoIndent(" [style=dashed]")
+                    printlnWithNoIndent(";")
+                }
             }
         }
         for (subGraph in graph.subGraphs) {
@@ -132,11 +174,19 @@ class FirControlFlowGraphRenderVisitor(
 
     override fun visitControlFlowGraphReference(controlFlowGraphReference: FirControlFlowGraphReference) {
         val controlFlowGraph = (controlFlowGraphReference as? FirControlFlowGraphReferenceImpl)?.controlFlowGraph ?: return
-        controlFlowGraph.collectNodes()
-        if (controlFlowGraph.owner == null) {
-            topLevelGraphs += controlFlowGraph
+        initializeNodes(controlFlowGraph)
+    }
+
+    private fun initializeNodes(graph: ControlFlowGraph) {
+        if (graph in allGraphs) return
+        graph.collectNodes()
+        if (graph.owner == null) {
+            topLevelGraphs += graph
         }
-        allGraphs += controlFlowGraph
+        allGraphs += graph
+        for (subGraph in graph.subGraphs) {
+            initializeNodes(subGraph)
+        }
     }
 
     private fun Printer.enterCluster(color: String) {

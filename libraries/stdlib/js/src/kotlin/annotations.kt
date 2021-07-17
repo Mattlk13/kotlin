@@ -1,15 +1,11 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package kotlin.js
 
 import kotlin.annotation.AnnotationTarget.*
-
-@Target(CLASS, FUNCTION, PROPERTY, CONSTRUCTOR, VALUE_PARAMETER, PROPERTY_GETTER, PROPERTY_SETTER)
-@Deprecated("Use `external` modifier instead", level = DeprecationLevel.ERROR)
-public annotation class native(public val name: String = "")
 
 @Target(FUNCTION)
 @Deprecated("Use inline extension function with body using dynamic")
@@ -162,12 +158,33 @@ public annotation class JsNonModule
 public annotation class JsQualifier(val value: String)
 
 /**
- * Exports top-level declaration.
+ * Exports top-level declaration on JS platform.
  *
- * Compiler exports from the module those top-level declarations that are marked with this annotation.
- * There is no effect if this annotation is applied to a non-top-level declaration.
+ * Compiled module exposes declarations that are marked with this annotation without name mangling.
  *
- * This annotation has effect only on top-level declarations and only in IR-based JS backend.
+ * This annotation can be applied to either files or top-level declarations.
+ *
+ * It is currently prohibited to export the following kinds of declarations:
+ *
+ *   * `expect` declarations
+ *   * inline functions with reified type parameters
+ *   * suspend functions
+ *   * secondary constructors without `@JsName`
+ *   * extension properties
+ *   * enum classes
+ *   * annotation classes
+ *
+ * Signatures of exported declarations must only contain "exportable" types:
+ *
+ *   * `dynamic`, `Any`, `String`, `Boolean`, `Byte`, `Short`, `Int`, `Float`, `Double`
+ *   * `BooleanArray`, `ByteArray`, `ShortArray`, `IntArray`, `FloatArray`, `DoubleArray`
+ *   * `Array<exportable-type>`
+ *   * Function types with exportable parameters and return types
+ *   * `external` or `@JsExport` classes and interfaces
+ *   * Nullable counterparts of types above
+ *   * Unit return type. Must not be nullable
+ *
+ * This annotation is experimental, meaning that restrictions mentioned above are subject to change.
  */
 @ExperimentalJsExport
 @Retention(AnnotationRetention.BINARY)

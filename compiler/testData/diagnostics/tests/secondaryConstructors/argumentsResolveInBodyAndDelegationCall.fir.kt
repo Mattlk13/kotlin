@@ -13,11 +13,11 @@ class A : B {
         foo(x.toInt(), y, myProp)
         x + y + myProp + parentProp + super.parentProp
     }
-    constructor(x: String, y: Int): <!INAPPLICABLE_CANDIDATE!>super<!>(x) {
-        <!INAPPLICABLE_CANDIDATE!>foo<!>(x, y, myProp)
+    constructor(x: String, y: Int): super(<!ARGUMENT_TYPE_MISMATCH!>x<!>) {
+        foo(<!ARGUMENT_TYPE_MISMATCH!>x<!>, y, myProp)
         x + y + myProp + parentProp + super.parentProp
     }
-    constructor(x: B, y: Int = <!UNRESOLVED_REFERENCE!>global2<!>): <!INAPPLICABLE_CANDIDATE!>this<!>("", x) {
+    constructor(x: B, y: Int = <!UNRESOLVED_REFERENCE!>global2<!>): <!NONE_APPLICABLE!>this<!>("", x) {
         x.parentProp + y + myProp + parentProp + super.parentProp
     }
 

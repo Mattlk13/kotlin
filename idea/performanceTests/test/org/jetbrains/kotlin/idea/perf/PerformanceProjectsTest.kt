@@ -5,22 +5,27 @@
 
 package org.jetbrains.kotlin.idea.perf
 
+import com.intellij.codeHighlighting.*
 import com.intellij.codeInsight.daemon.impl.HighlightInfo
-import com.intellij.lang.annotation.AnnotationHolder
+import com.intellij.codeInsight.daemon.impl.analysis.HighlightInfoHolder
+import com.intellij.openapi.editor.Document
+import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.util.Disposer
-import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiFile
+import com.intellij.testFramework.RunAll
+import com.intellij.util.ThrowableRunnable
 import org.jetbrains.kotlin.idea.core.script.ScriptConfigurationManager
-import org.jetbrains.kotlin.idea.highlighter.KotlinPsiChecker
-import org.jetbrains.kotlin.idea.highlighter.KotlinPsiCheckerAndHighlightingUpdater
+import org.jetbrains.kotlin.idea.highlighter.KotlinHighlightVisitor
 import org.jetbrains.kotlin.idea.perf.Stats.Companion.TEST_KEY
-import org.jetbrains.kotlin.idea.perf.Stats.Companion.WARM_UP
 import org.jetbrains.kotlin.idea.perf.Stats.Companion.runAndMeasure
-import org.jetbrains.kotlin.idea.perf.Stats.Companion.tcSuite
+import org.jetbrains.kotlin.idea.perf.util.Metric
+import org.jetbrains.kotlin.idea.perf.util.TeamCity.suite
 import org.jetbrains.kotlin.idea.testFramework.Fixture
 import org.jetbrains.kotlin.idea.testFramework.Fixture.Companion.cleanupCaches
 import org.jetbrains.kotlin.idea.testFramework.Fixture.Companion.isAKotlinScriptFile
 import org.jetbrains.kotlin.idea.testFramework.ProjectOpenAction.GRADLE_PROJECT
+import org.jetbrains.kotlin.psi.KtFile
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.test.assertNotEquals
 
@@ -29,18 +34,16 @@ class PerformanceProjectsTest : AbstractPerformanceProjectsTest() {
     companion object {
 
         @JvmStatic
-        var warmedUp: Boolean = false
+        val hwStats: Stats = Stats("helloWorld project")
 
         @JvmStatic
-        val hwStats: Stats = Stats("helloWorld project")
+        val warmUp = WarmUpProject(hwStats)
 
         @JvmStatic
         val timer: AtomicLong = AtomicLong()
 
-        init {
-            // there is no @AfterClass for junit3.8
-            Runtime.getRuntime().addShutdownHook(Thread { hwStats.close() })
-        }
+        @JvmStatic
+        val diagnosticTimer: AtomicLong = AtomicLong()
 
         fun resetTimestamp() {
             timer.set(0)
@@ -53,17 +56,34 @@ class PerformanceProjectsTest : AbstractPerformanceProjectsTest() {
 
     override fun setUp() {
         super.setUp()
-        // warm up: open simple small project
-        if (!warmedUp) {
-            warmUpProject(hwStats, "src/HelloMain.kt") { perfOpenHelloWorld(hwStats, WARM_UP) }
-            warmedUp = true
-        }
+        warmUp.warmUp(this)
+    }
+
+    override fun tearDown() {
+        RunAll(
+            ThrowableRunnable { super.tearDown() }
+        ).run()
     }
 
     fun testHelloWorldProject() {
+        suite("Hello world project") {
+            myProject = perfOpenProject(stats = hwStats) {
+                name("helloKotlin")
 
-        tcSuite("Hello world project") {
-            myProject = perfOpenHelloWorld(hwStats)
+                kotlinFile("HelloMain") {
+                    topFunction("main") {
+                        param("args", "Array<String>")
+                        body("""println("Hello World!")""")
+                    }
+                }
+
+                kotlinFile("HelloMain2") {
+                    topFunction("main") {
+                        param("args", "Array<String>")
+                        body("""println("Hello World!")""")
+                    }
+                }
+            }
 
             // highlight
             perfHighlightFile("src/HelloMain.kt", hwStats)
@@ -72,9 +92,8 @@ class PerformanceProjectsTest : AbstractPerformanceProjectsTest() {
     }
 
     fun testKotlinProject() {
-        tcSuite("Kotlin project") {
-            val stats = Stats("kotlin project")
-            stats.use {
+        suite("Kotlin project") {
+            Stats("kotlin project").use {
                 perfOpenKotlinProject(it)
 
                 val filesToHighlight = arrayOf(
@@ -114,9 +133,8 @@ class PerformanceProjectsTest : AbstractPerformanceProjectsTest() {
     }
 
     fun testKotlinProjectCopyAndPaste() {
-        tcSuite("Kotlin copy-and-paste") {
-            val stats = Stats("Kotlin copy-and-paste")
-            stats.use { stat ->
+        suite("Kotlin copy-and-paste") {
+            Stats("Kotlin copy-and-paste").use { stat ->
                 perfOpenKotlinProjectFast(stat)
 
                 perfCopyAndPaste(
@@ -129,9 +147,8 @@ class PerformanceProjectsTest : AbstractPerformanceProjectsTest() {
     }
 
     fun testKotlinProjectCompletionKtFile() {
-        tcSuite("Kotlin completion ktFile") {
-            val stats = Stats("Kotlin completion ktFile")
-            stats.use { stat ->
+        suite("Kotlin completion ktFile") {
+            Stats("Kotlin completion ktFile").use { stat ->
                 perfOpenKotlinProjectFast(stat)
 
                 perfTypeAndAutocomplete(
@@ -152,14 +169,53 @@ class PerformanceProjectsTest : AbstractPerformanceProjectsTest() {
                     lookupElements = listOf("importDirectives"),
                     note = "out-of-method import"
                 )
+
+                perfTypeAndAutocomplete(
+                    stat,
+                    fileName = "compiler/backend/src/org/jetbrains/kotlin/codegen/state/KotlinTypeMapper.kt",
+                    marker = "fun mapOwner(descriptor: DeclarationDescriptor): Type {",
+                    insertString = "val b = bind",
+                    typeAfterMarker = true,
+                    lookupElements = listOf("bindingContext"),
+                    note = "in-method completion for KotlinTypeMapper"
+                )
+
+                perfTypeAndAutocomplete(
+                    stat,
+                    fileName = "compiler/backend/src/org/jetbrains/kotlin/codegen/state/KotlinTypeMapper.kt",
+                    marker = "fun mapOwner(descriptor: DeclarationDescriptor): Type {",
+                    insertString = "val b = bind",
+                    typeAfterMarker = false,
+                    lookupElements = listOf("bindingContext"),
+                    note = "out-of-method completion for KotlinTypeMapper"
+                )
+
+                perfTypeAndAutocomplete(
+                    stat,
+                    fileName = "compiler/tests/org/jetbrains/kotlin/util/ArgsToParamsMatchingTest.kt",
+                    marker = "fun testMatchNamed() {",
+                    insertString = "testMatch",
+                    typeAfterMarker = true,
+                    lookupElements = listOf("testMatchNamed"),
+                    note = "in-method completion for ArgsToParamsMatchingTest"
+                )
+
+                perfTypeAndAutocomplete(
+                    stat,
+                    fileName = "compiler/tests/org/jetbrains/kotlin/util/ArgsToParamsMatchingTest.kt",
+                    marker = "class ArgsToParamsMatchingTest {",
+                    insertString = "val me = ",
+                    typeAfterMarker = true,
+                    lookupElements = listOf("ArgsToParamsMatchingTest"),
+                    note = "out-of-method completion for ArgsToParamsMatchingTest"
+                )
             }
         }
     }
 
     fun testKotlinProjectCompletionBuildGradle() {
-        tcSuite("Kotlin completion gradle.kts") {
-            val stats = Stats("kotlin completion gradle.kts")
-            stats.use { stat ->
+        suite("Kotlin completion gradle.kts") {
+            Stats("kotlin completion gradle.kts").use { stat ->
                 runAndMeasure("open kotlin project") {
                     perfOpenKotlinProjectFast(stat)
                 }
@@ -191,9 +247,8 @@ class PerformanceProjectsTest : AbstractPerformanceProjectsTest() {
     }
 
     fun testKotlinProjectScriptDependenciesBuildGradle() {
-        tcSuite("Kotlin scriptDependencies gradle.kts") {
-            val stats = Stats("kotlin scriptDependencies gradle.kts")
-            stats.use { stat ->
+        suite("Kotlin scriptDependencies gradle.kts") {
+            Stats("kotlin scriptDependencies gradle.kts").use { stat ->
                 perfOpenKotlinProjectFast(stat)
 
                 perfScriptDependenciesBuildGradleKts(stat)
@@ -205,9 +260,8 @@ class PerformanceProjectsTest : AbstractPerformanceProjectsTest() {
     }
 
     fun testKotlinProjectBuildGradle() {
-        tcSuite("Kotlin gradle.kts") {
-            val stats = Stats("kotlin gradle.kts")
-            stats.use { stat ->
+        suite("Kotlin gradle.kts") {
+            Stats("kotlin gradle.kts").use { stat ->
                 perfOpenKotlinProjectFast(stat)
 
                 perfFileAnalysisBuildGradleKts(stat)
@@ -269,52 +323,65 @@ class PerformanceProjectsTest : AbstractPerformanceProjectsTest() {
         note: String = ""
     ) {
         val project = myProject!!
-        val disposable = Disposer.newDisposable("perfKtsFileAnalysis $fileName")
+        //val disposable = Disposer.newDisposable("perfKtsFileAnalysis $fileName")
 
-        enableAllInspectionsCompat(project, disposable)
+        //enableAllInspectionsCompat(project, disposable)
 
         replaceWithCustomHighlighter()
 
-        try {
-            highlightFile {
-                val testName = "fileAnalysis ${notePrefix(note)}${simpleFilename(fileName)}"
-                val extraStats = Stats("${stats.name} $testName")
-                val extraTimingsNs = mutableListOf<Map<String, Any>?>()
+        highlightFile {
+            val testName = "fileAnalysis ${notePrefix(note)}${simpleFilename(fileName)}"
+            val extraStats = Stats("${stats.name} $testName")
+            val extraTimingsNs = mutableListOf<Map<String, Any>?>()
+            val diagnosticTimingsNs = mutableListOf<Map<String, Any>?>()
 
-                val warmUpIterations = 20
-                val iterations = 30
+            val warmUpIterations = 30
+            val iterations = 50
 
-                performanceTest<Fixture, Pair<Long, List<HighlightInfo>>> {
-                    name(testName)
-                    stats(stats)
-                    warmUpIterations(30)
-                    iterations(50)
-                    setUp(perfKtsFileAnalysisSetUp(project, fileName))
-                    test(perfKtsFileAnalysisTest())
-                    tearDown(perfKtsFileAnalysisTearDown(extraTimingsNs, project))
-                    profilerEnabled(true)
-                }
-
-                extraStats.printWarmUpTimings(
-                    "annotator",
-                    extraTimingsNs.take(warmUpIterations).toTypedArray()
-                )
-
-                extraStats.appendTimings(
-                    "annotator",
-                    extraTimingsNs.drop(warmUpIterations).toTypedArray()
-                )
+            performanceTest<Fixture, Pair<Long, List<HighlightInfo>>> {
+                name(testName)
+                stats(stats)
+                warmUpIterations(warmUpIterations)
+                iterations(iterations)
+                setUp(perfKtsFileAnalysisSetUp(project, fileName))
+                test(perfKtsFileAnalysisTest())
+                tearDown(perfKtsFileAnalysisTearDown(extraTimingsNs, diagnosticTimingsNs, project))
+                profilerConfig.enabled = true
             }
-        } finally {
-            Disposer.dispose(disposable)
+
+            val metricChildren = mutableListOf<Metric>()
+
+            extraStats.printWarmUpTimings(
+                "annotator",
+                extraTimingsNs.take(warmUpIterations).toTypedArray(),
+                metricChildren
+            )
+
+            extraStats.printWarmUpTimings(
+                "diagnostic",
+                diagnosticTimingsNs.take(warmUpIterations).toTypedArray(),
+                metricChildren
+            )
+
+            extraStats.processTimings(
+                "annotator",
+                extraTimingsNs.drop(warmUpIterations).toTypedArray(),
+                metricChildren
+            )
+
+            extraStats.processTimings(
+                "diagnostic",
+                diagnosticTimingsNs.drop(warmUpIterations).toTypedArray(),
+                metricChildren
+            )
         }
     }
 
     private fun replaceWithCustomHighlighter() {
         org.jetbrains.kotlin.idea.testFramework.replaceWithCustomHighlighter(
             testRootDisposable,
-            KotlinPsiCheckerAndHighlightingUpdater::class.java.name,
-            TestKotlinPsiChecker::class.java.name
+            KotlinHighlightVisitor::class.java.name,
+            TestKotlinHighlightVisitor::class.java.name
         )
     }
 
@@ -338,18 +405,22 @@ class PerformanceProjectsTest : AbstractPerformanceProjectsTest() {
     fun perfKtsFileAnalysisTest(): (TestData<Fixture, Pair<Long, List<HighlightInfo>>>) -> Unit {
         return {
             it.value = it.setUpValue?.let { fixture ->
-                Pair(System.nanoTime(), fixture.doHighlighting())
+                val nowNs = System.nanoTime()
+                diagnosticTimer.set(-nowNs)
+                Pair(nowNs, fixture.doHighlighting())
             }
         }
     }
 
     fun perfKtsFileAnalysisTearDown(
         extraTimingsNs: MutableList<Map<String, Any>?>,
+        diagnosticTimingsMs: MutableList<Map<String, Any>?>,
         project: Project
     ): (TestData<Fixture, Pair<Long, List<HighlightInfo>>>) -> Unit {
         return {
             it.setUpValue?.let { fixture ->
                 it.value?.let { v ->
+                    diagnosticTimingsMs.add(mapOf(TEST_KEY to diagnosticTimer.getAndSet(0)))
                     assertTrue(v.second.isNotEmpty())
                     assertNotEquals(0, timer.get())
 
@@ -364,12 +435,21 @@ class PerformanceProjectsTest : AbstractPerformanceProjectsTest() {
     }
 
 
-    class TestKotlinPsiChecker : KotlinPsiChecker() {
-        override fun annotate(
-            element: PsiElement, holder: AnnotationHolder
-        ) {
-            super.annotate(element, holder)
-            markTimestamp()
+    class TestKotlinHighlightVisitor : KotlinHighlightVisitor() {
+        override fun analyze(psiFile: PsiFile, updateWholeFile: Boolean, holder: HighlightInfoHolder, action: Runnable): Boolean {
+            // TODO:
+            //annotationCallback {
+            //    val nowNs = System.nanoTime()
+            //    diagnosticTimer.addAndGet(nowNs)
+            //    resetAnnotationCallback()
+            //}
+            try {
+                return super.analyze(psiFile, updateWholeFile, holder, action)
+            } finally {
+                //resetAnnotationCallback()
+                markTimestamp()
+            }
         }
+
     }
 }

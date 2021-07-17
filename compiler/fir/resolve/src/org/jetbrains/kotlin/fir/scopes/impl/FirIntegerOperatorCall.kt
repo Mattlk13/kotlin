@@ -12,7 +12,7 @@ import org.jetbrains.kotlin.fir.builder.FirBuilderDsl
 import org.jetbrains.kotlin.fir.expressions.FirAnnotationCall
 import org.jetbrains.kotlin.fir.expressions.FirArgumentList
 import org.jetbrains.kotlin.fir.expressions.FirExpression
-import org.jetbrains.kotlin.fir.expressions.FirFunctionCall
+import org.jetbrains.kotlin.fir.expressions.FirFunctionCallOrigin
 import org.jetbrains.kotlin.fir.expressions.builder.FirCallBuilder
 import org.jetbrains.kotlin.fir.expressions.builder.FirExpressionBuilder
 import org.jetbrains.kotlin.fir.expressions.builder.FirQualifiedAccessBuilder
@@ -28,7 +28,6 @@ class FirIntegerOperatorCall @FirImplementationDetail constructor(
     source: FirSourceElement?,
     typeRef: FirTypeRef,
     annotations: MutableList<FirAnnotationCall>,
-    safe: Boolean,
     typeArguments: MutableList<FirTypeProjection>,
     explicitReceiver: FirExpression?,
     dispatchReceiver: FirExpression,
@@ -39,13 +38,13 @@ class FirIntegerOperatorCall @FirImplementationDetail constructor(
     source,
     typeRef,
     annotations,
-    safe,
     typeArguments,
     explicitReceiver,
     dispatchReceiver,
     extensionReceiver,
     argumentList,
     calleeReference,
+    FirFunctionCallOrigin.Operator
 )
 
 @FirBuilderDsl
@@ -53,7 +52,6 @@ class FirIntegerOperatorCallBuilder : FirQualifiedAccessBuilder, FirCallBuilder,
     override var source: FirSourceElement? = null
     override var typeRef: FirTypeRef = buildImplicitTypeRef()
     override val annotations: MutableList<FirAnnotationCall> = mutableListOf()
-    override var safe: Boolean = false
     override val typeArguments: MutableList<FirTypeProjection> = mutableListOf()
     override var explicitReceiver: FirExpression? = null
     override var dispatchReceiver: FirExpression = FirNoReceiverExpression
@@ -67,7 +65,6 @@ class FirIntegerOperatorCallBuilder : FirQualifiedAccessBuilder, FirCallBuilder,
             source,
             typeRef,
             annotations,
-            safe,
             typeArguments,
             explicitReceiver,
             dispatchReceiver,
@@ -79,6 +76,6 @@ class FirIntegerOperatorCallBuilder : FirQualifiedAccessBuilder, FirCallBuilder,
 
 }
 
-inline fun buildFunctionCall(init: FirIntegerOperatorCallBuilder.() -> Unit): FirIntegerOperatorCall {
+inline fun buildIntegerOperatorFunctionCall(init: FirIntegerOperatorCallBuilder.() -> Unit): FirIntegerOperatorCall {
     return FirIntegerOperatorCallBuilder().apply(init).build()
 }

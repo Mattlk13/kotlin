@@ -7,13 +7,15 @@ package org.jetbrains.kotlin.idea.perf
 
 import org.jetbrains.kotlin.idea.perf.WholeProjectPerformanceTest.Companion.nsToMs
 import org.jetbrains.kotlin.idea.perf.profilers.*
-import org.jetbrains.kotlin.idea.testFramework.logMessage
-import org.jetbrains.kotlin.idea.testFramework.suggestOsNeutralFileName
+import org.jetbrains.kotlin.idea.perf.util.*
 import org.jetbrains.kotlin.util.PerformanceCounter
 import java.io.*
-import kotlin.system.measureNanoTime
 import java.lang.ref.WeakReference
+import java.text.SimpleDateFormat
+import java.util.*
+import kotlin.collections.HashMap
 import kotlin.math.*
+import kotlin.system.measureNanoTime
 import kotlin.system.measureTimeMillis
 import kotlin.test.assertEquals
 
@@ -21,46 +23,42 @@ typealias StatInfos = Map<String, Any>?
 
 class Stats(
     val name: String = "",
-    private val header: Array<String> = arrayOf("Name", "ValueMS", "StdDev"),
+    private val profilerConfig: ProfilerConfig = ProfilerConfig(),
     private val acceptanceStabilityLevel: Int = 25
-) : Closeable {
+) : AutoCloseable {
 
     private val perfTestRawDataMs = mutableListOf<Long>()
-
-    private val statsFile: File = File(pathToResource("stats${statFilePrefix()}.csv")).absoluteFile
-
-    private val statsOutput: BufferedWriter
+    private var metric: Metric? = null
 
     init {
-        statsOutput = statsFile.bufferedWriter()
-
-        statsOutput.appendln(header.joinToString())
-
         PerformanceCounter.setTimeCounterEnabled(true)
     }
 
-    private fun statFilePrefix() = if (name.isNotEmpty()) "-${plainname()}" else ""
-
-    private fun plainname() = suggestOsNeutralFileName(name)
-
-    private fun pathToResource(resource: String) = "build/$resource"
-
-    private fun append(id: String, statInfosArray: Array<StatInfos>) {
+    private fun calcAndProcessMetrics(id: String, statInfosArray: Array<StatInfos>, rawMetricChildren: MutableList<Metric>) {
         val timingsMs = toTimingsMs(statInfosArray)
 
         val calcMean = calcMean(timingsMs)
 
-        for (v in listOf(
-            Triple("mean", "", calcMean.mean.toLong()),
-            Triple("stdDev", " stdDev", calcMean.stdDev.toLong()),
-            Triple("geomMean", " geomMean", calcMean.geomMean.toLong())
-        )) {
-            val n = "$id : ${v.first}"
+        val metricChildren = mutableListOf<Metric>()
+        val hasError = if (rawMetricChildren.any { it.hasError == true }) true else null
+        metric = Metric(
+            id, metricValue = calcMean.mean.toLong(), metricError = calcMean.stdDev.toLong(),
+            hasError = hasError, metrics = metricChildren
+        )
+        // TODO:
 
-            printTestStarted(n)
-            printStatValue("$id${v.second}", v.third)
-            printTestFinished(n, v.third, includeStatValue = false)
-        }
+        metricChildren.add(
+            Metric(
+                "_value", metricValue = calcMean.mean.toLong(),
+                hasError = hasError,
+                metricError = calcMean.stdDev.toLong(),
+                rawMetrics = rawMetricChildren
+            )
+        )
+        metricChildren.add(Metric("mean", metricValue = calcMean.mean.toLong()))
+        // keep geomMean for bwc
+        metricChildren.add(Metric(GEOM_MEAN, metricValue = calcMean.geomMean.toLong()))
+        metricChildren.add(Metric("stdDev", metricValue = calcMean.stdDev.toLong()))
 
         statInfosArray.filterNotNull()
             .map { it.keys }
@@ -74,49 +72,21 @@ class Stats(
                 val mean = statInfoMean.mean.toLong()
 
                 val shortName = if (perfCounterName.endsWith(": time")) n.removeSuffix(": time") else null
+                val metricShortName = if (perfCounterName.endsWith(": time")) perfCounterName.removeSuffix(": time") else perfCounterName
 
-                shortName?.let { printTestStarted(it) }
-                printStatValue(n, mean)
-                shortName?.let { printTestFinished(it, mean, includeStatValue = false) }
+                metricChildren.add(Metric(": $metricShortName", metricValue = mean))
+
+                TeamCity.test(shortName, durationMs = mean) {}
             }
 
         perfTestRawDataMs.addAll(timingsMs.toList())
-        append(arrayOf(id, calcMean.mean, calcMean.stdDev))
+        metric!!.writeTeamCityStats(name)
     }
 
     private fun toTimingsMs(statInfosArray: Array<StatInfos>) =
         statInfosArray.map { info -> info?.let { it[TEST_KEY] as? Long }?.nsToMs ?: 0L }.toLongArray()
 
     private fun calcMean(statInfosArray: Array<StatInfos>): Mean = calcMean(toTimingsMs(statInfosArray))
-
-    private fun calcMean(values: LongArray): Mean {
-        val mean = values.average()
-
-        val stdDev = if (values.size > 1) (sqrt(
-            values.fold(0.0,
-                        { accumulator, next -> accumulator + (1.0 * (next - mean)).pow(2) })
-        ) / (values.size - 1))
-        else 0.0
-
-        val geomMean = geomMean(values.toList())
-
-        return Mean(mean, stdDev, geomMean)
-    }
-
-    data class Mean(val mean: Double, val stdDev: Double, val geomMean: Double)
-
-    private fun append(values: Array<Any>) {
-        require(values.size == header.size) { "Expected ${header.size} values, actual ${values.size} values" }
-        with(statsOutput) {
-            appendln(values.joinToString { it.toString() })
-            flush()
-        }
-    }
-
-    fun append(file: String, id: String, nanoTime: Long) {
-        val ms = nanoTime.nsToMs
-        append(arrayOf(file, id, ms))
-    }
 
     fun <SV, TV> perfTest(
         testName: String,
@@ -125,151 +95,210 @@ class Stats(
         setUp: (TestData<SV, TV>) -> Unit = { },
         test: (TestData<SV, TV>) -> Unit,
         tearDown: (TestData<SV, TV>) -> Unit = { },
-        profilerEnabled: Boolean = false,
-        checkStability: Boolean = true
+        checkStability: Boolean = true,
+        stopAtException: Boolean = false,
     ) {
-
         val warmPhaseData = PhaseData(
             iterations = warmUpIterations,
             testName = testName,
             setUp = setUp,
             test = test,
             tearDown = tearDown,
-            profilerEnabled = profilerEnabled
         )
         val mainPhaseData = PhaseData(
             iterations = iterations,
             testName = testName,
             setUp = setUp,
             test = test,
-            tearDown = tearDown,
-            profilerEnabled = profilerEnabled
+            tearDown = tearDown
         )
         val block = {
-            warmUpPhase(warmPhaseData)
-            val statInfoArray = mainPhase(mainPhaseData)
+            val metricChildren = mutableListOf<Metric>()
+            try {
+                warmUpPhase(warmPhaseData, metricChildren, stopAtException)
+                val statInfoArray = mainPhase(mainPhaseData, metricChildren, stopAtException)
 
-            assertEquals(iterations, statInfoArray.size)
-            if (testName != WARM_UP) {
-                appendTimings(testName, statInfoArray)
+                assertEquals(iterations, statInfoArray.size)
+                if (testName != WARM_UP) {
+                    // do not estimate stability for warm-up
+                    if (!testName.contains(WARM_UP)) {
+                        val calcMean = calcMean(statInfoArray)
+                        val stabilityPercentage = round(calcMean.stdDev * 100.0 / calcMean.mean).toInt()
+                        logMessage { "$testName stability is $stabilityPercentage %" }
+                        val stabilityName = "$name: $testName stability"
 
-                // do not estimate stability for warm-up
-                if (!testName.contains(WARM_UP)) {
-                    val calcMean = calcMean(statInfoArray)
-                    val stabilityPercentage = round(calcMean.stdDev * 100.0 / calcMean.mean).toInt()
-                    logMessage { "$testName stability is $stabilityPercentage %" }
-                    val stabilityName = "$name: $testName stability"
+                        val stable = stabilityPercentage <= acceptanceStabilityLevel
 
-                    val stable = stabilityPercentage <= acceptanceStabilityLevel
-                    printTestStarted(stabilityName)
-                    printStatValue(stabilityName, stabilityPercentage)
-                    if (stable or !checkStability) {
-                        printTestFinished(stabilityName)
-                    } else {
-                        printTestFailed(
-                            stabilityName,
+                        val error = if (stable or !checkStability) {
+                            null
+                        } else {
                             "$testName stability is $stabilityPercentage %, above accepted level of $acceptanceStabilityLevel %"
-                        )
+                        }
+
+                        TeamCity.test(stabilityName, errorDetails = error, includeStats = false) {
+                            metricChildren.add(Metric("stability", metricValue = stabilityPercentage.toLong()))
+                        }
                     }
+
+                    processTimings(testName, statInfoArray, metricChildren)
+                } else {
+                    convertStatInfoIntoMetrics(
+                        testName,
+                        printOnlyErrors = true,
+                        statInfoArray = statInfoArray,
+                        metricChildren = metricChildren
+                    )
                 }
-            } else {
-                printTimings(testName, printOnlyErrors = true, statInfoArray = statInfoArray)
+            } catch (e: Throwable) {
+                processTimings(testName, emptyArray(), metricChildren)
+                if (stopAtException) {
+                    throw e
+                }
             }
         }
 
         if (testName != WARM_UP) {
-            tcSuite(testName, block)
+            TeamCity.suite(testName, block)
         } else {
             block()
         }
+
+        flush()
     }
 
-    private fun printTimings(
+    private fun convertStatInfoIntoMetrics(
         prefix: String,
         statInfoArray: Array<StatInfos>,
         printOnlyErrors: Boolean = false,
+        metricChildren: MutableList<Metric>,
+        warmUp: Boolean = false,
         attemptFn: (Int) -> String = { attempt -> "#$attempt" }
     ) {
         for (statInfoIndex in statInfoArray.withIndex()) {
             val attempt = statInfoIndex.index
             val statInfo = statInfoIndex.value ?: continue
-            val n = "$name: $prefix ${attemptFn(attempt)}"
+            val attemptString = attemptFn(attempt)
+            val s = "$prefix $attemptString"
+            val n = "$name: $s"
+            val childrenMetrics = mutableListOf<Metric>()
 
             val t = statInfo[ERROR_KEY] as? Throwable
             if (t != null) {
-                printTestStarted(n)
-                printTestFinished(n, t)
+                TeamCity.test(n, errors = listOf(t)) {}
+                //logMessage { "metricChildren.add(Metric('$attemptString', value = null, hasError = true))" }
+                metricChildren.add(Metric(attemptString, metricValue = null, hasError = true))
             } else if (!printOnlyErrors) {
-                printTestStarted(n)
-                for ((k, v) in statInfo) {
-                    if (k == TEST_KEY) continue
-                    printStatValue("$n $k", v)
+                val durationMs = (statInfo[TEST_KEY] as Long).nsToMs
+                TeamCity.test(n, durationMs = durationMs, includeStats = false) {
+                    for ((k, v) in statInfo) {
+                        if (k == TEST_KEY) continue
+                        (v as? Number)?.let {
+                            childrenMetrics.add(Metric(k, metricValue = v.toLong()))
+                            //TeamCity.metadata(n, k, it)
+                        }
+                    }
                 }
-
-                printTestFinished(n, (statInfo[TEST_KEY] as Long).nsToMs)
+                metricChildren.add(
+                    Metric(
+                        metricName = attemptString,
+                        index = attempt,
+                        warmUp = if (warmUp) true else null,
+                        metricValue = durationMs,
+                        metrics = childrenMetrics
+                    )
+                )
             }
         }
     }
 
     fun printWarmUpTimings(
         prefix: String,
-        warmUpStatInfosArray: Array<StatInfos>
-    ) = printTimings(prefix, warmUpStatInfosArray) { attempt -> "warm-up #$attempt" }
+        warmUpStatInfosArray: Array<StatInfos>,
+        metricChildren: MutableList<Metric>
+    ) = convertStatInfoIntoMetrics(prefix, warmUpStatInfosArray, warmUp = true, metricChildren = metricChildren) { attempt -> "warm-up #$attempt" }
 
-    fun appendTimings(
+    fun processTimings(
         prefix: String,
-        statInfosArray: Array<StatInfos>
+        statInfosArray: Array<StatInfos>,
+        metricChildren: MutableList<Metric>
     ) {
-        printTimings(prefix, statInfosArray)
-        append("$name: $prefix", statInfosArray)
+        try {
+            convertStatInfoIntoMetrics(prefix, statInfosArray, metricChildren = metricChildren)
+        } finally {
+            calcAndProcessMetrics(prefix, statInfosArray, metricChildren)
+        }
     }
 
-    private fun <SV, TV> warmUpPhase(phaseData: PhaseData<SV, TV>) {
-        val warmUpStatInfosArray = phase(phaseData, WARM_UP)
+    private fun <SV, TV> warmUpPhase(
+        phaseData: PhaseData<SV, TV>,
+        metricChildren: MutableList<Metric>,
+        stopAtException: Boolean,
+    ) {
+        val warmUpStatInfosArray = phase(phaseData, WARM_UP, true, stopAtException)
 
         if (phaseData.testName != WARM_UP) {
-            printWarmUpTimings(phaseData.testName, warmUpStatInfosArray)
+            printWarmUpTimings(phaseData.testName, warmUpStatInfosArray, metricChildren)
         } else {
-            printTimings(
+            convertStatInfoIntoMetrics(
                 phaseData.testName,
                 printOnlyErrors = true,
-                statInfoArray = warmUpStatInfosArray
+                statInfoArray = warmUpStatInfosArray,
+                warmUp = true,
+                metricChildren = metricChildren
             ) { attempt -> "warm-up #$attempt" }
         }
 
         warmUpStatInfosArray.filterNotNull().map { it[ERROR_KEY] as? Throwable }.firstOrNull()?.let { throw it }
     }
 
-    private fun <SV, TV> mainPhase(phaseData: PhaseData<SV, TV>): Array<StatInfos> {
-        val statInfosArray = phase(phaseData, "")
-        statInfosArray.filterNotNull().map { it[ERROR_KEY] as? Throwable }.firstOrNull()?.let { throw it }
+    private fun <SV, TV> mainPhase(
+        phaseData: PhaseData<SV, TV>,
+        metricChildren: MutableList<Metric>,
+        stopAtException: Boolean,
+    ): Array<StatInfos> {
+        val statInfosArray = phase(phaseData, "", stopAtException = stopAtException)
+        statInfosArray.filterNotNull().map { it[ERROR_KEY] as? Throwable }.firstOrNull()?.let {
+            convertStatInfoIntoMetrics(
+                phaseData.testName,
+                printOnlyErrors = true,
+                statInfoArray = statInfosArray,
+                metricChildren = metricChildren
+            )
+            throw it
+        }
         return statInfosArray
     }
 
-    private fun <SV, TV> phase(phaseData: PhaseData<SV, TV>, phaseName: String): Array<StatInfos> {
+    private fun <SV, TV> phase(
+        phaseData: PhaseData<SV, TV>,
+        phaseName: String,
+        warmup: Boolean = false,
+        stopAtException: Boolean,
+    ): Array<StatInfos> {
         val statInfosArray = Array<StatInfos>(phaseData.iterations) { null }
         val testData = TestData<SV, TV>(null, null)
 
         try {
+            val phaseProfiler =
+                createPhaseProfiler(phaseData.testName, phaseName, profilerConfig.copy(warmup = warmup))
+
             for (attempt in 0 until phaseData.iterations) {
                 testData.reset()
                 triggerGC(attempt)
 
-                val phaseProfiler = createPhaseProfiler(phaseData, phaseName, attempt)
-
-                val setUpMillis = measureTimeMillis { phaseData.setUp(testData) }
+                val setUpMillis = measureTimeMillis {
+                    phaseData.setUp(testData)
+                }
                 val attemptName = "${phaseData.testName} #$attempt"
-                logMessage { "$attemptName setup took $setUpMillis ms" }
+                //logMessage { "$attemptName setup took $setUpMillis ms" }
 
                 val valueMap = HashMap<String, Any>(2 * PerformanceCounter.numberOfCounters + 1)
                 statInfosArray[attempt] = valueMap
                 try {
-
                     phaseProfiler.start()
                     valueMap[TEST_KEY] = measureNanoTime {
                         phaseData.test(testData)
                     }
-                    phaseProfiler.stop()
 
                     PerformanceCounter.report { name, counter, nanos ->
                         valueMap["counter \"$name\": count"] = counter.toLong()
@@ -281,11 +310,12 @@ class Stats(
                     valueMap[ERROR_KEY] = t
                     break
                 } finally {
+                    phaseProfiler.stop()
                     try {
                         val tearDownMillis = measureTimeMillis {
                             phaseData.tearDown(testData)
                         }
-                        logMessage { "$attemptName tearDown took $tearDownMillis ms" }
+                        //logMessage { "$attemptName tearDown took $tearDownMillis ms" }
                     } catch (t: Throwable) {
                         logMessage(t) { "error at tearDown of $attemptName" }
                         valueMap[ERROR_KEY] = t
@@ -297,24 +327,28 @@ class Stats(
             }
         } catch (t: Throwable) {
             logMessage(t) { "error at ${phaseData.testName}" }
-            tcPrintErrors(phaseData.testName, listOf(t))
+            TeamCity.testFailed(name, error = t)
+            if (stopAtException) {
+                throw t
+            }
         }
         return statInfosArray
     }
 
-    private fun <K, T> createPhaseProfiler(
-        phaseData: PhaseData<K, T>,
+    private fun createPhaseProfiler(
+        testName: String,
         phaseName: String,
-        attempt: Int
+        profilerConfig: ProfilerConfig
     ): PhaseProfiler {
-        val profilerHandler = if (phaseData.profilerEnabled) ProfilerHandler.getInstance() else DummyProfilerHandler
+        profilerConfig.name = "$testName${if (phaseName.isEmpty()) "" else "-$phaseName"}"
+        profilerConfig.path = pathToResource("profile/${plainname(name)}")
+        val profilerHandler = if (profilerConfig.enabled && !profilerConfig.warmup)
+            ProfilerHandler.getInstance(profilerConfig)
+        else
+            DummyProfilerHandler
 
         return if (profilerHandler != DummyProfilerHandler) {
-            val profilerPath = pathToResource("profile/${plainname()}")
-            check(with(File(profilerPath)) { exists() || mkdirs() }) { "unable to mkdirs $profilerPath for ${phaseData.testName}" }
-            val activityName = "${phaseData.testName}-${if (phaseName.isEmpty()) "" else "$phaseName-"}$attempt"
-
-            ActualPhaseProfiler(activityName, profilerPath, profilerHandler)
+            ActualPhaseProfiler(profilerHandler)
         } else {
             DummyPhaseProfiler
         }
@@ -330,16 +364,60 @@ class Stats(
         }
     }
 
-    private fun geomMean(data: List<Long>) = exp(data.fold(0.0, { mul, next -> mul + ln(1.0 * next) }) / data.size)
-
     override fun close() {
+        flush()
+    }
+
+    private fun flush() {
+        val simpleDateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ")
+        simpleDateFormat.timeZone = TimeZone.getTimeZone("UTC")
+//        properties["buildTimestamp"] = simpleDateFormat.format(Date())
+//        properties["buildId"] = 87015694
+//        properties["buildBranch"] = "rr/perf/json-output"
+//        properties["agentName"] = "kotlin-linux-perf-unit879"
+
+        var buildId: Int? = null
+        var agentName: String? = null
+        var buildBranch: String? = null
+        var commit: String? = null
+
+        System.getenv("TEAMCITY_BUILD_PROPERTIES_FILE")?.let { teamcityConfig ->
+            val buildProperties = Properties()
+            buildProperties.load(FileInputStream(teamcityConfig))
+
+            buildId = buildProperties["teamcity.build.id"]?.toString()?.toInt()
+            agentName = buildProperties["agent.name"]?.toString()
+            buildBranch = buildProperties["teamcity.build.branch"]?.toString()
+            commit = buildProperties["build.vcs.number"]?.toString()
+        }
+
         if (perfTestRawDataMs.isNotEmpty()) {
             val geomMeanMs = geomMean(perfTestRawDataMs.toList()).toLong()
-            printStatValue("$name geomMean", geomMeanMs)
-            append(arrayOf("$name geomMean", geomMeanMs, 0))
+            Metric(GEOM_MEAN, metricValue = geomMeanMs).writeTeamCityStats(name)
         }
-        statsOutput.flush()
-        statsOutput.close()
+
+        try {
+            metric?.let {
+                val benchmark = Benchmark(
+                    agentName = agentName,
+                    buildBranch = buildBranch,
+                    commit = commit,
+                    buildId = buildId,
+                    benchmark = name,
+                    name = it.metricName,
+                    metricValue = it.metricValue,
+                    metricError = it.metricError,
+                    buildTimestamp = simpleDateFormat.format(Date()),
+                    metrics = it.metrics ?: emptyList()
+                )
+
+                benchmark.writeJson()
+                ESUploader.upload(benchmark)
+            }
+        } finally {
+            metric = null
+        }
+        //metrics.writeCSV(name, header)
     }
 
     companion object {
@@ -347,6 +425,9 @@ class Stats(
         const val ERROR_KEY = "error"
 
         const val WARM_UP = "warm-up"
+        const val GEOM_MEAN = "geomMean"
+
+        internal val extraMetricNames = setOf("", "_value", GEOM_MEAN, "mean", "stdDev")
 
         inline fun runAndMeasure(note: String, block: () -> Unit) {
             val openProjectMillis = measureTimeMillis {
@@ -354,82 +435,34 @@ class Stats(
             }
             logMessage { "$note took $openProjectMillis ms" }
         }
-
-        fun printTestStarted(testName: String) {
-            println("##teamcity[testStarted name='$testName' captureStandardOutput='true']")
-        }
-
-        fun printStatValue(name: String, value: Any) {
-            println("##teamcity[buildStatisticValue key='$name' value='$value']")
-        }
-
-        private fun printTestFinished(testName: String) {
-            println("##teamcity[testFinished name='$testName']")
-        }
-
-        fun printTestFinished(testName: String, spentMs: Long, includeStatValue: Boolean = true) {
-            if (includeStatValue) {
-                printStatValue(testName, spentMs)
-            }
-            println("##teamcity[testFinished name='$testName' duration='$spentMs']")
-        }
-
-        fun printTestFinished(testName: String, error: Throwable) {
-            println("error at $testName:")
-            printStatValue(testName, -1)
-            tcPrintErrors(testName, listOf(error))
-        }
-
-        private fun printTestFailed(testName: String, details: String) {
-            println("##teamcity[testFailed name='$testName' message='Exceptions reported' details='${tcEscape(details)}']")
-        }
-
-        inline fun tcSuite(name: String, block: () -> Unit) {
-            println("##teamcity[testSuiteStarted name='$name']")
-            try {
-                block()
-            } finally {
-                println("##teamcity[testSuiteFinished name='$name']")
-            }
-        }
-
-        inline fun tcTest(name: String, block: () -> Pair<Long, List<Throwable>>) {
-            printTestStarted(name)
-            val (time, errors) = block()
-            tcPrintErrors(name, errors)
-        }
-
-        private fun tcEscape(s: String) = s.replace("|", "||")
-            .replace("[", "|[")
-            .replace("]", "|]")
-            .replace("\r", "|r")
-            .replace("\n", "|n")
-            .replace("'", "|'")
-
-        fun tcPrintErrors(name: String, errors: List<Throwable>) {
-            if (errors.isNotEmpty()) {
-                val detailsWriter = StringWriter()
-                val errorDetailsPrintWriter = PrintWriter(detailsWriter)
-                errors.forEach {
-                    it.printStackTrace(errorDetailsPrintWriter)
-                    errorDetailsPrintWriter.println()
-                }
-                errorDetailsPrintWriter.close()
-                val details = detailsWriter.toString()
-                printTestFailed(name, details)
-            }
-        }
     }
 
 }
+
+internal fun calcMean(values: LongArray): Mean {
+    val mean = values.average()
+
+    val stdDev = if (values.size > 1) (sqrt(
+        values.fold(0.0,
+                    { accumulator, next -> accumulator + (1.0 * (next - mean)).pow(2) })
+    ) / (values.size - 1))
+    else 0.0
+
+    val geomMean = geomMean(values.toList())
+
+    return Mean(mean, stdDev, geomMean)
+}
+
+private fun geomMean(data: List<Long>) = exp(data.fold(0.0, { mul, next -> mul + ln(1.0 * next) }) / data.size)
+
+internal data class Mean(val mean: Double, val stdDev: Double, val geomMean: Double)
 
 data class PhaseData<SV, TV>(
     val iterations: Int,
     val testName: String,
     val setUp: (TestData<SV, TV>) -> Unit,
     val test: (TestData<SV, TV>) -> Unit,
-    val tearDown: (TestData<SV, TV>) -> Unit,
-    val profilerEnabled: Boolean = false
+    val tearDown: (TestData<SV, TV>) -> Unit
 )
 
 data class TestData<SV, TV>(var setUpValue: SV?, var value: TV?) {

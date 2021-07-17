@@ -12,9 +12,10 @@ import org.jetbrains.kotlin.descriptors.VariableDescriptorWithAccessors
 import org.jetbrains.kotlin.resolve.calls.components.*
 import org.jetbrains.kotlin.resolve.calls.inference.ConstraintSystemBuilder
 import org.jetbrains.kotlin.resolve.calls.inference.NewConstraintSystem
+import org.jetbrains.kotlin.resolve.calls.inference.components.ConstraintSystemCompletionMode
 import org.jetbrains.kotlin.resolve.calls.inference.components.KotlinConstraintSystemCompleter
 import org.jetbrains.kotlin.resolve.calls.inference.model.ConstraintStorage
-import org.jetbrains.kotlin.resolve.calls.inference.model.DelegatedPropertyConstraintPosition
+import org.jetbrains.kotlin.resolve.calls.inference.model.DelegatedPropertyConstraintPositionImpl
 import org.jetbrains.kotlin.resolve.calls.model.*
 import org.jetbrains.kotlin.resolve.calls.tower.ManyCandidatesResolver
 import org.jetbrains.kotlin.resolve.calls.tower.PSICallResolver
@@ -31,7 +32,8 @@ class DelegatedPropertyInferenceSession(
     postponedArgumentsAnalyzer: PostponedArgumentsAnalyzer,
     kotlinConstraintSystemCompleter: KotlinConstraintSystemCompleter,
     callComponents: KotlinCallComponents,
-    builtIns: KotlinBuiltIns
+    builtIns: KotlinBuiltIns,
+    override val parentSession: InferenceSession?
 ) : ManyCandidatesResolver<FunctionDescriptor>(
     psiCallResolver, postponedArgumentsAnalyzer, kotlinConstraintSystemCompleter, callComponents, builtIns
 ) {
@@ -54,7 +56,7 @@ class DelegatedPropertyInferenceSession(
 
         val valueParameterForThis = descriptor.valueParameters.getOrNull(0) ?: return
         val substitutedType = freshVariablesSubstitutor.safeSubstitute(valueParameterForThis.type.unwrap())
-        commonSystem.addSubtypeConstraint(typeOfThis.unwrap(), substitutedType, DelegatedPropertyConstraintPosition(atom))
+        commonSystem.addSubtypeConstraint(typeOfThis.unwrap(), substitutedType, DelegatedPropertyConstraintPositionImpl(atom))
     }
 
     private fun ResolvedCallAtom.addConstraintsForGetValueMethod(commonSystem: ConstraintSystemBuilder) {
@@ -62,7 +64,7 @@ class DelegatedPropertyInferenceSession(
             val unsubstitutedReturnType = candidateDescriptor.returnType?.unwrap() ?: return
             val substitutedReturnType = freshVariablesSubstitutor.safeSubstitute(unsubstitutedReturnType)
 
-            commonSystem.addSubtypeConstraint(substitutedReturnType, expectedType, DelegatedPropertyConstraintPosition(atom))
+            commonSystem.addSubtypeConstraint(substitutedReturnType, expectedType, DelegatedPropertyConstraintPositionImpl(atom))
         }
 
         addConstraintForThis(candidateDescriptor, commonSystem)
@@ -73,7 +75,7 @@ class DelegatedPropertyInferenceSession(
             val unsubstitutedParameterType = candidateDescriptor.valueParameters.getOrNull(2)?.type?.unwrap() ?: return
             val substitutedParameterType = freshVariablesSubstitutor.safeSubstitute(unsubstitutedParameterType)
 
-            commonSystem.addSubtypeConstraint(expectedType, substitutedParameterType, DelegatedPropertyConstraintPosition(atom))
+            commonSystem.addSubtypeConstraint(expectedType, substitutedParameterType, DelegatedPropertyConstraintPositionImpl(atom))
         }
 
         addConstraintForThis(candidateDescriptor, commonSystem)
@@ -82,25 +84,23 @@ class DelegatedPropertyInferenceSession(
     override fun inferPostponedVariables(
         lambda: ResolvedLambdaAtom,
         initialStorage: ConstraintStorage,
+        completionMode: ConstraintSystemCompletionMode,
         diagnosticsHolder: KotlinDiagnosticsHolder
     ): Map<TypeConstructor, UnwrappedType> = emptyMap()
+
+    override fun initializeLambda(lambda: ResolvedLambdaAtom) {}
 
     override fun writeOnlyStubs(callInfo: SingleCallResolutionResult): Boolean = false
 
     override fun shouldCompleteResolvedSubAtomsOf(resolvedCallAtom: ResolvedCallAtom) = true
 }
 
-object InferenceSessionForExistingCandidates : InferenceSession {
+class InferenceSessionForExistingCandidates(
+    private val resolveReceiverIndependently: Boolean,
+    override val parentSession: InferenceSession?
+) : InferenceSession {
     override fun shouldRunCompletion(candidate: KotlinResolutionCandidate): Boolean {
-        if (ErrorUtils.isError(candidate.resolvedCall.candidateDescriptor)) return false
-
-        val builder = candidate.getSystem().getBuilder()
-        for ((_, variable) in builder.currentStorage().notFixedTypeVariables) {
-            val hasProperConstraint = variable.constraints.any { candidate.getSystem().getBuilder().isProperType(it.type) }
-            if (hasProperConstraint) return true
-        }
-
-        return false
+        return !ErrorUtils.isError(candidate.resolvedCall.candidateDescriptor)
     }
 
     override fun addPartialCallInfo(callInfo: PartialCallInfo) {}
@@ -111,6 +111,7 @@ object InferenceSessionForExistingCandidates : InferenceSession {
     override fun inferPostponedVariables(
         lambda: ResolvedLambdaAtom,
         initialStorage: ConstraintStorage,
+        completionMode: ConstraintSystemCompletionMode,
         diagnosticsHolder: KotlinDiagnosticsHolder
     ): Map<TypeConstructor, UnwrappedType> = emptyMap()
 
@@ -122,18 +123,9 @@ object InferenceSessionForExistingCandidates : InferenceSession {
 
     override fun computeCompletionMode(
         candidate: KotlinResolutionCandidate
-    ): KotlinConstraintSystemCompleter.ConstraintSystemCompletionMode? {
-        // this is a hack to mitigate questionable behavior in delegated properties design, namely:
-        // see test DelegatedProperty.ProvideDelegate#testHostAndReceiver2
+    ): ConstraintSystemCompletionMode? = null
 
-        // Normally, provideDelegate should be analyzed in INDEPENDENT mode, but now in OI there is one corner case, which
-        // doesn't fit into this design
-        val builder = candidate.getSystem().getBuilder()
-        for ((_, variable) in builder.currentStorage().notFixedTypeVariables) {
-            val hasProperConstraint = variable.constraints.any { candidate.getSystem().getBuilder().isProperType(it.type) }
-            if (hasProperConstraint) return null
-        }
+    override fun resolveReceiverIndependently(): Boolean = resolveReceiverIndependently
 
-        return KotlinConstraintSystemCompleter.ConstraintSystemCompletionMode.PARTIAL
-    }
+    override fun initializeLambda(lambda: ResolvedLambdaAtom) {}
 }

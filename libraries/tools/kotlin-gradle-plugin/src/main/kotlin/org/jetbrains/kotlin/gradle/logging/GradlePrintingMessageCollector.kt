@@ -6,8 +6,8 @@
 package org.jetbrains.kotlin.gradle.logging
 
 import org.gradle.api.logging.Logger
-import org.jetbrains.kotlin.cli.common.messages.CompilerMessageLocation
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
+import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSourceLocation
 import org.jetbrains.kotlin.cli.common.messages.GradleStyleMessageRenderer
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.compilerRunner.KotlinLogger
@@ -29,9 +29,10 @@ internal class GradlePrintingMessageCollector(
         // Do nothing
     }
 
-    override fun report(severity: CompilerMessageSeverity, message: String, location: CompilerMessageLocation?) {
+    override fun report(severity: CompilerMessageSeverity, message: String, location: CompilerMessageSourceLocation?) {
         val renderedMessage = messageRenderer.render(severity, message, location)
 
+        @Suppress("UNNECESSARY_NOT_NULL_ASSERTION")
         when (severity) {
             CompilerMessageSeverity.ERROR,
             CompilerMessageSeverity.EXCEPTION -> {

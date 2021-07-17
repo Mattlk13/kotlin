@@ -5,21 +5,22 @@
 
 package org.jetbrains.kotlin.library.impl
 
-import org.jetbrains.kotlin.library.*
+import org.jetbrains.kotlin.library.IrKotlinLibraryLayout
+import org.jetbrains.kotlin.library.IrWriter
+import org.jetbrains.kotlin.library.SerializedIrFile
+import org.jetbrains.kotlin.library.SerializedIrModule
 
 abstract class IrWriterImpl(val irLayout: IrKotlinLibraryLayout) : IrWriter {
-    init {
-        irLayout.irDir.mkdirs()
-    }
-
     override fun addDataFlowGraph(dataFlowGraph: ByteArray) {
         irLayout.dataFlowGraphFile.writeBytes(dataFlowGraph)
     }
 }
 
-class IrMonoliticWriterImpl(irLayout: IrKotlinLibraryLayout) : IrWriterImpl(irLayout) {
+class IrMonoliticWriterImpl(_irLayout: IrKotlinLibraryLayout) : IrWriterImpl(_irLayout) {
 
     override fun addIr(ir: SerializedIrModule) {
+        irLayout.irDir.mkdirs()
+
         with(ir.files.sortedBy { it.path }) {
             IrArrayWriter(map { it.fileData }).writeIntoFile(irLayout.irFiles.absolutePath)
             IrArrayWriter(map { it.declarations }).writeIntoFile(irLayout.irDeclarations.absolutePath)
@@ -27,12 +28,15 @@ class IrMonoliticWriterImpl(irLayout: IrKotlinLibraryLayout) : IrWriterImpl(irLa
             IrArrayWriter(map { it.signatures }).writeIntoFile(irLayout.irSignatures.absolutePath)
             IrArrayWriter(map { it.strings }).writeIntoFile(irLayout.irStrings.absolutePath)
             IrArrayWriter(map { it.bodies }).writeIntoFile(irLayout.irBodies.absolutePath)
+            IrArrayWriter(mapNotNull { it.debugInfo }).writeIntoFile(irLayout.irDebugInfo.absolutePath)
         }
     }
 }
 
-class IrPerFileWriterImpl(irLayout: IrKotlinLibraryLayout) : IrWriterImpl(irLayout) {
+class IrPerFileWriterImpl(_irLayout: IrKotlinLibraryLayout) : IrWriterImpl(_irLayout) {
     override fun addIr(ir: SerializedIrModule) {
+        irLayout.irDir.mkdirs()
+
         ir.files.forEach {
             serializeFile(it)
         }

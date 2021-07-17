@@ -5,23 +5,26 @@
 
 package org.jetbrains.kotlin.gradle
 
+import com.intellij.openapi.externalSystem.util.ExternalSystemApiUtil
 import com.intellij.openapi.module.Module
 import com.intellij.openapi.module.ModuleManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.rootManager
 import com.intellij.openapi.roots.*
-import com.intellij.openapi.roots.impl.ModuleOrderEntryImpl
 import com.intellij.openapi.util.io.FileUtil
 import org.jetbrains.jps.model.module.JpsModuleSourceRootType
 import org.jetbrains.jps.util.JpsPathUtil
 import org.jetbrains.kotlin.config.ExternalSystemTestRunTask
+import org.jetbrains.kotlin.idea.configuration.kotlinImportingDiagnosticsContainer
 import org.jetbrains.kotlin.idea.facet.KotlinFacet
 import org.jetbrains.kotlin.idea.facet.externalSystemTestRunTasks
+import org.jetbrains.kotlin.idea.framework.GRADLE_SYSTEM_ID
 import org.jetbrains.kotlin.idea.project.isHMPPEnabled
 import org.jetbrains.kotlin.idea.project.languageVersionSettings
 import org.jetbrains.kotlin.idea.project.platform
 import org.jetbrains.kotlin.platform.TargetPlatform
 import org.jetbrains.kotlin.platform.presentableDescription
+import org.jetbrains.plugins.gradle.util.GradleUtil
 
 class MessageCollector {
     private val builder = StringBuilder()
@@ -38,6 +41,7 @@ class MessageCollector {
     }
 }
 
+@Suppress("UnstableApiUsage")
 class ProjectInfo(
     project: Project,
     internal val projectPath: String,
@@ -48,6 +52,7 @@ class ProjectInfo(
 ) {
     internal val messageCollector = MessageCollector()
     private val moduleManager = ModuleManager.getInstance(project)
+    private val projectDataNode = ExternalSystemApiUtil.findProjectData(project, GRADLE_SYSTEM_ID, projectPath)
     private val expectedModuleNames = HashSet<String>()
     private var allModulesAsserter: (ModuleInfo.() -> Unit)? = null
 
@@ -59,7 +64,7 @@ class ProjectInfo(
     fun module(name: String, body: ModuleInfo.() -> Unit = {}) {
         val module = moduleManager.findModuleByName(name)
         if (module == null) {
-            messageCollector.report("No module found: '$name'")
+            messageCollector.report("No module found: '$name' in ${moduleManager.modules.map { it.name }}")
             return
         }
         val moduleInfo = ModuleInfo(module, this)
@@ -88,7 +93,7 @@ class ModuleInfo(
     val projectInfo: ProjectInfo
 ) {
     private val rootModel = module.rootManager
-    private val expectedDependencyNames = HashSet<String>()
+    private val expectedDependencyNames = ArrayList<String>()
     private val expectedSourceRoots = HashSet<String>()
     private val expectedExternalSystemTestTasks = ArrayList<ExternalSystemTestRunTask>()
 
@@ -201,7 +206,8 @@ class ModuleInfo(
     }
 
     fun moduleDependency(moduleName: String, scope: DependencyScope, productionOnTest: Boolean? = null) {
-        val moduleEntries = rootModel.orderEntries.filterIsInstance<ModuleOrderEntry>().filter { it.moduleName == moduleName }
+        val moduleEntries =
+            rootModel.orderEntries.filterIsInstance<ModuleOrderEntry>().filter { it.moduleName == moduleName && it.scope == scope }
         if (moduleEntries.size > 1) {
             projectInfo.messageCollector.report(
                 "Found multiple order entries for module $moduleName: ${rootModel.orderEntries.filterIsInstance<ModuleOrderEntry>()}"
@@ -225,7 +231,7 @@ class ModuleInfo(
     fun sourceFolder(pathInProject: String, rootType: JpsModuleSourceRootType<*>, packagePrefix: String? = ANY_PACKAGE_PREFIX) {
         val sourceFolder = sourceFolderByPath[pathInProject]
         if (sourceFolder == null) {
-            projectInfo.messageCollector.report("Module '${module.name}': No source folder found: '$pathInProject'")
+            projectInfo.messageCollector.report("Module '${module.name}': No source folder found: '$pathInProject' among $sourceFolderByPath")
             return
         }
         if (packagePrefix != ANY_PACKAGE_PREFIX && sourceFolder.packagePrefix != packagePrefix) {
@@ -270,6 +276,19 @@ class ModuleInfo(
         }
     }
 
+    @Suppress("UnstableApiUsage")
+    internal inline fun <reified T : KotlinImportingDiagnostic> assertDiagnosticsCount(count: Int) {
+        val moduleNode = GradleUtil.findGradleModuleData(module)
+        val diagnostics = moduleNode!!.kotlinImportingDiagnosticsContainer!!
+        val typedDiagnostics = diagnostics.filterIsInstance<T>()
+        if (typedDiagnostics.size != count) {
+            projectInfo.messageCollector.report(
+                "Expected number of ${T::class.java.simpleName} diagnostics $count doesn't match the actual one: ${typedDiagnostics.size}"
+            )
+        }
+    }
+
+
     fun run(body: ModuleInfo.() -> Unit = {}) {
         body()
 
@@ -287,7 +306,9 @@ class ModuleInfo(
             }
         }
 
-        if ((!module.externalSystemTestRunTasks().containsAll(expectedExternalSystemTestTasks)) || (projectInfo.exhaustiveTestsList && (module.externalSystemTestRunTasks() != expectedExternalSystemTestTasks))) {
+        if ((!module.externalSystemTestRunTasks()
+                .containsAll(expectedExternalSystemTestTasks)) || (projectInfo.exhaustiveTestsList && (module.externalSystemTestRunTasks() != expectedExternalSystemTestTasks))
+        ) {
             projectInfo.messageCollector.report(
                 "Module '${module.name}': Expected tests list $expectedExternalSystemTestTasks doesn't match the actual one: ${module.externalSystemTestRunTasks()}"
             )
@@ -319,7 +340,7 @@ class ModuleInfo(
 
     private fun checkProductionOnTest(library: ExportableOrderEntry, productionOnTest: Boolean?) {
         if (productionOnTest == null) return
-        val actualFlag = (library as? ModuleOrderEntryImpl)?.isProductionOnTestDependency
+        val actualFlag = (library as? ModuleOrderEntry)?.isProductionOnTestDependency
         if (actualFlag == null) {
             projectInfo.messageCollector.report(
                 "Module '${module.name}': Dependency '${library.presentableName}' has no productionOnTest property"

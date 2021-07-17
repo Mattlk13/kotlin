@@ -11,20 +11,20 @@ fun foo() {
         x = 42
     }
     // Error!
-    x.hashCode()
+    <!UNINITIALIZED_VARIABLE!>x<!>.hashCode()
 }
 
 fun bar() {
     val x: Int
     exec {
-        x = 13
+        <!CAPTURED_VAL_INITIALIZATION!>x<!> = 13
     }
 }
 
 fun bar2() {
     val x: Int
     fun foo() {
-        x = 3
+        <!CAPTURED_VAL_INITIALIZATION!>x<!> = 3
     }
     foo()
 }
@@ -60,7 +60,7 @@ class Your {
     val y = if (true) {
         val xx: Int
         exec {
-            xx = 42
+            <!CAPTURED_VAL_INITIALIZATION!>xx<!> = 42
         }
         24
     }
@@ -70,7 +70,7 @@ class Your {
 val z = if (true) {
     val xx: Int
     exec {
-        <!UNRESOLVED_REFERENCE!>xx<!> = 24
+        <!CAPTURED_VAL_INITIALIZATION!>xx<!> = 24
     }
     42
 }

@@ -1,6 +1,6 @@
+// DONT_TARGET_EXACT_BACKEND: WASM
+// WASM_MUTE_REASON: STDLIB_COLLECTIONS
 // !LANGUAGE: +NewInference +FunctionalInterfaceConversion +SamConversionPerArgument +SamConversionForKotlinFunctions
-// IGNORE_BACKEND_FIR: JVM_IR
-// SKIP_DCE_DRIVEN
 
 
 fun interface KRunnable {

@@ -5,7 +5,7 @@
 
 package org.jetbrains.kotlin.fir.declarations.synthetic
 
-import org.jetbrains.kotlin.fir.FirSession
+import org.jetbrains.kotlin.fir.FirModuleData
 import org.jetbrains.kotlin.fir.FirSourceElement
 import org.jetbrains.kotlin.fir.contracts.FirContractDescription
 import org.jetbrains.kotlin.fir.contracts.impl.FirEmptyContractDescription
@@ -14,11 +14,12 @@ import org.jetbrains.kotlin.fir.declarations.impl.FirPropertyAccessorImpl
 import org.jetbrains.kotlin.fir.expressions.FirAnnotationCall
 import org.jetbrains.kotlin.fir.expressions.FirBlock
 import org.jetbrains.kotlin.fir.references.FirControlFlowGraphReference
-import org.jetbrains.kotlin.fir.references.impl.FirEmptyControlFlowGraphReference
 import org.jetbrains.kotlin.fir.symbols.impl.FirPropertyAccessorSymbol
+import org.jetbrains.kotlin.fir.types.ConeKotlinType
 import org.jetbrains.kotlin.fir.types.FirTypeRef
 import org.jetbrains.kotlin.fir.visitors.FirTransformer
 import org.jetbrains.kotlin.fir.visitors.FirVisitor
+import org.jetbrains.kotlin.serialization.deserialization.descriptors.DeserializedContainerSource
 
 class FirSyntheticPropertyAccessor(
     val delegate: FirSimpleFunction,
@@ -27,8 +28,8 @@ class FirSyntheticPropertyAccessor(
     override val source: FirSourceElement?
         get() = delegate.source
 
-    override val session: FirSession
-        get() = delegate.session
+    override val moduleData: FirModuleData
+        get() = delegate.moduleData
 
     override val origin: FirDeclarationOrigin
         get() = FirDeclarationOrigin.Synthetic
@@ -42,8 +43,14 @@ class FirSyntheticPropertyAccessor(
     override val status: FirDeclarationStatus
         get() = delegate.status
 
+    override val dispatchReceiverType: ConeKotlinType?
+        get() = delegate.dispatchReceiverType
+
     override val receiverTypeRef: FirTypeRef?
         get() = null
+    
+    override val deprecation: DeprecationsPerUseSite?
+        get() = delegate.deprecation
 
     override val valueParameters: List<FirValueParameter>
         get() = delegate.valueParameters
@@ -67,14 +74,20 @@ class FirSyntheticPropertyAccessor(
         bind(this@FirSyntheticPropertyAccessor)
     }
 
-    override val controlFlowGraphReference: FirControlFlowGraphReference = FirEmptyControlFlowGraphReference
+    override val controlFlowGraphReference: FirControlFlowGraphReference? = null
 
     override val contractDescription: FirContractDescription = FirEmptyContractDescription
 
+    override val containerSource: DeserializedContainerSource? get() = null
+
     override fun <R, D> acceptChildren(visitor: FirVisitor<R, D>, data: D) {
         delegate.accept(visitor, data)
-        controlFlowGraphReference.accept(visitor, data)
+        controlFlowGraphReference?.accept(visitor, data)
         contractDescription.accept(visitor, data)
+    }
+
+    override fun replaceBody(newBody: FirBlock?) {
+        throw AssertionError("Transformation of synthetic property accessor isn't supported")
     }
 
     override fun <D> transformChildren(transformer: FirTransformer<D>, data: D): FirPropertyAccessorImpl {
@@ -86,10 +99,6 @@ class FirSyntheticPropertyAccessor(
     }
 
     override fun <D> transformReceiverTypeRef(transformer: FirTransformer<D>, data: D): FirPropertyAccessorImpl {
-        throw AssertionError("Transformation of synthetic property accessor isn't supported")
-    }
-
-    override fun <D> transformControlFlowGraphReference(transformer: FirTransformer<D>, data: D): FirPropertyAccessorImpl {
         throw AssertionError("Transformation of synthetic property accessor isn't supported")
     }
 
@@ -109,6 +118,14 @@ class FirSyntheticPropertyAccessor(
         throw AssertionError("Transformation of synthetic property accessor isn't supported")
     }
 
+    override fun <D> transformBody(transformer: FirTransformer<D>, data: D): FirPropertyAccessor {
+        throw AssertionError("Transformation of synthetic property accessor isn't supported")
+    }
+
+    override fun <D> transformTypeParameters(transformer: FirTransformer<D>, data: D): FirPropertyAccessor {
+        throw AssertionError("Transformation of synthetic property accessor isn't supported")
+    }
+
     override fun replaceResolvePhase(newResolvePhase: FirResolvePhase) {
         throw AssertionError("Mutation of synthetic property accessor isn't supported")
     }
@@ -121,11 +138,19 @@ class FirSyntheticPropertyAccessor(
         throw AssertionError("Mutation of synthetic property accessor isn't supported")
     }
 
+    override fun replaceDeprecation(newDeprecation: DeprecationsPerUseSite?) {
+        throw AssertionError("Mutation of synthetic property accessor isn't supported")
+    }
+
     override fun replaceValueParameters(newValueParameters: List<FirValueParameter>) {
         throw AssertionError("Mutation of synthetic property accessor isn't supported")
     }
 
     override fun replaceContractDescription(newContractDescription: FirContractDescription) {
+        throw AssertionError("Mutation of synthetic property accessor isn't supported")
+    }
+
+    override fun replaceControlFlowGraphReference(newControlFlowGraphReference: FirControlFlowGraphReference?) {
         throw AssertionError("Mutation of synthetic property accessor isn't supported")
     }
 }

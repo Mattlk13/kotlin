@@ -47,6 +47,13 @@ object CommonConfigurationKeys {
 
     @JvmField
     val EXPECT_ACTUAL_LINKER = CompilerConfigurationKey.create<Boolean>("Experimental expext/actual linker")
+
+    @JvmField
+    val USE_FIR_EXTENDED_CHECKERS = CompilerConfigurationKey.create<Boolean>("fir extended checkers")
+
+    @JvmField
+    val PARALLEL_BACKEND_THREADS =
+        CompilerConfigurationKey.create<Int>("When using the IR backend, run lowerings by file in N parallel threads")
 }
 
 var CompilerConfiguration.languageVersionSettings: LanguageVersionSettings
@@ -55,3 +62,6 @@ var CompilerConfiguration.languageVersionSettings: LanguageVersionSettings
 
 val LanguageVersionSettings.isTypeRefinementEnabled: Boolean
     get() = getFlag(AnalysisFlags.useTypeRefinement)
+
+val LanguageVersionSettings.isLibraryToSourceAnalysisEnabled: Boolean
+    get() = getFlag(AnalysisFlags.libraryToSourceAnalysis)

@@ -5,7 +5,10 @@
 
 package org.jetbrains.kotlin.fir.backend
 
-import org.jetbrains.kotlin.fir.declarations.FirSimpleFunction
+import org.jetbrains.kotlin.fir.declarations.FirClass
+import org.jetbrains.kotlin.fir.declarations.FirConstructor
+import org.jetbrains.kotlin.fir.declarations.FirProperty
+import org.jetbrains.kotlin.fir.declarations.FirPropertyAccessor
 import org.jetbrains.kotlin.fir.expressions.FirReturnExpression
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.util.parentClassOrNull
@@ -13,12 +16,22 @@ import org.jetbrains.kotlin.ir.util.parentClassOrNull
 class Fir2IrConversionScope {
     private val parentStack = mutableListOf<IrDeclarationParent>()
 
+    private val containingFirClassStack = mutableListOf<FirClass>()
+
     fun <T : IrDeclarationParent?> withParent(parent: T, f: T.() -> Unit): T {
         if (parent == null) return parent
         parentStack += parent
         parent.f()
         parentStack.removeAt(parentStack.size - 1)
         return parent
+    }
+
+    fun containingFileIfAny(): IrFile? = parentStack.getOrNull(0) as? IrFile
+
+    fun withContainingFirClass(containingFirClass: FirClass, f: () -> Unit) {
+        containingFirClassStack += containingFirClass
+        f()
+        containingFirClassStack.removeAt(containingFirClassStack.size - 1)
     }
 
     fun parentFromStack(): IrDeclarationParent = parentStack.last()
@@ -38,6 +51,8 @@ class Fir2IrConversionScope {
         return declaration
     }
 
+    fun containerFirClass(): FirClass? = containingFirClassStack.lastOrNull()
+
     private val functionStack = mutableListOf<IrFunction>()
 
     fun <T : IrFunction> withFunction(function: T, f: T.() -> Unit): T {
@@ -47,10 +62,10 @@ class Fir2IrConversionScope {
         return function
     }
 
-    private val propertyStack = mutableListOf<IrProperty>()
+    private val propertyStack = mutableListOf<Pair<IrProperty, FirProperty?>>()
 
-    fun withProperty(property: IrProperty, f: IrProperty.() -> Unit): IrProperty {
-        propertyStack += property
+    fun withProperty(property: IrProperty, firProperty: FirProperty? = null, f: IrProperty.() -> Unit): IrProperty {
+        propertyStack += (property to firProperty)
         property.f()
         propertyStack.removeAt(propertyStack.size - 1)
         return property
@@ -65,20 +80,41 @@ class Fir2IrConversionScope {
         return klass
     }
 
-    private val subjectVariableStack = mutableListOf<IrVariable>()
+    private val whenSubjectVariableStack = mutableListOf<IrVariable>()
+    private val safeCallSubjectVariableStack = mutableListOf<IrVariable>()
 
-    fun <T> withSubject(subject: IrVariable?, f: () -> T): T {
-        if (subject != null) subjectVariableStack += subject
+    fun <T> withWhenSubject(subject: IrVariable?, f: () -> T): T {
+        if (subject != null) whenSubjectVariableStack += subject
         val result = f()
-        if (subject != null) subjectVariableStack.removeAt(subjectVariableStack.size - 1)
+        if (subject != null) whenSubjectVariableStack.removeAt(whenSubjectVariableStack.size - 1)
         return result
     }
 
-    fun returnTarget(expression: FirReturnExpression): IrFunction {
-        val firTarget = expression.target.labeledElement
+    fun <T> withSafeCallSubject(subject: IrVariable?, f: () -> T): T {
+        if (subject != null) safeCallSubjectVariableStack += subject
+        val result = f()
+        if (subject != null) safeCallSubjectVariableStack.removeAt(safeCallSubjectVariableStack.size - 1)
+        return result
+    }
+
+    fun returnTarget(expression: FirReturnExpression, declarationStorage: Fir2IrDeclarationStorage): IrFunction {
+        val irTarget = when (val firTarget = expression.target.labeledElement) {
+            is FirConstructor -> declarationStorage.getCachedIrConstructor(firTarget)
+            is FirPropertyAccessor -> {
+                var answer: IrFunction? = null
+                for ((property, firProperty) in propertyStack.asReversed()) {
+                    if (firProperty?.getter === firTarget) {
+                        answer = property.getter
+                    } else if (firProperty?.setter === firTarget) {
+                        answer = property.setter
+                    }
+                }
+                answer
+            }
+            else -> declarationStorage.getCachedIrFunction(firTarget)
+        }
         for (potentialTarget in functionStack.asReversed()) {
-            // TODO: remove comparison by name
-            if (potentialTarget.name == (firTarget as? FirSimpleFunction)?.name) {
+            if (potentialTarget == irTarget) {
                 return potentialTarget
             }
         }
@@ -90,6 +126,11 @@ class Fir2IrConversionScope {
     fun dispatchReceiverParameter(irClass: IrClass): IrValueParameter? {
         for (function in functionStack.asReversed()) {
             if (function.parentClassOrNull == irClass) {
+                // An inner class's constructor needs an instance of the outer class as a dispatch receiver.
+                // However, if we are converting `this` receiver inside that constructor, now we should point to the inner class instance.
+                if (function is IrConstructor && irClass.isInner) {
+                    irClass.thisReceiver?.let { return it }
+                }
                 function.dispatchReceiverParameter?.let { return it }
             }
         }
@@ -98,5 +139,6 @@ class Fir2IrConversionScope {
 
     fun lastClass(): IrClass? = classStack.lastOrNull()
 
-    fun lastSubject(): IrVariable = subjectVariableStack.last()
+    fun lastWhenSubject(): IrVariable = whenSubjectVariableStack.last()
+    fun lastSafeCallSubject(): IrVariable = safeCallSubjectVariableStack.last()
 }

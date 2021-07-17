@@ -1,25 +1,29 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.core
 
+import com.intellij.psi.PsiComment
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiWhiteSpace
 import com.intellij.psi.impl.source.codeStyle.CodeEditUtil
 import com.intellij.psi.tree.IElementType
 import com.intellij.psi.util.PsiTreeUtil
+import com.intellij.psi.util.elementType
 import org.jetbrains.kotlin.builtins.isFunctionOrSuspendFunctionType
 import org.jetbrains.kotlin.config.LanguageFeature
-import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.extensions.DeclarationAttributeAltererExtension
+import org.jetbrains.kotlin.idea.FrontendInternals
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.caches.resolve.getResolutionFacade
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
+import org.jetbrains.kotlin.idea.project.languageVersionSettings
 import org.jetbrains.kotlin.idea.references.mainReference
 import org.jetbrains.kotlin.idea.resolve.frontendService
+import org.jetbrains.kotlin.idea.resolve.getLanguageVersionSettings
 import org.jetbrains.kotlin.idea.util.IdeDescriptorRenderers
 import org.jetbrains.kotlin.idea.util.hasJvmFieldAnnotation
 import org.jetbrains.kotlin.idea.util.isExpectDeclaration
@@ -34,7 +38,10 @@ import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.OverridingUtil
 import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
 import org.jetbrains.kotlin.resolve.calls.callUtil.getValueArgumentsInParentheses
+import org.jetbrains.kotlin.resolve.calls.callUtil.isFakeElement
 import org.jetbrains.kotlin.resolve.calls.model.ArgumentMatch
+import org.jetbrains.kotlin.resolve.checkers.ExplicitApiDeclarationChecker
+import org.jetbrains.kotlin.resolve.checkers.explicitApiEnabled
 import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
 import org.jetbrains.kotlin.resolve.sam.SamConversionOracle
 import org.jetbrains.kotlin.resolve.sam.SamConversionResolver
@@ -44,14 +51,7 @@ import org.jetbrains.kotlin.types.isError
 import org.jetbrains.kotlin.types.typeUtil.isTypeParameter
 import org.jetbrains.kotlin.utils.KotlinExceptionWithAttachments
 import org.jetbrains.kotlin.utils.SmartList
-
-inline fun <reified T : PsiElement> PsiElement.replaced(newElement: T): T {
-    val result = replace(newElement)
-    return result as? T ?: (result as KtParenthesizedExpression).expression as T
-}
-
-@Suppress("UNCHECKED_CAST")
-fun <T : PsiElement> T.copied(): T = copy() as T
+import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 
 fun KtLambdaArgument.moveInsideParentheses(bindingContext: BindingContext): KtCallExpression {
     val ktExpression = this.getArgumentExpression()
@@ -121,6 +121,7 @@ fun KtCallExpression.getLastLambdaExpression(): KtLambdaExpression? {
     return valueArguments.lastOrNull()?.getArgumentExpression()?.unpackFunctionLiteral()
 }
 
+@OptIn(FrontendInternals::class)
 fun KtCallExpression.canMoveLambdaOutsideParentheses(): Boolean {
     if (getStrictParentOfType<KtDelegatedSuperTypeEntry>() != null) return false
     if (getLastLambdaExpression() == null) return false
@@ -133,7 +134,7 @@ fun KtCallExpression.canMoveLambdaOutsideParentheses(): Boolean {
         val resolutionFacade = getResolutionFacade()
         val samConversionTransformer = resolutionFacade.frontendService<SamConversionResolver>()
         val samConversionOracle = resolutionFacade.frontendService<SamConversionOracle>()
-        val languageVersionSettings = resolutionFacade.frontendService<LanguageVersionSettings>()
+        val languageVersionSettings = resolutionFacade.getLanguageVersionSettings()
 
         val bindingContext = analyze(resolutionFacade, BodyResolveMode.PARTIAL)
         val targets = bindingContext[BindingContext.REFERENCE_TARGET, callee]?.let { listOf(it) }
@@ -192,10 +193,31 @@ fun KtCallExpression.moveFunctionLiteralOutsideParentheses() {
     val expression = argument.getArgumentExpression()!!
     assert(expression.unpackFunctionLiteral() != null)
 
-    val dummyCall = KtPsiFactory(project).createExpression("foo() {}") as KtCallExpression
+    fun isWhiteSpaceOrComment(e: PsiElement) = e is PsiWhiteSpace || e is PsiComment
+    val prevComma = argument.siblings(forward = false, withItself = false).firstOrNull { it.elementType == KtTokens.COMMA }
+    val prevComments = (prevComma ?: argumentList.leftParenthesis)
+        ?.siblings(forward = true, withItself = false)
+        ?.takeWhile(::isWhiteSpaceOrComment)?.toList().orEmpty()
+    val nextComments = argumentList.rightParenthesis
+        ?.siblings(forward = false, withItself = false)
+        ?.takeWhile(::isWhiteSpaceOrComment)?.toList()?.reversed().orEmpty()
+
+    val psiFactory = KtPsiFactory(project)
+    val dummyCall = psiFactory.createExpression("foo() {}") as KtCallExpression
     val functionLiteralArgument = dummyCall.lambdaArguments.single()
     functionLiteralArgument.getArgumentExpression()?.replace(expression)
+
+    if (prevComments.any { it is PsiComment }) {
+        if (prevComments.firstOrNull() !is PsiWhiteSpace) this.add(psiFactory.createWhiteSpace())
+        prevComments.forEach { this.add(it) }
+        prevComments.forEach { if (it is PsiComment) it.delete() }
+    }
     this.add(functionLiteralArgument)
+    if (nextComments.any { it is PsiComment }) {
+        nextComments.forEach { this.add(it) }
+        nextComments.forEach { if (it is PsiComment) it.delete() }
+    }
+
     /* we should not remove empty parenthesis when callee is a call too - it won't parse */
     if (argumentList.arguments.size == 1 && calleeExpression !is KtCallExpression) {
         argumentList.delete()
@@ -288,8 +310,15 @@ fun KtModifierListOwner.setVisibility(visibilityModifier: KtModifierKeywordToken
         val defaultVisibilityKeyword = implicitVisibility()
 
         if (visibilityModifier == defaultVisibilityKeyword) {
-            this.visibilityModifierType()?.let { removeModifier(it) }
-            return
+            // Fake elements do not have ModuleInfo and languageVersionSettings because they can't be analysed
+            // Effectively, this leads to J2K not respecting explicit api mode, but this case seems to be rare anyway.
+            val explicitVisibilityRequired = !this.isFakeElement && this.languageVersionSettings.explicitApiEnabled
+                    && this.resolveToDescriptorIfAny()?.let { !ExplicitApiDeclarationChecker.explicitVisibilityIsNotRequired(it) } == true
+
+            if (!explicitVisibilityRequired) {
+                this.visibilityModifierType()?.let { removeModifier(it) }
+                return
+            }
         }
     }
 
@@ -340,25 +369,43 @@ fun KtModifierListOwner.canBePrivate(): Boolean {
     return true
 }
 
+fun KtModifierListOwner.canBePublic(): Boolean = !isSealedClassConstructor()
+
 fun KtModifierListOwner.canBeProtected(): Boolean {
     val parent = when (this) {
         is KtPropertyAccessor -> this.property.parent
         else -> this.parent
     }
     return when (parent) {
-        is KtClassBody -> parent.parent is KtClass
+        is KtClassBody -> parent.parent is KtClass && !this.isFinalClassConstructor()
         is KtParameterList -> parent.parent is KtPrimaryConstructor
+        is KtClass -> !this.isAnnotationClassPrimaryConstructor() && !this.isFinalClassConstructor()
         else -> false
     }
 }
 
 fun KtModifierListOwner.canBeInternal(): Boolean {
-    if (containingClass()?.isInterface() == true && hasJvmFieldAnnotation()) return false
-    return !isAnnotationClassPrimaryConstructor()
+    if (containingClass()?.isInterface() == true) {
+        val objectDeclaration = getStrictParentOfType<KtObjectDeclaration>() ?: return false
+        if (objectDeclaration.isCompanion() && hasJvmFieldAnnotation()) return false
+    }
+    return !isAnnotationClassPrimaryConstructor() && !isSealedClassConstructor()
 }
 
 private fun KtModifierListOwner.isAnnotationClassPrimaryConstructor(): Boolean =
     this is KtPrimaryConstructor && (this.parent as? KtClass)?.hasModifier(KtTokens.ANNOTATION_KEYWORD) ?: false
+
+private fun KtModifierListOwner.isFinalClassConstructor(): Boolean {
+    if (this !is KtConstructor<*>) return false
+    val ktClass = getContainingClassOrObject().safeAs<KtClass>() ?: return false
+    return ktClass.toDescriptor().safeAs<ClassDescriptor>()?.isFinalOrEnum ?: return false
+}
+
+private fun KtModifierListOwner.isSealedClassConstructor(): Boolean {
+    if (this !is KtConstructor<*>) return false
+    val ktClass = getContainingClassOrObject().safeAs<KtClass>() ?: return false
+    return ktClass.isSealed()
+}
 
 fun KtClass.isInheritable(): Boolean {
     return when (getModalityFromDescriptor()) {
@@ -468,12 +515,6 @@ fun KtParameter.dropDefaultValue() {
     val from = equalsToken ?: return
     val to = defaultValue ?: from
     deleteChildRange(from, to)
-}
-
-fun dropEnclosingParenthesesIfPossible(expression: KtExpression): KtExpression {
-    val parent = expression.parent as? KtParenthesizedExpression ?: return expression
-    if (!KtPsiUtil.areParenthesesUseless(parent)) return expression
-    return parent.replaced(expression)
 }
 
 fun KtTypeParameterListOwner.addTypeParameter(typeParameter: KtTypeParameter): KtTypeParameter? {

@@ -11,7 +11,7 @@ annotation class WithString(val s: String)
 
 annotation class Complex(val wi: WithInt, val ws: WithString)
 
-annotation class VeryComplex(val f: Float, val d: Double, val b: Boolean, val l: Long, val n: Int?)
+annotation class VeryComplex(val f: Float, val d: Double, val b: Boolean, val l: Long, val n: <!NULLABLE_TYPE_OF_ANNOTATION_MEMBER!>Int?<!>)
 
 // FILE: main.kt
 
@@ -30,7 +30,7 @@ abstract class First {
 }
 
 @WithString("xyz")
-class Second(val y: Char) : @WithInt(0) First() {
+class Second(val y: Char) : <!WRONG_ANNOTATION_TARGET!>@WithInt(0)<!> First() {
     override fun foo(arg: Double) {
     }
 
@@ -41,6 +41,6 @@ class Second(val y: Char) : @WithInt(0) First() {
     constructor(): this('\n')
 }
 
-@WithInt(24)
-@VeryComplex(3.14f, 6.67e-11, false, 123456789012345L, null)
+<!WRONG_ANNOTATION_TARGET!>@WithInt(24)<!>
+<!WRONG_ANNOTATION_TARGET!>@VeryComplex(3.14f, 6.67e-11, false, 123456789012345L, null)<!>
 typealias Third = @Simple Second

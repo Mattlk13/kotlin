@@ -5,24 +5,38 @@
 
 package org.jetbrains.kotlin.fir.backend
 
+import org.jetbrains.kotlin.config.AnalysisFlags
 import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.fir.FirSession
+import org.jetbrains.kotlin.fir.backend.evaluate.evaluateConstants
+import org.jetbrains.kotlin.fir.backend.generators.*
 import org.jetbrains.kotlin.fir.declarations.*
+import org.jetbrains.kotlin.fir.declarations.utils.isLocal
+import org.jetbrains.kotlin.fir.declarations.utils.isSynthetic
+import org.jetbrains.kotlin.fir.declarations.utils.primaryConstructor
 import org.jetbrains.kotlin.fir.descriptors.FirModuleDescriptor
+import org.jetbrains.kotlin.fir.packageFqName
 import org.jetbrains.kotlin.fir.psi
 import org.jetbrains.kotlin.fir.resolve.ScopeSession
+import org.jetbrains.kotlin.fir.signaturer.FirBasedSignatureComposer
+import org.jetbrains.kotlin.fir.signaturer.FirMangler
+import org.jetbrains.kotlin.ir.ObsoleteDescriptorBasedAPI
+import org.jetbrains.kotlin.ir.PsiIrFileEntry
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.declarations.impl.IrFileImpl
 import org.jetbrains.kotlin.ir.declarations.impl.IrModuleFragmentImpl
-import org.jetbrains.kotlin.ir.descriptors.IrBuiltIns
-import org.jetbrains.kotlin.ir.util.*
+import org.jetbrains.kotlin.ir.util.DeclarationStubGenerator
+import org.jetbrains.kotlin.ir.util.ExternalDependenciesGenerator
+import org.jetbrains.kotlin.ir.util.IdSignatureComposer
+import org.jetbrains.kotlin.ir.util.SymbolTable
+import org.jetbrains.kotlin.ir.visitors.acceptVoid
+import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.KtFile
-import org.jetbrains.kotlin.psi2ir.PsiSourceManager
 import org.jetbrains.kotlin.psi2ir.generators.GeneratorExtensions
+import org.jetbrains.kotlin.psi2ir.generators.generateTypicalIrProviderList
 
 class Fir2IrConverter(
     private val moduleDescriptor: FirModuleDescriptor,
-    private val sourceManager: PsiSourceManager,
     private val components: Fir2IrComponents
 ) : Fir2IrComponents by components {
 
@@ -42,10 +56,11 @@ class Fir2IrConverter(
         processClassMembers(regularClass, irClass)
     }
 
-    fun registerFileAndClasses(file: FirFile): IrFile {
+    fun registerFileAndClasses(file: FirFile, moduleFragment: IrModuleFragment) {
         val irFile = IrFileImpl(
-            sourceManager.getOrCreateFileEntry(file.psi as KtFile),
-            moduleDescriptor.getPackage(file.packageFqName).fragments.first()
+            PsiIrFileEntry(file.psi as KtFile),
+            moduleDescriptor.getPackage(file.packageFqName).fragments.first(),
+            moduleFragment
         )
         declarationStorage.registerFile(file, irFile)
         file.declarations.forEach {
@@ -53,13 +68,14 @@ class Fir2IrConverter(
                 registerClassAndNestedClasses(it, irFile)
             }
         }
-        return irFile
+        moduleFragment.files += irFile
     }
 
     fun processClassHeaders(file: FirFile) {
         file.declarations.forEach {
-            if (it is FirRegularClass) {
-                processClassAndNestedClassHeaders(it)
+            when (it) {
+                is FirRegularClass -> processClassAndNestedClassHeaders(it)
+                is FirTypeAlias -> classifierStorage.registerTypeAlias(it, declarationStorage.getIrFile(file))
             }
         }
     }
@@ -67,7 +83,7 @@ class Fir2IrConverter(
     fun processFileAndClassMembers(file: FirFile) {
         val irFile = declarationStorage.getIrFile(file)
         for (declaration in file.declarations) {
-            val irDeclaration = processMemberDeclaration(declaration, irFile) ?: continue
+            val irDeclaration = processMemberDeclaration(declaration, null, irFile) ?: continue
             irFile.declarations += irDeclaration
         }
     }
@@ -76,17 +92,35 @@ class Fir2IrConverter(
         anonymousObject: FirAnonymousObject,
         irClass: IrClass = classifierStorage.getCachedIrClass(anonymousObject)!!
     ): IrClass {
-        anonymousObject.getPrimaryConstructorIfAny()?.let {
-            irClass.declarations += declarationStorage.createIrConstructor(it, irClass)
+        anonymousObject.primaryConstructor?.let {
+            irClass.declarations += declarationStorage.createIrConstructor(
+                it, irClass, isLocal = true
+            )
         }
-        for (declaration in anonymousObject.declarations) {
-            if (declaration is FirRegularClass) {
+        val processedCallableNames = mutableSetOf<Name>()
+        val classes = mutableListOf<FirRegularClass>()
+        for (declaration in syntheticPropertiesLast(anonymousObject.declarations)) {
+            val irDeclaration = if (declaration is FirRegularClass) {
+                classes += declaration
                 registerClassAndNestedClasses(declaration, irClass)
-                processClassAndNestedClassHeaders(declaration)
+            } else {
+                when (declaration) {
+                    is FirSimpleFunction -> processedCallableNames += declaration.name
+                    is FirProperty -> processedCallableNames += declaration.name
+                }
+                processMemberDeclaration(declaration, anonymousObject, irClass) ?: continue
             }
-            val irDeclaration = processMemberDeclaration(declaration, irClass) ?: continue
             irClass.declarations += irDeclaration
         }
+        classes.forEach { processClassAndNestedClassHeaders(it) }
+        classes.forEach { processClassMembers(it) }
+        // Add delegated members *before* fake override generations.
+        // Otherwise, fake overrides for delegated members, which are redundant, will be added.
+        val realDeclarations = delegatedMembers(irClass) + anonymousObject.declarations
+        with(fakeOverrideGenerator) {
+            irClass.addFakeOverrides(anonymousObject, realDeclarations)
+        }
+
         return irClass
     }
 
@@ -94,14 +128,53 @@ class Fir2IrConverter(
         regularClass: FirRegularClass,
         irClass: IrClass = classifierStorage.getCachedIrClass(regularClass)!!
     ): IrClass {
-        regularClass.getPrimaryConstructorIfAny()?.let {
-            irClass.declarations += declarationStorage.createIrConstructor(it, irClass)
+        val irConstructor = regularClass.primaryConstructor?.let {
+            declarationStorage.getOrCreateIrConstructor(it, irClass, isLocal = regularClass.isLocal)
         }
-        for (declaration in regularClass.declarations) {
-            val irDeclaration = processMemberDeclaration(declaration, irClass) ?: continue
+        if (irConstructor != null) {
+            irClass.declarations += irConstructor
+        }
+        val allDeclarations = regularClass.declarations.toMutableList()
+        for (declaration in syntheticPropertiesLast(regularClass.declarations)) {
+            val irDeclaration = processMemberDeclaration(declaration, regularClass, irClass) ?: continue
             irClass.declarations += irDeclaration
         }
+        // Add delegated members *before* fake override generations.
+        // Otherwise, fake overrides for delegated members, which are redundant, will be added.
+        allDeclarations += delegatedMembers(irClass)
+        // Add synthetic members *before* fake override generations.
+        // Otherwise, redundant members, e.g., synthetic toString _and_ fake override toString, will be added.
+        if (irConstructor != null && (irClass.isInline || irClass.isData)) {
+            declarationStorage.enterScope(irConstructor)
+            val dataClassMembersGenerator = DataClassMembersGenerator(components)
+            if (irClass.isInline) {
+                allDeclarations += dataClassMembersGenerator.generateInlineClassMembers(regularClass, irClass)
+            }
+            if (irClass.isData) {
+                allDeclarations += dataClassMembersGenerator.generateDataClassMembers(regularClass, irClass)
+            }
+            declarationStorage.leaveScope(irConstructor)
+        }
+        with(fakeOverrideGenerator) {
+            irClass.addFakeOverrides(regularClass, allDeclarations)
+        }
+
         return irClass
+    }
+
+    private fun delegatedMembers(irClass: IrClass): List<FirDeclaration> {
+        return irClass.declarations.filter {
+            it.origin == IrDeclarationOrigin.DELEGATED_MEMBER
+        }.mapNotNull {
+            components.declarationStorage.originalDeclarationForDelegated(it)
+        }
+    }
+
+    // Sort declarations so that all non-synthetic declarations are before synthetic ones.
+    // This is needed because converting synthetic fields for implementation delegation needs to know
+    // existing declarations in the class to avoid adding redundant delegated members.
+    private fun syntheticPropertiesLast(declarations: List<FirDeclaration>): Iterable<FirDeclaration> {
+        return declarations.sortedBy { it !is FirField && it.isSynthetic }
     }
 
     private fun registerClassAndNestedClasses(regularClass: FirRegularClass, parent: IrDeclarationParent): IrClass {
@@ -123,19 +196,38 @@ class Fir2IrConverter(
         }
     }
 
-    private fun processMemberDeclaration(declaration: FirDeclaration, parent: IrDeclarationParent): IrDeclaration? {
+    private fun processMemberDeclaration(
+        declaration: FirDeclaration,
+        containingClass: FirClass?,
+        parent: IrDeclarationParent
+    ): IrDeclaration? {
+        val isLocal = containingClass != null &&
+                (containingClass !is FirRegularClass || containingClass.isLocal)
         return when (declaration) {
             is FirRegularClass -> {
                 processClassMembers(declaration)
             }
             is FirSimpleFunction -> {
-                declarationStorage.createIrFunction(declaration, parent)
+                declarationStorage.getOrCreateIrFunction(
+                    declaration, parent, isLocal = isLocal
+                )
             }
             is FirProperty -> {
-                declarationStorage.createIrProperty(declaration, parent)
+                declarationStorage.getOrCreateIrProperty(
+                    declaration, parent, isLocal = isLocal
+                )
+            }
+            is FirField -> {
+                if (declaration.isSynthetic) {
+                    declarationStorage.createIrFieldAndDelegatedMembers(declaration, containingClass!!, parent as IrClass)
+                } else {
+                    throw AssertionError("Unexpected non-synthetic field: ${declaration::class}")
+                }
             }
             is FirConstructor -> if (!declaration.isPrimary) {
-                declarationStorage.createIrConstructor(declaration, parent as IrClass)
+                declarationStorage.getOrCreateIrConstructor(
+                    declaration, parent as IrClass, isLocal = isLocal
+                )
             } else {
                 null
             }
@@ -150,47 +242,64 @@ class Fir2IrConverter(
                 null
             }
             else -> {
-                throw AssertionError("Unexpected member: ${declaration::class}")
+                error("Unexpected member: ${declaration::class}")
             }
         }
     }
 
     companion object {
+        @OptIn(ObsoleteDescriptorBasedAPI::class)
         fun createModuleFragment(
             session: FirSession,
             scopeSession: ScopeSession,
             firFiles: List<FirFile>,
             languageVersionSettings: LanguageVersionSettings,
-            fakeOverrideMode: FakeOverrideMode = FakeOverrideMode.NORMAL,
             signaturer: IdSignatureComposer,
-            generatorExtensions: GeneratorExtensions
+            generatorExtensions: GeneratorExtensions,
+            mangler: FirMangler,
+            irFactory: IrFactory,
+            visibilityConverter: Fir2IrVisibilityConverter,
+            specialSymbolProvider: Fir2IrSpecialSymbolProvider?
         ): Fir2IrResult {
             val moduleDescriptor = FirModuleDescriptor(session)
-            val symbolTable = SymbolTable(signaturer)
-            val constantValueGenerator = ConstantValueGenerator(moduleDescriptor, symbolTable)
-            val typeTranslator = TypeTranslator(symbolTable, languageVersionSettings, moduleDescriptor.builtIns)
-            constantValueGenerator.typeTranslator = typeTranslator
-            typeTranslator.constantValueGenerator = constantValueGenerator
-            val builtIns = IrBuiltIns(moduleDescriptor.builtIns, typeTranslator, symbolTable)
-            val sourceManager = PsiSourceManager()
-            val components = Fir2IrComponentsStorage(session, scopeSession, symbolTable, builtIns)
-            val declarationStorage = Fir2IrDeclarationStorage(components, moduleDescriptor)
+            val symbolTable = SymbolTable(signaturer, irFactory)
+            val signatureComposer = FirBasedSignatureComposer(mangler)
+            val components = Fir2IrComponentsStorage(session, scopeSession, symbolTable, irFactory, signatureComposer)
             val classifierStorage = Fir2IrClassifierStorage(components)
-            val typeConverter = Fir2IrTypeConverter(components)
-            components.declarationStorage = declarationStorage
             components.classifierStorage = classifierStorage
+            components.delegatedMemberGenerator = DelegatedMemberGenerator(components)
+            val declarationStorage = Fir2IrDeclarationStorage(components, moduleDescriptor)
+            components.declarationStorage = declarationStorage
+            components.visibilityConverter = visibilityConverter
+            val typeConverter = Fir2IrTypeConverter(components)
             components.typeConverter = typeConverter
-            val irFiles = mutableListOf<IrFile>()
+            val irBuiltIns =
+                IrBuiltInsOverFir(
+                    components, languageVersionSettings, moduleDescriptor,
+                    languageVersionSettings.getFlag(AnalysisFlags.builtInsFromSources)
+                )
+            components.irBuiltIns = irBuiltIns
+            val converter = Fir2IrConverter(moduleDescriptor, components)
+            val conversionScope = Fir2IrConversionScope()
+            val fir2irVisitor = Fir2IrVisitor(converter, components, conversionScope)
+            val builtIns = Fir2IrBuiltIns(components, specialSymbolProvider)
+            val annotationGenerator = AnnotationGenerator(components)
+            components.builtIns = builtIns
+            components.annotationGenerator = annotationGenerator
+            val fakeOverrideGenerator = FakeOverrideGenerator(components, conversionScope)
+            components.fakeOverrideGenerator = fakeOverrideGenerator
+            val callGenerator = CallAndReferenceGenerator(components, fir2irVisitor, conversionScope)
+            components.callGenerator = callGenerator
 
-            val converter = Fir2IrConverter(moduleDescriptor, sourceManager, components)
+            val irModuleFragment = IrModuleFragmentImpl(moduleDescriptor, irBuiltIns)
             for (firFile in firFiles) {
-                irFiles += converter.registerFileAndClasses(firFile)
+                converter.registerFileAndClasses(firFile, irModuleFragment)
             }
-            val irModuleFragment = IrModuleFragmentImpl(moduleDescriptor, builtIns, irFiles)
+            val irProviders =
+                generateTypicalIrProviderList(irModuleFragment.descriptor, irBuiltIns, symbolTable, extensions = generatorExtensions)
             val externalDependenciesGenerator = ExternalDependenciesGenerator(
                 symbolTable,
-                generateTypicalIrProviderList(irModuleFragment.descriptor, builtIns, symbolTable, extensions = generatorExtensions),
-                languageVersionSettings
+                irProviders
             )
             // Necessary call to generate built-in IR classes
             externalDependenciesGenerator.generateUnboundSymbolsAsDependencies()
@@ -202,15 +311,17 @@ class Fir2IrConverter(
                 converter.processFileAndClassMembers(firFile)
             }
 
-            val fir2irVisitor = Fir2IrVisitor(converter, components, fakeOverrideMode)
             for (firFile in firFiles) {
-                val irFile = firFile.accept(fir2irVisitor, null) as IrFile
-                val fileEntry = sourceManager.getOrCreateFileEntry(firFile.psi as KtFile)
-                sourceManager.putFileEntry(irFile, fileEntry)
+                firFile.accept(fir2irVisitor, null)
             }
 
             externalDependenciesGenerator.generateUnboundSymbolsAsDependencies()
-            return Fir2IrResult(irModuleFragment, symbolTable, sourceManager, components)
+            val stubGenerator = irProviders.filterIsInstance<DeclarationStubGenerator>().first()
+            irModuleFragment.acceptVoid(ExternalPackageParentPatcher(stubGenerator))
+
+            evaluateConstants(irModuleFragment)
+
+            return Fir2IrResult(irModuleFragment, symbolTable, components)
         }
     }
 }

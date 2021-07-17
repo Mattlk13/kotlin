@@ -3,7 +3,6 @@ package org.jetbrains.kotlin.tools.projectWizard.ir.buildsystem
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.plus
 import kotlinx.collections.immutable.toPersistentList
-import kotlin.reflect.full.isSubclassOf
 
 
 interface IrsOwner {
@@ -17,10 +16,14 @@ fun <I : IrsOwner> I.withIrs(irs: List<BuildSystemIR>) = withReplacedIrs(irs = t
 @Suppress("UNCHECKED_CAST")
 fun <I : IrsOwner> I.withIrs(vararg irs: BuildSystemIR) = withReplacedIrs(irs = this.irs + irs) as I
 
+@Suppress("UNCHECKED_CAST")
+inline fun <I : IrsOwner> I.withoutIrs(filterNot: (BuildSystemIR) -> Boolean): I =
+    withReplacedIrs(irs = this.irs.filterNot(filterNot).toPersistentList()) as I
+
 
 inline fun <reified I : BuildSystemIR> IrsOwner.irsOfType(): List<I> =
     irs.filterIsInstance<I>().let { irs ->
-        if (I::class.isSubclassOf(BuildSystemIRWithPriority::class))
+        if (irs.all { it is BuildSystemIRWithPriority })
             irs.sortedBy { (it as BuildSystemIRWithPriority).priority }
         else irs
     }
