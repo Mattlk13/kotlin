@@ -167,6 +167,18 @@ public class FirStandaloneNormalAnalysisSourceModuleSymbolByReferenceTestGenerat
   }
 
   @Test
+  @TestMetadata("javaValueParameter.kt")
+  public void testJavaValueParameter() {
+    runTest("analysis/analysis-api/testData/symbols/symbolByReference/javaValueParameter.kt");
+  }
+
+  @Test
+  @TestMetadata("javaValueParameterLibraryBinary.kt")
+  public void testJavaValueParameterLibraryBinary() {
+    runTest("analysis/analysis-api/testData/symbols/symbolByReference/javaValueParameterLibraryBinary.kt");
+  }
+
+  @Test
   @TestMetadata("libraryConstructorProperty.kt")
   public void testLibraryConstructorProperty() {
     runTest("analysis/analysis-api/testData/symbols/symbolByReference/libraryConstructorProperty.kt");
@@ -422,6 +434,12 @@ public class FirStandaloneNormalAnalysisSourceModuleSymbolByReferenceTestGenerat
   @TestMetadata("analysis/analysis-api/testData/symbols/symbolByReference/js")
   @TestDataPath("$PROJECT_ROOT")
   public class Js {
+    @Test
+    @TestMetadata("actualEnum.kt")
+    public void testActualEnum() {
+      runTest("analysis/analysis-api/testData/symbols/symbolByReference/js/actualEnum.kt");
+    }
+
     @Test
     public void testAllFilesPresentInJs() {
       KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("analysis/analysis-api/testData/symbols/symbolByReference/js"), Pattern.compile("^(.+)\\.kt$"), null, true, "withTestCompilerPluginEnabled");

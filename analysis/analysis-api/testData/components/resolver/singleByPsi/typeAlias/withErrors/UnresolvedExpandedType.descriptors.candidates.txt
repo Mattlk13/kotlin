@@ -1,16 +1,24 @@
 KtNameReferenceExpression(67,70): 'foo'
   KaApplicableCallCandidateInfo:
     candidate = KaSimpleFunctionCall:
+      argumentMapping = {
+        2 -> (KaVariableSignature:
+          name = t
+          receiverType = null
+          returnType = ERROR_TYPE
+          symbol = t: ERROR_TYPE
+          callableId = null)
+      }
       isImplicitInvoke = false
       partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
         dispatchReceiver = null
         extensionReceiver = null
-        signature = KaFunctionLikeSignature:
+        signature = KaFunctionSignature:
           receiverType = null
           returnType = kotlin.Unit
           symbol = main/foo(t: ERROR_TYPE): kotlin.Unit
           valueParameters = [
-            KaVariableLikeSignature:
+            KaVariableSignature:
               name = t
               receiverType = null
               returnType = ERROR_TYPE
@@ -19,12 +27,4 @@ KtNameReferenceExpression(67,70): 'foo'
           ]
           callableId = main/foo
       typeArgumentsMapping = {}
-      argumentMapping = {
-        2 -> (KaVariableLikeSignature:
-          name = t
-          receiverType = null
-          returnType = ERROR_TYPE
-          symbol = t: ERROR_TYPE
-          callableId = null)
-      }
     isInBestCandidates = true

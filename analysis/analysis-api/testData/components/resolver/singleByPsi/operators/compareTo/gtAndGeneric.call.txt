@@ -1,6 +1,14 @@
 KtOperationReferenceExpression(97,98): '>'
   KaSuccessCallInfo:
     call = KaSimpleFunctionCall:
+      argumentMapping = {
+        1 -> (KaVariableSignature:
+          name = int
+          receiverType = null
+          returnType = kotlin.Int
+          symbol = int: kotlin.Int
+          callableId = null)
+      }
       isImplicitInvoke = false
       partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
         dispatchReceiver = null
@@ -8,12 +16,12 @@ KtOperationReferenceExpression(97,98): '>'
           expression = m
           isSafeNavigation = false
           type = MyClass
-        signature = KaFunctionLikeSignature:
+        signature = KaFunctionSignature:
           receiverType = MyClass
           returnType = kotlin.Int
           symbol = /compareTo(<extension receiver>: T, int: kotlin.Int): kotlin.Int
           valueParameters = [
-            KaVariableLikeSignature:
+            KaVariableSignature:
               name = int
               receiverType = null
               returnType = kotlin.Int
@@ -23,12 +31,4 @@ KtOperationReferenceExpression(97,98): '>'
           callableId = /compareTo
       typeArgumentsMapping = {
         T -> (MyClass)
-      }
-      argumentMapping = {
-        1 -> (KaVariableLikeSignature:
-          name = int
-          receiverType = null
-          returnType = kotlin.Int
-          symbol = int: kotlin.Int
-          callableId = null)
       }

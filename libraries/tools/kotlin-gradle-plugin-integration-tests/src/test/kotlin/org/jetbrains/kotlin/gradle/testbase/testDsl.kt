@@ -50,7 +50,7 @@ fun KGPBaseTest.project(
     enableKotlinDaemonMemoryLimitInMb: Int? = 1024,
     projectPathAdditionalSuffix: String = "",
     buildJdk: File? = null,
-    localRepoDir: Path? = null,
+    localRepoDir: Path? = defaultLocalRepo(gradleVersion),
     environmentVariables: EnvironmentalVariables = EnvironmentalVariables(),
     dependencyManagement: DependencyManagement = DependencyManagement.DefaultDependencyManagement(),
     test: TestProject.() -> Unit = {},
@@ -61,7 +61,7 @@ fun KGPBaseTest.project(
         workingDir,
         projectPathAdditionalSuffix,
     )
-    projectPath.addDefaultSettingsToSettingsGradle(gradleVersion, dependencyManagement, localRepoDir)
+    projectPath.addDefaultSettingsToSettingsGradle(gradleVersion, dependencyManagement, localRepoDir, buildOptions.projectIsolation)
     projectPath.enableCacheRedirector()
     projectPath.enableAndroidSdk()
     if (buildOptions.languageVersion != null || buildOptions.languageApiVersion != null) {
@@ -478,6 +478,7 @@ private fun commonBuildSetup(
     val jdkLocations = System.getProperties()
         .filterKeys { it.toString().matches(jdkPropNameRegex) }
         .values
+        .sortedWith(compareBy { it.toString() })
         .joinToString(separator = ",")
     return buildOptions.toArguments(gradleVersion) + buildArguments + listOfNotNull(
         // Required toolchains should be pre-installed via repo. Tests should not download any JDKs
@@ -568,12 +569,13 @@ internal fun Path.addDefaultSettingsToSettingsGradle(
     gradleVersion: GradleVersion,
     dependencyManagement: DependencyManagement = DependencyManagement.DefaultDependencyManagement(),
     localRepo: Path? = null,
+    projectIsolationEnabled: Boolean = false
 ) {
     addPluginManagementToSettings()
     when (dependencyManagement) {
         is DependencyManagement.DefaultDependencyManagement -> {
             // we cannot switch to dependencyManagement before Gradle 8.1 because of KT-65708
-            if (gradleVersion < GradleVersion.version(TestVersions.Gradle.G_8_1)) {
+            if (gradleVersion < GradleVersion.version(TestVersions.Gradle.G_8_1) && !projectIsolationEnabled) {
                 addDependencyRepositoriesToBuildScript(
                     additionalDependencyRepositories = dependencyManagement.additionalRepos,
                     localRepo = localRepo

@@ -12,7 +12,7 @@ import org.jetbrains.kotlin.analysis.low.level.api.fir.api.targets.LLFirResolveT
 import org.jetbrains.kotlin.analysis.low.level.api.fir.api.throwUnexpectedFirElementError
 import org.jetbrains.kotlin.analysis.low.level.api.fir.compile.codeFragmentScopeProvider
 import org.jetbrains.kotlin.analysis.low.level.api.fir.file.structure.LLFirDeclarationModificationService
-import org.jetbrains.kotlin.analysis.low.level.api.fir.project.structure.llFirModuleData
+import org.jetbrains.kotlin.analysis.low.level.api.fir.projectStructure.llFirModuleData
 import org.jetbrains.kotlin.analysis.low.level.api.fir.state.LLFirResolvableResolveSession
 import org.jetbrains.kotlin.analysis.low.level.api.fir.util.*
 import org.jetbrains.kotlin.analysis.low.level.api.fir.util.checkDelegatedConstructorIsResolved
@@ -404,6 +404,7 @@ internal object BodyStateKeepers {
 }
 
 context(StateKeeperBuilder)
+@Suppress("CONTEXT_RECEIVERS_DEPRECATED")
 private fun StateKeeperScope<FirFunction, FirDesignation>.preserveContractBlock(function: FirFunction) {
     val oldBody = function.body
     if (oldBody == null || oldBody is FirLazyBlock) {

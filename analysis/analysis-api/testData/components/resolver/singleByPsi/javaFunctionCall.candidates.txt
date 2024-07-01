@@ -1,6 +1,7 @@
 KtCallExpression(76,88): 'javaMethod()'
   KaApplicableCallCandidateInfo:
     candidate = KaSimpleFunctionCall:
+      argumentMapping = {}
       isImplicitInvoke = false
       partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
         dispatchReceiver = KaExplicitReceiverValue:
@@ -8,12 +9,11 @@ KtCallExpression(76,88): 'javaMethod()'
           isSafeNavigation = false
           type = JavaClass
         extensionReceiver = null
-        signature = KaFunctionLikeSignature:
+        signature = KaFunctionSignature:
           receiverType = null
           returnType = kotlin.Unit
           symbol = /JavaClass.javaMethod(<dispatch receiver>: JavaClass): kotlin.Unit
           valueParameters = []
           callableId = /JavaClass.javaMethod
       typeArgumentsMapping = {}
-      argumentMapping = {}
     isInBestCandidates = true

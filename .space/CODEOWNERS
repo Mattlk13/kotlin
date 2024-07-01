@@ -16,6 +16,7 @@
 # OWNER_LIST: "Kotlin Language Evolution"
 # OWNER_LIST: "Kotlin in Fleet"
 # OWNER_LIST: Compose
+# OWNER_LIST: Parcelize
 # OWNER_LIST: Mikhail.Glukhikh Dmitriy.Novozhilov Kirill.Rakhman
 # OWNER_LIST: Yan.Zhulanow
 # OWNER_LIST: Dmitry.Gridin
@@ -43,9 +44,9 @@
 /analysis/ "Kotlin IDE Analysis Core"
 /analysis/light-classes-base/ Dmitry.Gridin
 /analysis/symbol-light-classes/ Dmitry.Gridin
-/analysis/analysis-api-fir/src/org/jetbrains/kotlin/analysis/api/fir/diagnostics/KtFirDiagnostics.kt "Kotlin Compiler Core"
-/analysis/analysis-api-fir/src/org/jetbrains/kotlin/analysis/api/fir/diagnostics/KtFirDiagnosticsImpl.kt "Kotlin Compiler Core"
-/analysis/analysis-api-fir/src/org/jetbrains/kotlin/analysis/api/fir/diagnostics/KtFirDataClassConverters.kt "Kotlin Compiler Core"
+/analysis/analysis-api-fir/src/org/jetbrains/kotlin/analysis/api/fir/diagnostics/KaFirDiagnostics.kt "Kotlin Compiler Core"
+/analysis/analysis-api-fir/src/org/jetbrains/kotlin/analysis/api/fir/diagnostics/KaFirDiagnosticsImpl.kt "Kotlin Compiler Core"
+/analysis/analysis-api-fir/src/org/jetbrains/kotlin/analysis/api/fir/diagnostics/KaFirDataClassConverters.kt "Kotlin Compiler Core"
 
 # UNKNOWN: /annotations/
 
@@ -64,6 +65,7 @@
 /compiler/cli/ "Kotlin Compiler Core" Simon.Ogorodnik
 /compiler/cli/cli-js/ "Kotlin Common Backend" "Kotlin Wasm"
 /compiler/cli/cli-common/src/org/jetbrains/kotlin/cli/common/arguments/K2NativeCompilerArguments.kt "Kotlin Native"
+/compiler/cli/cli-common/gen/org/jetbrains/kotlin/cli/common/arguments/K2NativeCompilerArgumentsCopyGenerated.kt "Kotlin Native"
 /compiler/compiler.version/ "Kotlin Compiler Core" Simon.Ogorodnik
 /compiler/compiler-runner/ "Kotlin Compiler Core" Simon.Ogorodnik
 /compiler/compiler-runner-unshaded/ "Kotlin Build Tools"
@@ -395,7 +397,7 @@
 /libraries/tools/js-plain-objects Artem.Kobzar
 /plugins/lombok/ "Kotlin Compiler Core"
 /plugins/noarg/ "Kotlin Compiler Core"
-/plugins/parcelize/ "Kotlin Compiler Core"
+/plugins/parcelize/ Parcelize
 /plugins/pill/ Yan.Zhulanow "Kotlin Build Infrastructure"
 /plugins/power-assert/ Brian.Norman "Kotlin Common Backend"
 /plugins/sam-with-receiver/ "Kotlin Compiler Core"

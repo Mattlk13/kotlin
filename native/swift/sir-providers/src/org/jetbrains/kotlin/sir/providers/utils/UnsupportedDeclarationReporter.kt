@@ -6,12 +6,12 @@
 package org.jetbrains.kotlin.sir.providers.utils
 
 import org.jetbrains.kotlin.analysis.api.symbols.KaCallableSymbol
-import org.jetbrains.kotlin.analysis.api.symbols.KaClassOrObjectSymbol
-import org.jetbrains.kotlin.analysis.api.symbols.markers.KaNamedSymbol
-import org.jetbrains.kotlin.analysis.api.symbols.markers.KaSymbolWithVisibility
+import org.jetbrains.kotlin.analysis.api.symbols.KaClassSymbol
+import org.jetbrains.kotlin.analysis.api.symbols.KaDeclarationSymbol
+import org.jetbrains.kotlin.analysis.api.symbols.name
 
 public interface UnsupportedDeclarationReporter {
-    public fun report(symbol: KaSymbolWithVisibility, reason: String)
+    public fun report(symbol: KaDeclarationSymbol, reason: String)
 }
 
 public class SimpleUnsupportedDeclarationReporter : UnsupportedDeclarationReporter {
@@ -21,17 +21,16 @@ public class SimpleUnsupportedDeclarationReporter : UnsupportedDeclarationReport
     public val messages: List<String>
         get() = _messages.toList()
 
-    override fun report(symbol: KaSymbolWithVisibility, reason: String) {
+    override fun report(symbol: KaDeclarationSymbol, reason: String) {
         val declarationName = when (symbol) {
             is KaCallableSymbol -> symbol.callableId?.asSingleFqName()?.asString()
-            is KaClassOrObjectSymbol -> symbol.classId?.asSingleFqName()?.asString()
-            is KaNamedSymbol -> symbol.name.asString()
-            else -> null
+            is KaClassSymbol -> symbol.classId?.asSingleFqName()?.asString()
+            else -> symbol.name?.asString()
         } ?: "declaration"
         _messages += "Can't export $declarationName: $reason"
     }
 }
 
 public object SilentUnsupportedDeclarationReporter : UnsupportedDeclarationReporter {
-    override fun report(symbol: KaSymbolWithVisibility, reason: String) {}
+    override fun report(symbol: KaDeclarationSymbol, reason: String) {}
 }

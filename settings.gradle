@@ -431,9 +431,7 @@ if (!buildProperties.inJpsBuildIdeaSync) {
             ":prepare:ide-plugin-dependencies:analysis-api-k2-tests-for-ide",
             ":prepare:ide-plugin-dependencies:analysis-api-fe10-for-ide",
             ":prepare:ide-plugin-dependencies:analysis-api-fe10-tests-for-ide",
-            ":prepare:ide-plugin-dependencies:kt-references-fe10-for-ide",
             ":prepare:ide-plugin-dependencies:analysis-api-platform-interface-for-ide",
-            ":prepare:ide-plugin-dependencies:analysis-project-structure-for-ide",
             ":prepare:ide-plugin-dependencies:symbol-light-classes-for-ide",
             ":prepare:ide-plugin-dependencies:analysis-api-standalone-for-ide",
             ":prepare:ide-plugin-dependencies:kotlin-compiler-ir-for-ide",
@@ -450,11 +448,13 @@ include ":compiler:build-tools:kotlin-build-tools-api",
 if (!buildProperties.inJpsBuildIdeaSync) {
     include ":plugins:compose-compiler-plugin",
             ":plugins:compose-compiler-plugin:compiler",
-            ":plugins:compose-compiler-plugin:compiler:integration-tests",
             ":plugins:compose-compiler-plugin:compiler-hosted",
             ":plugins:compose-compiler-plugin:compiler-hosted:integration-tests",
-            ":plugins:compose-compiler-plugin:compiler-hosted:integration-tests:protobuf-test-classes",
-            ":plugins:compose-compiler-plugin:compiler-hosted:runtime-tests"
+            ":plugins:compose-compiler-plugin:compiler-hosted:integration-tests:protobuf-test-classes"
+
+    if (buildProperties.inIdeaSync) {
+        include ":plugins:compose-compiler-plugin:compiler-hosted:runtime-tests"
+    }
 }
 
 // Swift Export modules
@@ -633,10 +633,8 @@ include ":generators:analysis-api-generator",
         ":analysis:analysis-internal-utils",
         ":analysis:analysis-test-framework",
         ":analysis:kt-references",
-        ":analysis:kt-references:kt-references-fe10",
         ":analysis:symbol-light-classes",
         ":analysis:light-classes-base",
-        ":analysis:project-structure",
         ":analysis:analysis-api-standalone",
         ":analysis:analysis-api-standalone:analysis-api-standalone-base",
         ":analysis:analysis-api-standalone:analysis-api-fir-standalone-base",
@@ -903,12 +901,14 @@ project(':atomicfu').projectDir = file("$rootDir/libraries/tools/atomicfu")
 if (!buildProperties.inJpsBuildIdeaSync) {
     project(':plugins:compose-compiler-plugin').projectDir = file("$rootDir/plugins/compose")
     project(':plugins:compose-compiler-plugin:compiler').projectDir = file("$rootDir/plugins/compose/compiler")
-    project(':plugins:compose-compiler-plugin:compiler:integration-tests').projectDir = file("$rootDir/plugins/compose/compiler/integration-tests")
     project(':plugins:compose-compiler-plugin:compiler-hosted').projectDir = file("$rootDir/plugins/compose/compiler-hosted")
     project(':plugins:compose-compiler-plugin:compiler-hosted:integration-tests').projectDir = file("$rootDir/plugins/compose/compiler-hosted/integration-tests")
     project(':plugins:compose-compiler-plugin:compiler-hosted:integration-tests:protobuf-test-classes').projectDir =
             file("$rootDir/plugins/compose/compiler-hosted/integration-tests/protobuf-test-classes")
-    project(':plugins:compose-compiler-plugin:compiler-hosted:runtime-tests').projectDir = file("$rootDir/plugins/compose/compiler-hosted/runtime-tests")
+
+    if (buildProperties.inIdeaSync) {
+        project(':plugins:compose-compiler-plugin:compiler-hosted:runtime-tests').projectDir = file("$rootDir/plugins/compose/compiler-hosted/runtime-tests")
+    }
 }
 
 project(':kotlin-scripting-ide-services-unshaded').projectDir = "$rootDir/plugins/scripting/scripting-ide-services" as File
@@ -948,4 +948,5 @@ if (buildProperties.isKotlinNativeEnabled) {
     include ':kotlin-native:prepare:kotlin-native-compiler-embeddable'
     include ':native:kotlin-test-native-xctest'
     include ':native:cli-native'
+    include ':native:native.tests:cli-tests'
 }

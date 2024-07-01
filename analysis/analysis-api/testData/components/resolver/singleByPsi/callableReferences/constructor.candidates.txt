@@ -1,16 +1,17 @@
 KtCallableReferenceExpression(55,60): '::Foo'
   KaApplicableCallCandidateInfo:
     candidate = KaSimpleFunctionCall:
+      argumentMapping = {}
       isImplicitInvoke = false
       partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
         dispatchReceiver = null
         extensionReceiver = null
-        signature = KaFunctionLikeSignature:
+        signature = KaFunctionSignature:
           receiverType = null
           returnType = Foo
           symbol = <constructor>(value: kotlin.String): Foo
           valueParameters = [
-            KaVariableLikeSignature:
+            KaVariableSignature:
               name = value
               receiverType = null
               returnType = kotlin.String
@@ -19,5 +20,4 @@ KtCallableReferenceExpression(55,60): '::Foo'
           ]
           callableId = null
       typeArgumentsMapping = {}
-      argumentMapping = {}
     isInBestCandidates = true

@@ -30,9 +30,21 @@ public class KlibBasedSwiftExportRunnerTest extends AbstractKlibBasedSwiftRunner
   }
 
   @Test
+  @TestMetadata("any")
+  public void testAny() {
+    runTest("native/swift/swift-export-standalone/testData/any/");
+  }
+
+  @Test
   @TestMetadata("classes")
   public void testClasses() {
     runTest("native/swift/swift-export-standalone/testData/classes/");
+  }
+
+  @Test
+  @TestMetadata("consuming_dependencies")
+  public void testConsuming_dependencies() {
+    runTest("native/swift/swift-export-standalone/testData/consuming_dependencies/");
   }
 
   @Test
@@ -51,6 +63,12 @@ public class KlibBasedSwiftExportRunnerTest extends AbstractKlibBasedSwiftRunner
   @TestMetadata("no_package")
   public void testNo_package() {
     runTest("native/swift/swift-export-standalone/testData/no_package/");
+  }
+
+  @Test
+  @TestMetadata("nothing_type")
+  public void testNothing_type() {
+    runTest("native/swift/swift-export-standalone/testData/nothing_type/");
   }
 
   @Test

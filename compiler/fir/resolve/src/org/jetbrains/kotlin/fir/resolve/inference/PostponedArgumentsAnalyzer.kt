@@ -5,12 +5,13 @@
 
 package org.jetbrains.kotlin.fir.resolve.inference
 
-import org.jetbrains.kotlin.fir.FirCallResolver
 import org.jetbrains.kotlin.fir.expressions.FirExpression
 import org.jetbrains.kotlin.fir.lookupTracker
 import org.jetbrains.kotlin.fir.recordTypeResolveAsLookup
 import org.jetbrains.kotlin.fir.references.builder.buildErrorNamedReference
 import org.jetbrains.kotlin.fir.resolve.calls.*
+import org.jetbrains.kotlin.fir.resolve.calls.candidate.*
+import org.jetbrains.kotlin.fir.resolve.calls.stages.ArgumentCheckingProcessor
 import org.jetbrains.kotlin.fir.resolve.dfa.cfg.lastStatement
 import org.jetbrains.kotlin.fir.resolve.diagnostics.ConeUnresolvedReferenceError
 import org.jetbrains.kotlin.fir.resolve.inference.model.ConeLambdaArgumentConstraintPosition
@@ -35,7 +36,7 @@ data class ReturnArgumentsAnalysisResult(
 
 interface LambdaAnalyzer {
     fun analyzeAndGetLambdaReturnArguments(
-        lambdaAtom: ResolvedLambdaAtom,
+        lambdaAtom: ConeResolvedLambdaAtom,
         receiverType: ConeKotlinType?,
         contextReceivers: List<ConeKotlinType>,
         parameters: List<ConeKotlinType>,
@@ -55,31 +56,31 @@ class PostponedArgumentsAnalyzer(
 
     fun analyze(
         c: PostponedArgumentsAnalyzerContext,
-        argument: PostponedResolvedAtom,
+        argument: ConePostponedResolvedAtom,
         candidate: Candidate,
         withPCLASession: Boolean,
     ) {
         when (argument) {
-            is ResolvedLambdaAtom ->
+            is ConeResolvedLambdaAtom ->
                 analyzeLambda(c, argument, candidate, forOverloadByLambdaReturnType = false, withPCLASession)
 
-            is LambdaWithTypeVariableAsExpectedTypeAtom ->
+            is ConeLambdaWithTypeVariableAsExpectedTypeAtom ->
                 analyzeLambda(
                     c,
                     argument.transformToResolvedLambda(c.getBuilder(), resolutionContext),
                     candidate, forOverloadByLambdaReturnType = false, withPCLASession
                 )
 
-            is ResolvedCallableReferenceAtom -> processCallableReference(argument, candidate)
+            is ConeResolvedCallableReferenceAtom -> processCallableReference(argument, candidate)
         }
     }
 
-    private fun processCallableReference(atom: ResolvedCallableReferenceAtom, candidate: Candidate) {
+    private fun processCallableReference(atom: ConeResolvedCallableReferenceAtom, candidate: Candidate) {
         if (atom.mightNeedAdditionalResolution) {
             callResolver.resolveCallableReference(candidate, atom, hasSyntheticOuterCall = false)
         }
 
-        val callableReferenceAccess = atom.reference
+        val callableReferenceAccess = atom.fir
         atom.analyzed = true
 
         resolutionContext.bodyResolveContext.dropCallableReferenceContext(callableReferenceAccess)
@@ -106,7 +107,7 @@ class PostponedArgumentsAnalyzer(
 
     fun analyzeLambda(
         c: PostponedArgumentsAnalyzerContext,
-        lambda: ResolvedLambdaAtom,
+        lambda: ConeResolvedLambdaAtom,
         candidate: Candidate,
         forOverloadByLambdaReturnType: Boolean,
         withPCLASession: Boolean,
@@ -168,7 +169,7 @@ class PostponedArgumentsAnalyzer(
 
     fun applyResultsOfAnalyzedLambdaToCandidateSystem(
         c: PostponedArgumentsAnalyzerContext,
-        lambda: ResolvedLambdaAtom,
+        lambda: ConeResolvedLambdaAtom,
         candidate: Candidate,
         results: ReturnArgumentsAnalysisResult,
         substituteAlreadyFixedVariables: (ConeKotlinType) -> ConeKotlinType = c.createSubstituteFunctorForLambdaAnalysis(),
@@ -182,12 +183,12 @@ class PostponedArgumentsAnalyzer(
         val checkerSink: CheckerSink = CheckerSinkImpl(candidate)
         val builder = c.getBuilder()
 
-        val lastExpression = lambda.atom.lastStatement() as? FirExpression
+        val lastExpression = lambda.fir.lastStatement() as? FirExpression
         var hasExpressionInReturnArguments = false
-        val returnTypeRef = lambda.atom.returnTypeRef.let {
+        val returnTypeRef = lambda.fir.returnTypeRef.let {
             it as? FirResolvedTypeRef ?: it.resolvedTypeFromPrototype(substituteAlreadyFixedVariables(lambda.returnType))
         }
-        val isUnitLambda = returnTypeRef.type.isUnitOrFlexibleUnit || lambda.atom.shouldReturnUnit(returnArguments)
+        val isUnitLambda = returnTypeRef.type.isUnitOrFlexibleUnit || lambda.fir.shouldReturnUnit(returnArguments)
 
         returnArguments.forEach {
             if (it.isImplicitUnitForEmptyLambda()) return@forEach
@@ -214,7 +215,7 @@ class PostponedArgumentsAnalyzer(
                     // See KT-63602 for details.
                     builder.addSubtypeConstraintIfCompatible(
                         it.resolvedType, returnTypeRef.type,
-                        ConeLambdaArgumentConstraintPosition(lambda.atom)
+                        ConeLambdaArgumentConstraintPosition(lambda.fir)
                     )
                 }
                 return@forEach
@@ -222,8 +223,8 @@ class PostponedArgumentsAnalyzer(
 
             hasExpressionInReturnArguments = true
             if (!builder.hasContradiction) {
-                candidate.resolveArgumentExpression(
-                    builder,
+                ArgumentCheckingProcessor.resolveArgumentExpression(
+                    candidate,
                     it,
                     substituteAlreadyFixedVariables(lambda.returnType),
                     checkerSink,
@@ -245,7 +246,7 @@ class PostponedArgumentsAnalyzer(
     private fun addLambdaReturnTypeUnitConstraintOrReportError(
         c: PostponedArgumentsAnalyzerContext,
         builder: ConstraintSystemBuilder,
-        lambda: ResolvedLambdaAtom,
+        lambda: ConeResolvedLambdaAtom,
         checkerSink: CheckerSink,
         substituteAlreadyFixedVariables: (ConeKotlinType) -> ConeKotlinType,
     ) {
@@ -254,7 +255,7 @@ class PostponedArgumentsAnalyzer(
         // If we've got some errors already, no new constraints or diagnostics are required
         if (with(c) { lambdaReturnType.isError() } || builder.hasContradiction) return
 
-        val position = ConeLambdaArgumentConstraintPosition(lambda.atom)
+        val position = ConeLambdaArgumentConstraintPosition(lambda.fir)
         val unitType = components.session.builtinTypes.unitType.type
         if (!builder.addSubtypeConstraintIfCompatible(
                 unitType,
@@ -270,7 +271,7 @@ class PostponedArgumentsAnalyzer(
                     // TODO: Consider replacement with ArgumentTypeMismatch once KT-67961 is fixed
                     // Currently, ArgumentTypeMismatch only allows expressions and we don't have it here
                     UnitReturnTypeLambdaContradictsExpectedType(
-                        lambda.atom,
+                        lambda.fir,
                         wholeLambdaExpectedType,
                         lambda.sourceForFunctionExpression,
                     )
@@ -294,23 +295,18 @@ class PostponedArgumentsAnalyzer(
     }
 }
 
-fun LambdaWithTypeVariableAsExpectedTypeAtom.transformToResolvedLambda(
+fun ConeLambdaWithTypeVariableAsExpectedTypeAtom.transformToResolvedLambda(
     csBuilder: ConstraintSystemBuilder,
     context: ResolutionContext,
     expectedType: ConeKotlinType? = null,
     returnTypeVariable: ConeTypeVariableForLambdaReturnType? = null,
-): ResolvedLambdaAtom {
+): ConeResolvedLambdaAtom {
     val fixedExpectedType = (csBuilder.buildCurrentSubstitutor() as ConeSubstitutor)
         .substituteOrSelf(expectedType ?: this.expectedType)
-    val resolvedAtom = candidateOfOuterCall.preprocessLambdaArgument(
-        csBuilder,
-        atom,
-        fixedExpectedType,
-        context,
-        sink = null,
-        duringCompletion = true,
-        returnTypeVariable = returnTypeVariable
-    ) as ResolvedLambdaAtom
+    val resolvedAtom = ArgumentCheckingProcessor.createResolvedLambdaAtomDuringCompletion(
+        candidateOfOuterCall, csBuilder, expression, fixedExpectedType,
+        context, returnTypeVariable = returnTypeVariable
+    )
     analyzed = true
     return resolvedAtom
 }

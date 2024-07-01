@@ -1,57 +1,58 @@
 /*
- * Copyright 2010-2023 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2024 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.objcexport.analysisApiUtils
 
-import org.jetbrains.kotlin.analysis.api.KtAnalysisSession
-import org.jetbrains.kotlin.analysis.api.annotations.annotationInfos
+import org.jetbrains.kotlin.analysis.api.KaExperimentalApi
+import org.jetbrains.kotlin.analysis.api.KaSession
 import org.jetbrains.kotlin.analysis.api.symbols.*
-import org.jetbrains.kotlin.analysis.api.symbols.KtClassKind.*
-import org.jetbrains.kotlin.analysis.api.symbols.markers.KtAnnotatedSymbol
-import org.jetbrains.kotlin.analysis.api.symbols.markers.KtPossibleMultiplatformSymbol
-import org.jetbrains.kotlin.analysis.api.symbols.markers.KtSymbolWithModality
-import org.jetbrains.kotlin.analysis.api.symbols.markers.KtSymbolWithVisibility
+import org.jetbrains.kotlin.analysis.api.symbols.KaClassKind.*
+import org.jetbrains.kotlin.analysis.api.symbols.markers.*
 import org.jetbrains.kotlin.backend.konan.KonanFqNames
-import org.jetbrains.kotlin.descriptors.Modality
+import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.resolve.DataClassResolver
 import org.jetbrains.kotlin.resolve.deprecation.DeprecationLevelValue
 import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.contract
 
-context(KtAnalysisSession)
-internal fun KtSymbol.isVisibleInObjC(): Boolean = when (this) {
-    is KtCallableSymbol -> this.isVisibleInObjC()
-    is KtClassOrObjectSymbol -> this.isVisibleInObjC()
+context(KaSession)
+@Suppress("CONTEXT_RECEIVERS_DEPRECATED")
+internal fun KaSymbol.isVisibleInObjC(): Boolean = when (this) {
+    is KaCallableSymbol -> this.isVisibleInObjC()
+    is KaClassSymbol -> this.isVisibleInObjC()
     else -> false
 }
 
-context(KtAnalysisSession)
-internal fun KtCallableSymbol.isVisibleInObjC(): Boolean {
-    if (this is KtSymbolWithVisibility && !isPublicApi(this)) return false
-    if (this is KtPossibleMultiplatformSymbol && isExpect) return false
+/**
+ * Doesn't check visibility of containing symbol, so nested callables are visible
+ */
+context(KaSession)
+@Suppress("CONTEXT_RECEIVERS_DEPRECATED")
+internal fun KaCallableSymbol.isVisibleInObjC(): Boolean {
+    if (!this.isPublic) return false
+    if (isExpect) return false
 
     if (this.isHiddenFromObjCByDeprecation()) return false
     if (this.isHiddenFromObjCByAnnotation()) return false
     if (this.isSealedClassConstructor()) return false
-    if (this.isComponentNMethod() && this.getDirectlyOverriddenSymbols().isEmpty()) return false
-    getContainingSymbol()?.let { if (!it.isVisibleInObjC()) return false }
+    if (this.isComponentNMethod() && !this.directlyOverriddenSymbols.any()) return false
     return true
 }
 
-context(KtAnalysisSession)
-internal fun KtClassOrObjectSymbol.isVisibleInObjC(): Boolean {
+context(KaSession)
+@Suppress("CONTEXT_RECEIVERS_DEPRECATED")
+internal fun KaClassSymbol.isVisibleInObjC(): Boolean {
     // TODO if(specialMapped()) return false
     // TODO if(!defaultType.isObjCObjectType()) return false
 
-    if (this is KtSymbolWithVisibility && !isPublicApi(this)) return false
+    if (!isPublicApi(this)) return false
     if (this.isHiddenFromObjCByDeprecation()) return false
     if (this.isHiddenFromObjCByAnnotation()) return false
     if (!this.classKind.isVisibleInObjC()) return false
     if (this.isExpect) return false
     if (this.isInlined()) return false
-    getContainingSymbol()?.let { if (!it.isVisibleInObjC()) return false }
     return true
 }
 
@@ -59,38 +60,55 @@ internal fun KtClassOrObjectSymbol.isVisibleInObjC(): Boolean {
 Private utility functions
  */
 
-context(KtAnalysisSession)
-private fun KtSymbol.isSealedClassConstructor(): Boolean {
-    if (this !is KtConstructorSymbol) return false
-    val containingSymbol = this.getContainingSymbol() as? KtSymbolWithModality ?: return false
-    return containingSymbol.modality == Modality.SEALED
-}
-
-context(KtAnalysisSession)
-@OptIn(ExperimentalContracts::class)
-private fun KtSymbol.isComponentNMethod(): Boolean {
-    contract {
-        returns(true) implies (this@isComponentNMethod is KtFunctionSymbol)
+context(KaSession)
+@Suppress("CONTEXT_RECEIVERS_DEPRECATED")
+private val KaCallableSymbol.isPublic: Boolean
+    get() {
+        /**
+         * Visibility check is a temp workaround, since AA doesn't have something similar to K1 [DeclarationDescriptorWithVisibility.isEffectivelyPublicApi]
+         * Remove when KT-69122 is implemented
+         *
+         * See details at [org.jetbrains.kotlin.backend.konan.objcexport.ObjCExportMapperKt.shouldBeExposed]
+         */
+        return visibility != KaSymbolVisibility.INTERNAL && isPublicApi(this)
     }
 
-    if (this !is KtFunctionSymbol) return false
+context(KaSession)
+@Suppress("CONTEXT_RECEIVERS_DEPRECATED")
+private fun KaSymbol.isSealedClassConstructor(): Boolean {
+    if (this !is KaConstructorSymbol) return false
+    val containingSymbol = this.containingSymbol ?: return false
+    return containingSymbol.modality == KaSymbolModality.SEALED
+}
+
+context(KaSession)
+@Suppress("CONTEXT_RECEIVERS_DEPRECATED")
+@OptIn(ExperimentalContracts::class)
+private fun KaSymbol.isComponentNMethod(): Boolean {
+    contract {
+        returns(true) implies (this@isComponentNMethod is KaNamedFunctionSymbol)
+    }
+
+    if (this !is KaNamedFunctionSymbol) return false
     if (!this.isOperator) return false
-    val containingClassSymbol = this.getContainingSymbol() as? KtNamedClassOrObjectSymbol ?: return false
+    val containingClassSymbol = this.containingSymbol as? KaNamedClassSymbol ?: return false
     if (!containingClassSymbol.isData) return false
     return DataClassResolver.isComponentLike(this.name)
 }
 
-context(KtAnalysisSession)
-private fun KtCallableSymbol.isHiddenFromObjCByAnnotation(): Boolean {
-    val overwrittenSymbols = getDirectlyOverriddenSymbols()
+context(KaSession)
+@Suppress("CONTEXT_RECEIVERS_DEPRECATED")
+private fun KaCallableSymbol.isHiddenFromObjCByAnnotation(): Boolean {
+    val overwrittenSymbols = directlyOverriddenSymbols.toList()
     if (overwrittenSymbols.isNotEmpty()) return overwrittenSymbols.first().isHiddenFromObjCByAnnotation()
     return this.containsHidesFromObjCAnnotation()
 }
 
-context(KtAnalysisSession)
-private fun KtClassOrObjectSymbol.isHiddenFromObjCByAnnotation(): Boolean {
-    val containingSymbol = getContainingSymbol()
-    if (containingSymbol is KtClassOrObjectSymbol && containingSymbol.isHiddenFromObjCByAnnotation()) return true
+context(KaSession)
+@Suppress("CONTEXT_RECEIVERS_DEPRECATED")
+private fun KaClassSymbol.isHiddenFromObjCByAnnotation(): Boolean {
+    val containingSymbol = containingSymbol
+    if (containingSymbol is KaClassSymbol && containingSymbol.isHiddenFromObjCByAnnotation()) return true
     return this.containsHidesFromObjCAnnotation()
 }
 
@@ -113,30 +131,31 @@ private fun KtClassOrObjectSymbol.isHiddenFromObjCByAnnotation(): Boolean {
  * ```
  *
  */
-context(KtAnalysisSession)
-private fun KtAnnotatedSymbol.containsHidesFromObjCAnnotation(): Boolean {
-    return annotationsList.annotations.any { annotation ->
+context(KaSession)
+@Suppress("CONTEXT_RECEIVERS_DEPRECATED")
+private fun KaAnnotatedSymbol.containsHidesFromObjCAnnotation(): Boolean {
+    return annotations.any { annotation ->
         val annotationClassId = annotation.classId ?: return@any false
-        val annotationClassSymbol = getClassOrObjectSymbolByClassId(annotationClassId) ?: return@any false
-        annotationClassSymbol.annotationInfos.any { annotationAnnotation ->
-            annotationAnnotation.classId?.asSingleFqName() == KonanFqNames.hidesFromObjC
-        }
+        val annotationClassSymbol = findClass(annotationClassId) ?: return@any false
+        ClassId.topLevel(KonanFqNames.hidesFromObjC) in annotationClassSymbol.annotations
     }
 }
 
-context(KtAnalysisSession)
-private fun KtCallableSymbol.isHiddenFromObjCByDeprecation(): Boolean {
+context(KaSession)
+@Suppress("CONTEXT_RECEIVERS_DEPRECATED")
+@OptIn(KaExperimentalApi::class)
+private fun KaCallableSymbol.isHiddenFromObjCByDeprecation(): Boolean {
     /*
     Note: ObjCExport generally expect overrides of exposed methods to be exposed.
     So don't hide a "deprecated hidden" method which overrides non-hidden one:
      */
     if (deprecationStatus?.deprecationLevel == DeprecationLevelValue.HIDDEN &&
-        getDirectlyOverriddenSymbols().all { overridden -> overridden.isHiddenFromObjCByDeprecation() }
+        directlyOverriddenSymbols.all { overridden -> overridden.isHiddenFromObjCByDeprecation() }
     ) {
         return true
     }
 
-    val containingClassSymbol = getContainingSymbol() as? KtClassOrObjectSymbol
+    val containingClassSymbol = containingSymbol as? KaClassSymbol
     if (containingClassSymbol?.deprecationStatus?.deprecationLevel == DeprecationLevelValue.HIDDEN) {
         return true
     }
@@ -144,8 +163,10 @@ private fun KtCallableSymbol.isHiddenFromObjCByDeprecation(): Boolean {
     return false
 }
 
-context(KtAnalysisSession)
-private fun KtClassOrObjectSymbol.isHiddenFromObjCByDeprecation(): Boolean {
+context(KaSession)
+@Suppress("CONTEXT_RECEIVERS_DEPRECATED")
+@OptIn(KaExperimentalApi::class)
+private fun KaClassSymbol.isHiddenFromObjCByDeprecation(): Boolean {
     if (this.deprecationStatus?.deprecationLevel == DeprecationLevelValue.HIDDEN) return true
 
     // Note: ObjCExport requires super class of exposed class to be exposed.
@@ -158,23 +179,24 @@ private fun KtClassOrObjectSymbol.isHiddenFromObjCByDeprecation(): Boolean {
     // Note: ObjCExport requires enclosing class of exposed class to be exposed.
     // Also in Kotlin hidden class members (including other classes) aren't directly accessible.
     // So hide a class if its enclosing class is hidden:
-    val containingSymbol = getContainingSymbol()
-    if (containingSymbol is KtClassOrObjectSymbol && containingSymbol.isHiddenFromObjCByDeprecation()) {
+    val containingSymbol = containingSymbol
+    if (containingSymbol is KaClassSymbol && containingSymbol.isHiddenFromObjCByDeprecation()) {
         return true
     }
 
     return false
 }
 
-context(KtAnalysisSession)
-private fun KtClassOrObjectSymbol.isInlined(): Boolean {
-    if (this !is KtNamedClassOrObjectSymbol) return false
+context(KaSession)
+@Suppress("CONTEXT_RECEIVERS_DEPRECATED")
+private fun KaClassSymbol.isInlined(): Boolean {
+    if (this !is KaNamedClassSymbol) return false
     if (this.isInline) return true
     // TODO: There are some native types that are 'implicitly inlined'
     return false
 }
 
-private fun KtClassKind.isVisibleInObjC(): Boolean = when (this) {
+private fun KaClassKind.isVisibleInObjC(): Boolean = when (this) {
     CLASS, ENUM_CLASS, INTERFACE, OBJECT, COMPANION_OBJECT -> true
     ANONYMOUS_OBJECT, ANNOTATION_CLASS -> false
 }

@@ -10,15 +10,18 @@ import com.intellij.mock.MockProject
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiClass
-import org.jetbrains.kotlin.analysis.api.KaAnalysisApiInternals
-import org.jetbrains.kotlin.analysis.api.platform.KotlinAnnotationsResolverFactory
-import org.jetbrains.kotlin.analysis.api.platform.KotlinDeclarationProviderFactory
-import org.jetbrains.kotlin.analysis.api.platform.KotlinDeclarationProviderMerger
-import org.jetbrains.kotlin.analysis.api.platform.KotlinGlobalModificationService
-import org.jetbrains.kotlin.analysis.api.platform.KotlinModificationTrackerFactory
-import org.jetbrains.kotlin.analysis.api.platform.KotlinPackageProviderFactory
-import org.jetbrains.kotlin.analysis.api.platform.KotlinPackageProviderMerger
-import org.jetbrains.kotlin.analysis.api.platform.KotlinResolutionScopeProvider
+import org.jetbrains.kotlin.analysis.api.platform.KotlinDeserializedDeclarationsOrigin
+import org.jetbrains.kotlin.analysis.api.platform.KotlinPlatformSettings
+import org.jetbrains.kotlin.analysis.api.platform.declarations.KotlinAnnotationsResolverFactory
+import org.jetbrains.kotlin.analysis.api.platform.declarations.KotlinDeclarationProviderFactory
+import org.jetbrains.kotlin.analysis.api.platform.declarations.KotlinDeclarationProviderMerger
+import org.jetbrains.kotlin.analysis.api.platform.modification.KotlinGlobalModificationService
+import org.jetbrains.kotlin.analysis.api.platform.modification.KotlinModificationTrackerFactory
+import org.jetbrains.kotlin.analysis.api.platform.packages.KotlinPackageProviderFactory
+import org.jetbrains.kotlin.analysis.api.platform.packages.KotlinPackageProviderMerger
+import org.jetbrains.kotlin.analysis.api.platform.projectStructure.KotlinByModulesResolutionScopeProvider
+import org.jetbrains.kotlin.analysis.api.platform.projectStructure.KotlinResolutionScopeProvider
+import org.jetbrains.kotlin.analysis.api.projectStructure.KaLibraryModule
 import org.jetbrains.kotlin.analysis.api.standalone.base.declarations.KotlinStandaloneAnnotationsResolverFactory
 import org.jetbrains.kotlin.analysis.api.standalone.base.declarations.KotlinStandaloneDeclarationProviderFactory
 import org.jetbrains.kotlin.analysis.api.standalone.base.declarations.KotlinStandaloneDeclarationProviderMerger
@@ -26,16 +29,14 @@ import org.jetbrains.kotlin.analysis.api.standalone.base.modification.KotlinStan
 import org.jetbrains.kotlin.analysis.api.standalone.base.modification.KotlinStandaloneModificationTrackerFactory
 import org.jetbrains.kotlin.analysis.api.standalone.base.packages.KotlinStandalonePackageProviderFactory
 import org.jetbrains.kotlin.analysis.api.standalone.base.packages.KotlinStandalonePackageProviderMerger
-import org.jetbrains.kotlin.analysis.api.standalone.base.project.structure.StandaloneProjectFactory
+import org.jetbrains.kotlin.analysis.api.standalone.base.projectStructure.StandaloneProjectFactory
 import org.jetbrains.kotlin.analysis.decompiled.light.classes.ClsJavaStubByVirtualFileCache
 import org.jetbrains.kotlin.analysis.decompiled.light.classes.DecompiledLightClassesFactory
 import org.jetbrains.kotlin.analysis.decompiler.konan.KlibMetaFileType
 import org.jetbrains.kotlin.analysis.decompiler.psi.BuiltInDefinitionFile
 import org.jetbrains.kotlin.analysis.decompiler.psi.KotlinBuiltInFileType
 import org.jetbrains.kotlin.analysis.decompiler.psi.file.KtClsFile
-import org.jetbrains.kotlin.analysis.project.structure.KtBinaryModule
-import org.jetbrains.kotlin.analysis.api.platform.impl.*
-import org.jetbrains.kotlin.analysis.test.framework.project.structure.ktTestModuleStructure
+import org.jetbrains.kotlin.analysis.test.framework.projectStructure.ktTestModuleStructure
 import org.jetbrains.kotlin.analysis.test.framework.services.configuration.AnalysisApiBinaryLibraryIndexingMode
 import org.jetbrains.kotlin.analysis.test.framework.services.configuration.libraryIndexingConfiguration
 import org.jetbrains.kotlin.analysis.test.framework.services.environmentManager
@@ -54,9 +55,10 @@ import org.jetbrains.kotlin.test.services.TestServices
 import org.jetbrains.kotlin.test.services.moduleStructure
 
 object AnalysisApiBaseTestServiceRegistrar : AnalysisApiTestServiceRegistrar() {
-    @OptIn(KaAnalysisApiInternals::class)
     override fun registerProjectServices(project: MockProject, testServices: TestServices) {
         project.apply {
+            registerPlatformSettings(testServices)
+
             registerService(KotlinModificationTrackerFactory::class.java, KotlinStandaloneModificationTrackerFactory::class.java)
             registerService(KotlinGlobalModificationService::class.java, KotlinStandaloneGlobalModificationService::class.java)
 
@@ -68,6 +70,19 @@ object AnalysisApiBaseTestServiceRegistrar : AnalysisApiTestServiceRegistrar() {
             registerService(ClsJavaStubByVirtualFileCache::class.java, ClsJavaStubByVirtualFileCache())
             registerService(ScriptDefinitionProvider::class.java, CliScriptDefinitionProvider())
         }
+    }
+
+    private fun MockProject.registerPlatformSettings(testServices: TestServices) {
+        val deserializedDeclarationsOrigin = when (testServices.libraryIndexingConfiguration.binaryLibraryIndexingMode) {
+            AnalysisApiBinaryLibraryIndexingMode.INDEX_STUBS -> KotlinDeserializedDeclarationsOrigin.STUBS
+            AnalysisApiBinaryLibraryIndexingMode.NO_INDEXING -> KotlinDeserializedDeclarationsOrigin.BINARIES
+        }
+
+        val settings = object : KotlinPlatformSettings {
+            override val deserializedDeclarationsOrigin: KotlinDeserializedDeclarationsOrigin = deserializedDeclarationsOrigin
+        }
+
+        registerService(KotlinPlatformSettings::class.java, settings)
     }
 
     class KtClsFileClassProvider(val project: Project) : KtFileClassProvider {
@@ -91,22 +106,26 @@ object AnalysisApiBaseTestServiceRegistrar : AnalysisApiTestServiceRegistrar() {
         // additionally build and index stubs for the library.
         val mainBinaryModules = moduleStructure.mainModules
             .filter { it.moduleKind == TestModuleKind.LibraryBinary }
-            .map { it.ktModule as KtBinaryModule }
+            .mapNotNull {
+                // Builtins have `TestModuleKind.LibraryBinary` but `KaBuiltinsModule`
+                // See KT-69367, builtins should probably be handled another way
+                it.ktModule as? KaLibraryModule
+            }
 
         val sharedBinaryDependencies = moduleStructure.binaryModules.toMutableSet()
         for (mainModule in moduleStructure.mainModules) {
             val ktModule = mainModule.ktModule
-            if (ktModule !is KtBinaryModule) continue
+            if (ktModule !is KaLibraryModule) continue
             sharedBinaryDependencies -= ktModule
         }
 
         val mainBinaryRoots = StandaloneProjectFactory.getVirtualFilesForLibraryRoots(
-            mainBinaryModules.flatMap { it.getBinaryRoots() },
+            mainBinaryModules.flatMap { it.binaryRoots },
             testServices.environmentManager.getProjectEnvironment(),
         ).distinct()
 
         val sharedBinaryRoots = StandaloneProjectFactory.getVirtualFilesForLibraryRoots(
-            sharedBinaryDependencies.flatMap { binary -> binary.getBinaryRoots() },
+            sharedBinaryDependencies.flatMap { binary -> binary.binaryRoots },
             testServices.environmentManager.getProjectEnvironment()
         ).distinct()
 

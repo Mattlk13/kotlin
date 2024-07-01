@@ -1,33 +1,41 @@
 KtNameReferenceExpression(55,59): 'TODO'
   KaInapplicableCallCandidateInfo:
-    diagnostic = ERROR<TOO_MANY_ARGUMENTS: Too many arguments for 'public final inline fun kotlin/TODO(): kotlin/Nothing'.>
     candidate = KaSimpleFunctionCall:
+      argumentMapping = {}
       isImplicitInvoke = false
       partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
         dispatchReceiver = null
         extensionReceiver = null
-        signature = KaFunctionLikeSignature:
+        signature = KaFunctionSignature:
           receiverType = null
           returnType = kotlin.Nothing
           symbol = kotlin/TODO(): kotlin.Nothing
           valueParameters = []
           callableId = kotlin/TODO
       typeArgumentsMapping = {}
-      argumentMapping = {}
+    diagnostic = ERROR<TOO_MANY_ARGUMENTS: Too many arguments for 'fun TODO(): Nothing'.>
     isInBestCandidates = false
   
   KaApplicableCallCandidateInfo:
     candidate = KaSimpleFunctionCall:
+      argumentMapping = {
+        "Not implemented yet" -> (KaVariableSignature:
+          name = reason
+          receiverType = null
+          returnType = kotlin.String
+          symbol = reason: kotlin.String
+          callableId = null)
+      }
       isImplicitInvoke = false
       partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
         dispatchReceiver = null
         extensionReceiver = null
-        signature = KaFunctionLikeSignature:
+        signature = KaFunctionSignature:
           receiverType = null
           returnType = kotlin.Nothing
           symbol = kotlin/TODO(reason: kotlin.String): kotlin.Nothing
           valueParameters = [
-            KaVariableLikeSignature:
+            KaVariableSignature:
               name = reason
               receiverType = null
               returnType = kotlin.String
@@ -36,12 +44,4 @@ KtNameReferenceExpression(55,59): 'TODO'
           ]
           callableId = kotlin/TODO
       typeArgumentsMapping = {}
-      argumentMapping = {
-        "Not implemented yet" -> (KaVariableLikeSignature:
-          name = reason
-          receiverType = null
-          returnType = kotlin.String
-          symbol = reason: kotlin.String
-          callableId = null)
-      }
     isInBestCandidates = true

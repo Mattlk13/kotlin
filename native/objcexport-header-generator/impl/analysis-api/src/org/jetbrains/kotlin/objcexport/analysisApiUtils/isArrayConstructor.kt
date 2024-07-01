@@ -5,14 +5,15 @@
 
 package org.jetbrains.kotlin.objcexport.analysisApiUtils
 
-import org.jetbrains.kotlin.analysis.api.KtAnalysisSession
-import org.jetbrains.kotlin.analysis.api.symbols.KtCallableSymbol
-import org.jetbrains.kotlin.analysis.api.symbols.KtClassOrObjectSymbol
-import org.jetbrains.kotlin.analysis.api.symbols.KtConstructorSymbol
+import org.jetbrains.kotlin.analysis.api.KaSession
+import org.jetbrains.kotlin.analysis.api.symbols.KaCallableSymbol
+import org.jetbrains.kotlin.analysis.api.symbols.KaClassSymbol
+import org.jetbrains.kotlin.analysis.api.symbols.KaConstructorSymbol
 import org.jetbrains.kotlin.backend.konan.descriptors.arrayTypes
 
-context(KtAnalysisSession)
-internal val KtCallableSymbol.isArrayConstructor: Boolean
-    get() = this is KtConstructorSymbol && getContainingSymbol()
-        ?.let { containingSymbol -> containingSymbol as? KtClassOrObjectSymbol }
+context(KaSession)
+@Suppress("CONTEXT_RECEIVERS_DEPRECATED")
+internal val KaCallableSymbol.isArrayConstructor: Boolean
+    get() = this is KaConstructorSymbol && containingSymbol
+        ?.let { containingSymbol -> containingSymbol as? KaClassSymbol }
         ?.let { classSymbol -> classSymbol.classId?.asFqNameString() in arrayTypes } ?: false

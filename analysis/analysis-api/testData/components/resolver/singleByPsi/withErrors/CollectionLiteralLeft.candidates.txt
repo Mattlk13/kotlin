@@ -1,16 +1,36 @@
 KtCollectionLiteralExpression(10,19): '[1, 2, 3]'
   KaApplicableCallCandidateInfo:
     candidate = KaSimpleFunctionCall:
+      argumentMapping = {
+        1 -> (KaVariableSignature:
+          name = elements
+          receiverType = null
+          returnType = kotlin.Int
+          symbol = vararg elements: T
+          callableId = null),
+        2 -> (KaVariableSignature:
+          name = elements
+          receiverType = null
+          returnType = kotlin.Int
+          symbol = vararg elements: T
+          callableId = null),
+        3 -> (KaVariableSignature:
+          name = elements
+          receiverType = null
+          returnType = kotlin.Int
+          symbol = vararg elements: T
+          callableId = null)
+      }
       isImplicitInvoke = false
       partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
         dispatchReceiver = null
         extensionReceiver = null
-        signature = KaFunctionLikeSignature:
+        signature = KaFunctionSignature:
           receiverType = null
           returnType = kotlin.Array<kotlin.Int>
           symbol = kotlin/arrayOf(vararg elements: T): kotlin.Array<T>
           valueParameters = [
-            KaVariableLikeSignature:
+            KaVariableSignature:
               name = elements
               receiverType = null
               returnType = kotlin.Int
@@ -20,25 +40,5 @@ KtCollectionLiteralExpression(10,19): '[1, 2, 3]'
           callableId = kotlin/arrayOf
       typeArgumentsMapping = {
         T -> (kotlin.Int)
-      }
-      argumentMapping = {
-        1 -> (KaVariableLikeSignature:
-          name = elements
-          receiverType = null
-          returnType = kotlin.Int
-          symbol = vararg elements: T
-          callableId = null),
-        2 -> (KaVariableLikeSignature:
-          name = elements
-          receiverType = null
-          returnType = kotlin.Int
-          symbol = vararg elements: T
-          callableId = null),
-        3 -> (KaVariableLikeSignature:
-          name = elements
-          receiverType = null
-          returnType = kotlin.Int
-          symbol = vararg elements: T
-          callableId = null)
       }
     isInBestCandidates = true

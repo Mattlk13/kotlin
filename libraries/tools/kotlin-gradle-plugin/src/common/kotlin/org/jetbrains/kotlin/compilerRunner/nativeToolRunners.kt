@@ -16,14 +16,13 @@ import org.jetbrains.kotlin.build.report.metrics.GradleBuildTime
 import org.jetbrains.kotlin.cli.common.messages.MessageRenderer
 import org.jetbrains.kotlin.gradle.dsl.NativeCacheKind
 import org.jetbrains.kotlin.gradle.dsl.NativeCacheOrchestration
+import org.jetbrains.kotlin.gradle.internal.properties.NativeProperties
 import org.jetbrains.kotlin.gradle.internal.properties.nativeProperties
 import org.jetbrains.kotlin.gradle.plugin.PropertiesProvider
 import org.jetbrains.kotlin.gradle.plugin.PropertiesProvider.Companion.kotlinPropertiesProvider
 import org.jetbrains.kotlin.gradle.plugin.mpp.apple.useXcodeMessageStyle
-import org.jetbrains.kotlin.gradle.plugin.mpp.nativeUseEmbeddableCompilerJar
 import org.jetbrains.kotlin.gradle.report.GradleBuildMetricsReporter
 import org.jetbrains.kotlin.gradle.targets.native.KonanPropertiesBuildService
-import org.jetbrains.kotlin.gradle.utils.NativeCompilerDownloader
 import org.jetbrains.kotlin.gradle.utils.newInstance
 import org.jetbrains.kotlin.konan.properties.resolvablePropertyString
 import org.jetbrains.kotlin.konan.target.HostManager
@@ -33,17 +32,6 @@ import java.io.File
 import java.nio.file.Files
 import java.util.*
 import javax.inject.Inject
-
-internal val Project.konanHome: File
-    get() = (PropertiesProvider(this).konanDataDir?.let { NativeCompilerDownloader(project).compilerDirectory }
-        ?: PropertiesProvider(this).nativeHome?.let { file(it) }
-        ?: NativeCompilerDownloader(project).compilerDirectory).absoluteFile
-
-internal val Project.konanDataDir: String?
-    get() = PropertiesProvider(this).konanDataDir
-
-internal val Project.kotlinNativeToolchainEnabled: Boolean
-    get() = PropertiesProvider(this).kotlinNativeToolchainEnabled && PropertiesProvider(this).nativeDownloadFromMaven
 
 internal fun Project.getKonanCacheKind(target: KonanTarget): NativeCacheKind =
     kotlinPropertiesProvider.getKonanCacheKind(target, KonanPropertiesBuildService.registerIfAbsent(this))
@@ -73,11 +61,15 @@ internal fun Project.getKonanParallelThreads(): Int {
     return PropertiesProvider(this).nativeParallelThreads ?: 4
 }
 
-private val Project.kotlinNativeCompilerJar: String
-    get() = if (nativeUseEmbeddableCompilerJar)
-        "${konanHome.absolutePath}/konan/lib/kotlin-native-compiler-embeddable.jar"
-    else
-        "${konanHome.absolutePath}/konan/lib/kotlin-native.jar"
+private val Project.kotlinNativeCompilerJar: Provider<File>
+    get() = nativeProperties.isUseEmbeddableCompilerJar
+        .zip(nativeProperties.actualNativeHomeDirectory) { useJar, nativeHomeDir ->
+            if (useJar) {
+                nativeHomeDir.resolve("konan/lib/kotlin-native-compiler-embeddable.jar")
+            } else {
+                nativeHomeDir.resolve("konan/lib/kotlin-native.jar")
+            }
+        }
 
 internal abstract class KotlinNativeToolRunner(
     protected val toolName: String,
@@ -135,7 +127,7 @@ internal abstract class KotlinNativeToolRunner(
         check(classpath.isNotEmpty()) {
             """
                 Classpath of the tool is empty: $toolName
-                Probably the '${PropertiesProvider.KOTLIN_NATIVE_HOME}' project property contains an incorrect path.
+                Probably the '${NativeProperties.NATIVE_HOME.name}' project property contains an incorrect path.
                 Please change it to the compiler root directory and rerun the build.
             """.trimIndent()
         }
@@ -289,7 +281,11 @@ internal abstract class KotlinNativeLibraryGenerationRunner @Inject constructor(
 
     companion object {
         fun fromProject(project: Project) = project.objects.KotlinNativeLibraryGenerationRunner(
-            settings = Settings.of(project.konanHome.absolutePath, project.konanDataDir, project),
+            settings = Settings.of(
+                project.nativeProperties.actualNativeHomeDirectory.get().absolutePath,
+                project.nativeProperties.konanDataDir.orNull?.absolutePath,
+                project
+            ),
             metricsReporter = GradleBuildMetricsReporter()
         )
     }

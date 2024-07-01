@@ -226,7 +226,7 @@ fun Test.includeTestsWithPattern(include: Boolean, patterns: (MutableSet<String>
 }
 
 fun Test.advanceGradleVersion() {
-    val gradleVersionForTests = "8.7"
+    val gradleVersionForTests = "8.8"
     systemProperty("kotlin.gradle.version.for.tests", gradleVersionForTests)
 }
 
@@ -293,7 +293,8 @@ val gradleVersions = listOf(
     "8.4",
     "8.5",
     "8.6",
-    "8.7"
+    "8.7",
+    "8.8",
 )
 
 if (project.kotlinBuildProperties.isTeamcityBuild) {
@@ -467,6 +468,8 @@ tasks.withType<Test> {
 
     systemProperty("kotlinVersion", rootProject.extra["kotlinVersion"] as String)
     systemProperty("runnerGradleVersion", gradle.gradleVersion)
+    systemProperty("composeSnapshotVersion", libs.versions.compose.snapshot.version.get())
+    systemProperty("composeSnapshotId", libs.versions.compose.snapshot.id.get())
 
     val installCocoapods = project.findProperty("installCocoapods") as String?
     if (installCocoapods != null) {

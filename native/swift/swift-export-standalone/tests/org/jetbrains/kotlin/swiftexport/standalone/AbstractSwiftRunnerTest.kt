@@ -9,10 +9,13 @@ import com.intellij.openapi.util.io.FileUtil
 import org.jetbrains.kotlin.konan.target.Distribution
 import org.jetbrains.kotlin.konan.test.blackbox.AbstractNativeSwiftExportTest
 import org.jetbrains.kotlin.konan.test.blackbox.support.TestCase
+import org.jetbrains.kotlin.konan.test.blackbox.support.TestDirectives
+import org.jetbrains.kotlin.konan.test.blackbox.support.TestModule
 import org.jetbrains.kotlin.konan.test.blackbox.support.compilation.TestCompilationArtifact
+import org.jetbrains.kotlin.konan.test.blackbox.support.util.flatMapToSet
 import org.jetbrains.kotlin.test.KotlinTestUtils
+import org.jetbrains.kotlin.utils.flatMapToNullableSet
 import java.io.File
-import java.util.Properties
 import kotlin.io.path.*
 import kotlin.test.assertSame
 
@@ -23,29 +26,39 @@ abstract class AbstractKlibBasedSwiftRunnerTest : AbstractNativeSwiftExportTest(
     override fun runCompiledTest(
         testPathFull: File,
         testCase: TestCase,
-        swiftExportOutput: SwiftExportModule,
+        swiftExportOutputs: Set<SwiftExportModule>,
         swiftModules: Set<TestCompilationArtifact.Swift.Module>,
+        kotlinBinaryLibrary: TestCompilationArtifact.BinaryLibrary,
     ) {
-        assertSame(1, swiftExportOutput.dependencies.count(), "should produce module without a single dependency")
-
-        val flattenModules = setOf(swiftExportOutput, swiftExportOutput.dependencies.first())
+        val flattenModules = swiftExportOutputs.flatMapToSet { it.dependencies.toSet() + it }
 
         flattenModules.forEach {
-            val files = it.files
+            when (it) {
+                is SwiftExportModule.BridgesToKotlin -> {
+                    val files = it.files
 
-            val expectedFiles = testPathFull.toPath() / "golden_result/"
-            val expectedSwift = expectedFiles / it.name / "${it.name}.swift"
-            val expectedCHeader = expectedFiles / it.name / "${it.name}.h"
-            val expectedKotlinBridge = expectedFiles / it.name / "${it.name}.kt"
+                    val expectedFiles = testPathFull.toPath() / "golden_result/"
+                    val expectedSwift = expectedFiles / it.name / "${it.name}.swift"
+                    val expectedCHeader = expectedFiles / it.name / "${it.name}.h"
+                    val expectedKotlinBridge = expectedFiles / it.name / "${it.name}.kt"
 
-            KotlinTestUtils.assertEqualsToFile(expectedSwift, files.swiftApi.readText())
-            KotlinTestUtils.assertEqualsToFile(expectedCHeader, files.cHeaderBridges.readText())
-            KotlinTestUtils.assertEqualsToFile(expectedKotlinBridge, files.kotlinBridges.readText())
+                    KotlinTestUtils.assertEqualsToFile(expectedSwift, files.swiftApi.readText())
+                    KotlinTestUtils.assertEqualsToFile(expectedCHeader, files.cHeaderBridges.readText())
+                    KotlinTestUtils.assertEqualsToFile(expectedKotlinBridge, files.kotlinBridges.readText())
+                }
+                is SwiftExportModule.SwiftOnly -> {
+                    val expectedFiles = testPathFull.toPath() / "golden_result/"
+                    val expectedSwift = expectedFiles / it.name / "${it.name}.swift"
+
+                    KotlinTestUtils.assertEqualsToFile(expectedSwift, it.swiftApi.readText())
+                }
+            }
         }
     }
 
-    override fun constructSwiftExportConfig(testPathFull: File): SwiftExportConfig {
-        val unsupportedTypeStrategy = ErrorTypeStrategy.Fail
+    override fun constructSwiftExportConfig(module: TestModule.Exclusive): SwiftExportConfig {
+        // TODO: KT-69285: add tests for ErrorTypeStrategy.Fail
+        val unsupportedTypeStrategy = ErrorTypeStrategy.SpecialType
         val errorTypeStrategy = ErrorTypeStrategy.Fail
 
         val defaultConfig: Map<String, String> = mapOf(
@@ -56,30 +69,30 @@ abstract class AbstractKlibBasedSwiftRunnerTest : AbstractNativeSwiftExportTest(
 
         var unsupportedDeclarationReporterKind = UnsupportedDeclarationReporterKind.Silent
         var multipleModulesHandlingStrategy = MultipleModulesHandlingStrategy.OneToOneModuleMapping
-        val discoveredConfig = (testPathFull.toPath() / "config.properties").takeIf { it.exists() }?.let { configPath ->
-            Properties().apply { load(configPath.toFile().inputStream()) }.let { properties ->
-                properties.propertyNames().asSequence()
-                    .filterIsInstance<String>()
-                    .associateWith { properties.getProperty(it) }
-                    .filter { (key, value) ->
-                        when {
-                            key == "unsupportedDeclarationsReporterKind" -> {
-                                UnsupportedDeclarationReporterKind.entries
-                                    .singleOrNull { it.name.lowercase() == value.lowercase() }
-                                    ?.let { unsupportedDeclarationReporterKind = it }
-                                false
-                            }
-                            key == "multipleModulesHandlingStrategy" -> {
-                                MultipleModulesHandlingStrategy.entries
-                                    .singleOrNull { it.name.lowercase() == value.lowercase() }
-                                    ?.let { multipleModulesHandlingStrategy = it }
-                                false
-                            }
-                            else -> true
-                        }
+
+        @Suppress("UNCHECKED_CAST") val discoveredConfig: Map<String, String> = (module
+            .directives
+            .firstOrNull { it.directive.name == TestDirectives.SWIFT_EXPORT_CONFIG.name }
+            ?.values as? List<Pair<String, String>>)
+            ?.toMap()
+            ?.filter { (key, value) ->
+                when (key) {
+                    "unsupportedDeclarationsReporterKind" -> {
+                        UnsupportedDeclarationReporterKind.entries
+                            .singleOrNull { it.name.lowercase() == value.lowercase() }
+                            ?.let { unsupportedDeclarationReporterKind = it }
+                        false
                     }
+                    "multipleModulesHandlingStrategy" -> {
+                        MultipleModulesHandlingStrategy.entries
+                            .singleOrNull { it.name.lowercase() == value.lowercase() }
+                            ?.let { multipleModulesHandlingStrategy = it }
+                        false
+                    }
+                    else -> true
+                }
             }
-        } ?: emptyMap()
+            ?: emptyMap()
 
         val config = defaultConfig + discoveredConfig
 
@@ -89,7 +102,7 @@ abstract class AbstractKlibBasedSwiftRunnerTest : AbstractNativeSwiftExportTest(
             distribution = Distribution(KonanHome.konanHomePath),
             errorTypeStrategy = errorTypeStrategy,
             unsupportedTypeStrategy = unsupportedTypeStrategy,
-            outputPath = tmpdir.toPath().resolve(testPathFull.name),
+            outputPath = tmpdir.toPath().resolve(module.name),
             unsupportedDeclarationReporterKind = unsupportedDeclarationReporterKind,
             multipleModulesHandlingStrategy = multipleModulesHandlingStrategy,
         )

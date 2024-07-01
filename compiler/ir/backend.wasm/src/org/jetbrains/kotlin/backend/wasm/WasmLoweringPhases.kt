@@ -32,9 +32,9 @@ private val validateIrBeforeLowering = makeIrModulePhase(
 )
 
 private val validateIrAfterInliningPhase = makeIrModulePhase(
-    ::IrValidationAfterInliningPhase,
-    name = "IrValidationAfterInliningPhase",
-    description = "Validate IR after inlining",
+    ::IrValidationAfterInliningAllFunctionsPhase,
+    name = "IrValidationAfterInliningAllFunctionsPhase",
+    description = "Validate IR after all functions have been inlined",
 )
 
 private val validateIrAfterLowering = makeIrModulePhase(
@@ -638,6 +638,12 @@ val constEvaluationPhase = makeIrModulePhase(
     prerequisite = setOf(functionInliningPhase)
 )
 
+val inlineCallableReferenceToLambdaPhase = makeIrModulePhase(
+    ::WasmInlineCallableReferenceToLambdaPhase,
+    name = "WasmInlineCallableReferenceToLambdaPhase",
+    description = "Transform all callable reference (including defaults) to inline lambdas, mark inline lambdas for later passes"
+)
+
 val loweringList = listOf(
     validateIrBeforeLowering,
     jsCodeCallsLowering,
@@ -656,6 +662,7 @@ val loweringList = listOf(
     localClassesInInlineFunctionsPhase,
     localClassesExtractionFromInlineFunctionsPhase,
 
+    inlineCallableReferenceToLambdaPhase,
     wrapInlineDeclarationsWithReifiedTypeParametersPhase,
 
     functionInliningPhase,

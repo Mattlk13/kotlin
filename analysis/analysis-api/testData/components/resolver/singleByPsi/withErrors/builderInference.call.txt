@@ -1,30 +1,39 @@
 KtNameReferenceExpression(248,251): 'add'
   KaSuccessCallInfo:
     call = KaSimpleFunctionCall:
+      argumentMapping = {
+        s -> (KaVariableSignature:
+          name = t
+          receiverType = null
+          returnType = kotlin.String
+          symbol = t: T
+          callableId = null)
+      }
       isImplicitInvoke = false
       partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
         dispatchReceiver = KaImplicitReceiverValue:
           symbol = KaReceiverParameterSymbol:
-            annotationsList: []
+            annotations: []
+            location: LOCAL
             origin: SOURCE
             owningCallableSymbol: KaAnonymousFunctionSymbol(<local>/<no name provided>)
             type: KaUsualClassType:
-              annotationsList: []
+              annotations: []
               typeArguments: [
                 KaUsualClassType:
-                  annotationsList: []
+                  annotations: []
                   typeArguments: []
                   type: kotlin/String
               ]
               type: test/Target<kotlin/String>
           type = test.Target<kotlin.String>
         extensionReceiver = null
-        signature = KaFunctionLikeSignature:
+        signature = KaFunctionSignature:
           receiverType = null
           returnType = kotlin.Unit
           symbol = test/Target.add(<dispatch receiver>: test.Target<T>, t: T): kotlin.Unit
           valueParameters = [
-            KaVariableLikeSignature:
+            KaVariableSignature:
               name = t
               receiverType = null
               returnType = kotlin.String
@@ -33,11 +42,3 @@ KtNameReferenceExpression(248,251): 'add'
           ]
           callableId = test/Target.add
       typeArgumentsMapping = {}
-      argumentMapping = {
-        s -> (KaVariableLikeSignature:
-          name = t
-          receiverType = null
-          returnType = kotlin.String
-          symbol = t: T
-          callableId = null)
-      }

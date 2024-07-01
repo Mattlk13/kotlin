@@ -64,7 +64,7 @@ private fun ConeKotlinType.enhanceConeKotlinType(
                 this is ConeRawType -> ConeRawType.create(lowerResult ?: lowerBound, upperResult ?: upperBound)
                 else -> coneFlexibleOrSimpleType(session.typeContext, lowerResult ?: lowerBound, upperResult ?: upperBound).let {
                     it.applyIf(it !is ConeFlexibleType) {
-                        it.withAttributes(it.attributes + CompilerConeAttributes.EnhancedNullability)
+                        it.withAttributes(it.attributes.add(CompilerConeAttributes.EnhancedNullability))
                     }
                 }
             }
@@ -123,7 +123,12 @@ private fun ConeSimpleKotlinType.enhanceInflexibleType(
     )
 
     return if (enhanced != null && (effectiveQualifiers.isNullabilityQualifierForWarning || convertErrorToWarning)) {
-        val newAttributes = attributes.plus(EnhancedTypeForWarningAttribute(enhanced, isDeprecation = convertErrorToWarning && effectiveQualifiers.enhancesSomethingForError()))
+        val newAttributes = attributes.add(
+            EnhancedTypeForWarningAttribute(
+                enhanced.enhancedTypeForWarningOrSelf,
+                isDeprecation = convertErrorToWarning && effectiveQualifiers.enhancesSomethingForError()
+            )
+        )
 
         if (enhancedTag != lookupTag) {
             // Handle case when mutability was enhanced and nullability was enhanced for warning.
@@ -136,7 +141,14 @@ private fun ConeSimpleKotlinType.enhanceInflexibleType(
             ConeDefinitelyNotNullType.create(this, session.typeContext)
         }
     } else {
-        enhanced
+        // It's possible for enhanced (for warning) types to be enhanced again, one instance is when in
+        // `JavaClassUseSiteMemberScope.processOverridesForFunctionsWithErasedValueParameter`,
+        // `relevantFunctionFromSupertypes` is a substitution override.
+        // In this case, the non-enhanced Java method gets a value parameter with an enhanced type.
+        // In a situation where this previously enhanced for warning type gets enhanced for error (because of an override, e.g., from a
+        // `@PurelyImplements` supertype), we need to remove the enhanced for warning attribute, otherwise we end up with a contradicting,
+        // non-flexible(!) type like `EFW(String?) String`.
+        enhanced?.withAttributes(enhanced.attributes.remove(EnhancedTypeForWarningAttribute::class))
     }
 }
 
@@ -195,7 +207,7 @@ private fun ConeLookupTagBasedType.enhanceInflexibleType(
     }
 
     val mergedArguments = Array(typeArguments.size) { enhancedArguments[it] ?: typeArguments[it] }
-    val mergedAttributes = if (shouldAddAttribute) attributes + CompilerConeAttributes.EnhancedNullability else attributes
+    val mergedAttributes = if (shouldAddAttribute) attributes.add(CompilerConeAttributes.EnhancedNullability) else attributes
     val enhancedType = enhancedTag.constructType(mergedArguments, enhancedIsNullable, mergedAttributes)
     return if (isDefinitelyNotNull || (isFromDefinitelyNotNullType && nullabilityFromQualifiers == null))
         ConeDefinitelyNotNullType.create(enhancedType, session.typeContext) ?: enhancedType

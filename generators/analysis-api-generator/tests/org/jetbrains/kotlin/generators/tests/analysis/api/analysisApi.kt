@@ -38,9 +38,12 @@ import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.components.psiType
 import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.components.readWriteAccess.AbstractReadWriteAccessTest
 import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.components.referenceResolveProvider.AbstractIsImplicitCompanionReferenceTest
 import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.components.resolveExtensionInfoProvider.AbstractResolveExtensionInfoProviderTest
+import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.components.resolver.AbstractResolveCallByFileTest
 import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.components.resolver.AbstractResolveCallTest
+import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.components.resolver.AbstractResolveCandidatesByFileTest
 import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.components.resolver.AbstractResolveCandidatesTest
 import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.components.resolver.AbstractResolveDanglingFileReferenceTest
+import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.components.resolver.AbstractResolveReferenceByFileTest
 import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.components.resolver.AbstractResolveReferenceTest
 import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.components.resolver.AbstractResolveReferenceWithResolveExtensionTest
 import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.components.scopeProvider.*
@@ -81,7 +84,6 @@ import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.types.AbstractAbbr
 import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.types.AbstractAnalysisApiSubstitutorsTest
 import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.types.AbstractBuiltInTypeTest
 import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.types.AbstractTypeByDeclarationReturnTypeTest
-import org.jetbrains.kotlin.analysis.api.standalone.fir.test.cases.components.psiDeclarationProvider.AbstractPsiDeclarationProviderTest
 import org.jetbrains.kotlin.analysis.test.framework.test.configurators.AnalysisApiMode
 import org.jetbrains.kotlin.analysis.test.framework.test.configurators.AnalysisApiTestConfiguratorFactoryData
 import org.jetbrains.kotlin.analysis.test.framework.test.configurators.AnalysisSessionMode
@@ -97,7 +99,7 @@ internal fun AnalysisApiTestGroup.generateAnalysisApiTests() {
         filter = testModuleKindIs(TestModuleKind.Source, TestModuleKind.ScriptSource, TestModuleKind.LibrarySource) and
                 analysisSessionModeIs(AnalysisSessionMode.Normal),
     ) {
-        val init: TestGroup.TestClass.(data: AnalysisApiTestConfiguratorFactoryData) -> Unit = { data ->
+        val singleByPsiInit: TestGroup.TestClass.(data: AnalysisApiTestConfiguratorFactoryData) -> Unit = { data ->
             val excludeDirs = buildList {
                 if (data.analysisApiMode == AnalysisApiMode.Standalone ||
                     data.frontend == FrontendKind.Fe10 ||
@@ -125,9 +127,19 @@ internal fun AnalysisApiTestGroup.generateAnalysisApiTests() {
             model(data, "singleByPsi", excludeDirsRecursively = excludeDirs)
         }
 
-        test<AbstractResolveCallTest>(init = init)
-        test<AbstractResolveCandidatesTest>(init = init)
-        test<AbstractResolveReferenceTest>(init = init)
+        test<AbstractResolveCallTest>(init = singleByPsiInit)
+        test<AbstractResolveCandidatesTest>(init = singleByPsiInit)
+        test<AbstractResolveReferenceTest>(init = singleByPsiInit)
+
+        group(filter = testModuleKindIs(TestModuleKind.Source)) {
+            val allByPsiInit: TestGroup.TestClass.(data: AnalysisApiTestConfiguratorFactoryData) -> Unit = { data ->
+                model(data, "allByPsi")
+            }
+
+            test<AbstractResolveCallByFileTest>(init = allByPsiInit)
+            test<AbstractResolveCandidatesByFileTest>(init = allByPsiInit)
+            test<AbstractResolveReferenceByFileTest>(init = allByPsiInit)
+        }
     }
 
     test<AbstractResolveDanglingFileReferenceTest>(
@@ -163,13 +175,6 @@ internal fun AnalysisApiTestGroup.generateAnalysisApiTests() {
     }
 
     generateAnalysisApiNonComponentsTests()
-
-    group(
-        filter = testModuleKindIs(TestModuleKind.Source, TestModuleKind.ScriptSource, TestModuleKind.LibraryBinaryDecompiled) and
-                analysisApiModeIs(AnalysisApiMode.Standalone)
-    ) {
-        generateAnalysisApiStandaloneTests()
-    }
 }
 
 private fun AnalysisApiTestGroup.generateResolveExtensionsTests() {
@@ -324,22 +329,6 @@ private fun AnalysisApiTestGroup.generateAnalysisApiNonComponentsTests() {
 
         test<AbstractCodeFragmentContextModificationAnalysisSessionInvalidationTest> {
             model("sessionInvalidation")
-        }
-    }
-}
-
-private fun AnalysisApiTestGroup.generateAnalysisApiStandaloneTests() {
-    group("standalone") {
-        test<AbstractPsiDeclarationProviderTest>(
-            filter = testModuleKindIs(TestModuleKind.Source)
-        ) {
-            model(it, "source")
-        }
-
-        test<AbstractPsiDeclarationProviderTest>(
-            filter = testModuleKindIs(TestModuleKind.LibraryBinaryDecompiled)
-        ) {
-            model(it, "binary")
         }
     }
 }
@@ -638,11 +627,11 @@ private fun AnalysisApiTestGroup.generateAnalysisApiComponentsTests() {
                 model(it, "packageScope")
             }
 
-            group(filter = frontendIs(FrontendKind.Fir)) {
-                test<AbstractSubstitutionOverridesUnwrappingTest> {
-                    model(it, "substitutionOverridesUnwrapping")
-                }
+            test<AbstractSubstitutionOverridesUnwrappingTest> {
+                model(it, "substitutionOverridesUnwrapping")
+            }
 
+            group(filter = frontendIs(FrontendKind.Fir)) {
                 test<AbstractMemberScopeTest> {
                     when (it.analysisApiMode) {
                         AnalysisApiMode.Ide ->

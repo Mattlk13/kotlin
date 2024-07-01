@@ -1,6 +1,14 @@
 KtOperationReferenceExpression(106,108): '=='
   KaSuccessCallInfo:
     call = KaSimpleFunctionCall:
+      argumentMapping = {
+        n -> (KaVariableSignature:
+          name = other
+          receiverType = null
+          returnType = kotlin.Any?
+          symbol = other: kotlin.Any?
+          callableId = null)
+      }
       isImplicitInvoke = false
       partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
         dispatchReceiver = KaExplicitReceiverValue:
@@ -8,12 +16,12 @@ KtOperationReferenceExpression(106,108): '=='
           isSafeNavigation = false
           type = kotlin.Any
         extensionReceiver = null
-        signature = KaFunctionLikeSignature:
+        signature = KaFunctionSignature:
           receiverType = null
           returnType = kotlin.Boolean
           symbol = kotlin/Any.equals(<dispatch receiver>: kotlin.Any, other: kotlin.Any?): kotlin.Boolean
           valueParameters = [
-            KaVariableLikeSignature:
+            KaVariableSignature:
               name = other
               receiverType = null
               returnType = kotlin.Any?
@@ -22,11 +30,3 @@ KtOperationReferenceExpression(106,108): '=='
           ]
           callableId = kotlin/Any.equals
       typeArgumentsMapping = {}
-      argumentMapping = {
-        n -> (KaVariableLikeSignature:
-          name = other
-          receiverType = null
-          returnType = kotlin.Any?
-          symbol = other: kotlin.Any?
-          callableId = null)
-      }

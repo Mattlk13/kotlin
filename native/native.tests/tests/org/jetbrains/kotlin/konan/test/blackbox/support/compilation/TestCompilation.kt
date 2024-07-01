@@ -12,7 +12,7 @@ import org.jetbrains.kotlin.konan.target.Family
 import org.jetbrains.kotlin.konan.target.withOSVersion
 import org.jetbrains.kotlin.konan.test.blackbox.support.*
 import org.jetbrains.kotlin.konan.test.blackbox.support.TestCase.*
-import org.jetbrains.kotlin.konan.test.blackbox.support.TestModule.Companion.allDependsOn
+import org.jetbrains.kotlin.konan.test.blackbox.support.TestModule.Companion.allDependsOnDependencies
 import org.jetbrains.kotlin.konan.test.blackbox.support.compilation.ExecutableCompilation.Companion.applyFileCheckArgs
 import org.jetbrains.kotlin.konan.test.blackbox.support.compilation.ExecutableCompilation.Companion.applyPartialLinkageArgs
 import org.jetbrains.kotlin.konan.test.blackbox.support.compilation.ExecutableCompilation.Companion.applyTestRunnerSpecificArgs
@@ -233,6 +233,7 @@ abstract class SourceBasedCompilation<A : TestCompilationArtifact>(
     override fun applyDependencies(argsBuilder: ArgsBuilder): Unit = with(argsBuilder) {
         dependencies.friends.takeIf(Collection<*>::isNotEmpty)?.let { friends ->
             add("-friend-modules", friends.joinToString(File.pathSeparator) { friend -> friend.path })
+            addFlattened(friends) { friend -> listOf("-l", friend.path) }
         }
         add(dependencies.includedLibraries) { include -> "-Xinclude=${include.path}" }
         super.applyDependencies(argsBuilder)
@@ -242,7 +243,7 @@ abstract class SourceBasedCompilation<A : TestCompilationArtifact>(
         if (pipelineType == PipelineType.K2 && freeCompilerArgs.compilerArgs.any { it == "-XXLanguage:+MultiPlatformProjects" }) {
             sourceModules.mapToSet { "-Xfragments=${it.name}" }
                 .sorted().forEach { add(it) }
-            sourceModules.flatMapToSet { module -> module.allDependsOn.map { "-Xfragment-refines=${module.name}:${it.name}" } }
+            sourceModules.flatMapToSet { module -> module.allDependsOnDependencies.map { "-Xfragment-refines=${module.name}:${it.name}" } }
                 .sorted().forEach { add(it) }
             sourceModules.flatMapToSet { module -> module.files.map { "-Xfragment-sources=${module.name}:${it.location.path}" } }
                 .sorted().forEach { add(it) }
@@ -728,24 +729,17 @@ internal class StaticCacheCompilation(
 
     override fun applyDependencies(argsBuilder: ArgsBuilder): Unit = with(argsBuilder) {
         dependencies.friends.takeIf(Collection<*>::isNotEmpty)?.let { friends ->
-            add(
-                "-friend-modules",
-                friends.joinToString(File.pathSeparator) { friend ->
-                    friend.headerKlib.takeIf { useHeaders && it.exists() }?.path ?: friend.path
-                })
+            add("-friend-modules", friends.joinToString(File.pathSeparator) { friend -> friend.getHeaderKlibPathOrDefaultPath() })
         }
-        addFlattened(dependencies.cachedLibraries) { lib ->
-            listOf(
-                "-l",
-                lib.klib.headerKlib.takeIf { useHeaders && it.exists() }?.path ?: lib.klib.path
-            )
-        }
+        addFlattened(dependencies.cachedLibraries) { lib -> listOf("-l", lib.klib.getHeaderKlibPathOrDefaultPath()) }
         super.applyDependencies(argsBuilder)
     }
 
     override fun postCompileCheck() {
         (options as? Options.ForIncludedLibraryWithTests)?.expectedExecutableArtifact?.testDumpFile?.assertTestDumpFileNotEmptyIfExists()
     }
+
+    private fun KLIB.getHeaderKlibPathOrDefaultPath(): String = headerKlib.takeIf { useHeaders && it.exists() }?.path ?: path
 }
 
 internal class TestBundleCompilation(

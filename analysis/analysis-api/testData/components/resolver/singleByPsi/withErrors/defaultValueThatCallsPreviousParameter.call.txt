@@ -1,6 +1,14 @@
 KtNameReferenceExpression(270,279): 'getString'
   KaSuccessCallInfo:
     call = KaSimpleFunctionCall:
+      argumentMapping = {
+        if (testInt == 0) R.string.test_string_1 else R.string.test_string_2 -> (KaVariableSignature:
+          name = id
+          receiverType = null
+          returnType = kotlin.Int
+          symbol = id: kotlin.Int
+          callableId = null)
+      }
       isImplicitInvoke = false
       partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
         dispatchReceiver = KaExplicitReceiverValue:
@@ -8,12 +16,12 @@ KtNameReferenceExpression(270,279): 'getString'
           isSafeNavigation = false
           type = test.pkg.Context
         extensionReceiver = null
-        signature = KaFunctionLikeSignature:
+        signature = KaFunctionSignature:
           receiverType = null
           returnType = kotlin.String!
           symbol = test/pkg/Context.getString(<dispatch receiver>: test.pkg.Context, id: kotlin.Int): kotlin.String!
           valueParameters = [
-            KaVariableLikeSignature:
+            KaVariableSignature:
               name = id
               receiverType = null
               returnType = kotlin.Int
@@ -22,11 +30,3 @@ KtNameReferenceExpression(270,279): 'getString'
           ]
           callableId = test/pkg/Context.getString
       typeArgumentsMapping = {}
-      argumentMapping = {
-        if (testInt == 0) R.string.test_string_1 else R.string.test_string_2 -> (KaVariableLikeSignature:
-          name = id
-          receiverType = null
-          returnType = kotlin.Int
-          symbol = id: kotlin.Int
-          callableId = null)
-      }

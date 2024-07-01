@@ -1,6 +1,6 @@
-KaFunctionalType:
+KaFunctionType:
   abbreviatedType: null
-  annotationsList: []
+  annotations: []
   arity: 1
   classId: kotlin/Function1
   contextReceivers: []
@@ -13,7 +13,7 @@ KaFunctionalType:
     KaUsualClassType:
       abbreviatedType: KaUsualClassType:
         abbreviatedType: null
-        annotationsList: []
+        annotations: []
         classId: expansion/StringAlias
         nullability: NON_NULLABLE
         qualifiers: [
@@ -24,27 +24,27 @@ KaFunctionalType:
         ]
         symbol: KaTypeAliasSymbol(expansion/StringAlias)
         typeArguments: []
-      annotationsList: []
+      annotations: []
       classId: kotlin/String
       nullability: NON_NULLABLE
       qualifiers: [
         qualifier:
           name: String
-          symbol: KaNamedClassOrObjectSymbol(kotlin/String)
+          symbol: KaNamedClassSymbol(kotlin/String)
           typeArguments: []
       ]
-      symbol: KaNamedClassOrObjectSymbol(kotlin/String)
+      symbol: KaNamedClassSymbol(kotlin/String)
       typeArguments: []
   ]
   qualifiers: [
     qualifier:
       name: Function1
-      symbol: KaNamedClassOrObjectSymbol(kotlin/Function1)
+      symbol: KaNamedClassSymbol(kotlin/Function1)
       typeArguments: [
         KaUsualClassType:
           abbreviatedType: KaUsualClassType:
             abbreviatedType: null
-            annotationsList: []
+            annotations: []
             classId: expansion/StringAlias
             nullability: NON_NULLABLE
             qualifiers: [
@@ -55,21 +55,21 @@ KaFunctionalType:
             ]
             symbol: KaTypeAliasSymbol(expansion/StringAlias)
             typeArguments: []
-          annotationsList: []
+          annotations: []
           classId: kotlin/String
           nullability: NON_NULLABLE
           qualifiers: [
             qualifier:
               name: String
-              symbol: KaNamedClassOrObjectSymbol(kotlin/String)
+              symbol: KaNamedClassSymbol(kotlin/String)
               typeArguments: []
           ]
-          symbol: KaNamedClassOrObjectSymbol(kotlin/String)
+          symbol: KaNamedClassSymbol(kotlin/String)
           typeArguments: []
         KaUsualClassType:
           abbreviatedType: KaUsualClassType:
             abbreviatedType: null
-            annotationsList: []
+            annotations: []
             classId: expansion/IntAlias
             nullability: NON_NULLABLE
             qualifiers: [
@@ -80,16 +80,16 @@ KaFunctionalType:
             ]
             symbol: KaTypeAliasSymbol(expansion/IntAlias)
             typeArguments: []
-          annotationsList: []
+          annotations: []
           classId: kotlin/Int
           nullability: NON_NULLABLE
           qualifiers: [
             qualifier:
               name: Int
-              symbol: KaNamedClassOrObjectSymbol(kotlin/Int)
+              symbol: KaNamedClassSymbol(kotlin/Int)
               typeArguments: []
           ]
-          symbol: KaNamedClassOrObjectSymbol(kotlin/Int)
+          symbol: KaNamedClassSymbol(kotlin/Int)
           typeArguments: []
       ]
   ]
@@ -97,7 +97,7 @@ KaFunctionalType:
   returnType: KaUsualClassType:
     abbreviatedType: KaUsualClassType:
       abbreviatedType: null
-      annotationsList: []
+      annotations: []
       classId: expansion/IntAlias
       nullability: NON_NULLABLE
       qualifiers: [
@@ -108,23 +108,23 @@ KaFunctionalType:
       ]
       symbol: KaTypeAliasSymbol(expansion/IntAlias)
       typeArguments: []
-    annotationsList: []
+    annotations: []
     classId: kotlin/Int
     nullability: NON_NULLABLE
     qualifiers: [
       qualifier:
         name: Int
-        symbol: KaNamedClassOrObjectSymbol(kotlin/Int)
+        symbol: KaNamedClassSymbol(kotlin/Int)
         typeArguments: []
     ]
-    symbol: KaNamedClassOrObjectSymbol(kotlin/Int)
+    symbol: KaNamedClassSymbol(kotlin/Int)
     typeArguments: []
-  symbol: KaNamedClassOrObjectSymbol(kotlin/Function1)
+  symbol: KaNamedClassSymbol(kotlin/Function1)
   typeArguments: [
     KaUsualClassType:
       abbreviatedType: KaUsualClassType:
         abbreviatedType: null
-        annotationsList: []
+        annotations: []
         classId: expansion/StringAlias
         nullability: NON_NULLABLE
         qualifiers: [
@@ -135,21 +135,21 @@ KaFunctionalType:
         ]
         symbol: KaTypeAliasSymbol(expansion/StringAlias)
         typeArguments: []
-      annotationsList: []
+      annotations: []
       classId: kotlin/String
       nullability: NON_NULLABLE
       qualifiers: [
         qualifier:
           name: String
-          symbol: KaNamedClassOrObjectSymbol(kotlin/String)
+          symbol: KaNamedClassSymbol(kotlin/String)
           typeArguments: []
       ]
-      symbol: KaNamedClassOrObjectSymbol(kotlin/String)
+      symbol: KaNamedClassSymbol(kotlin/String)
       typeArguments: []
     KaUsualClassType:
       abbreviatedType: KaUsualClassType:
         abbreviatedType: null
-        annotationsList: []
+        annotations: []
         classId: expansion/IntAlias
         nullability: NON_NULLABLE
         qualifiers: [
@@ -160,16 +160,16 @@ KaFunctionalType:
         ]
         symbol: KaTypeAliasSymbol(expansion/IntAlias)
         typeArguments: []
-      annotationsList: []
+      annotations: []
       classId: kotlin/Int
       nullability: NON_NULLABLE
       qualifiers: [
         qualifier:
           name: Int
-          symbol: KaNamedClassOrObjectSymbol(kotlin/Int)
+          symbol: KaNamedClassSymbol(kotlin/Int)
           typeArguments: []
       ]
-      symbol: KaNamedClassOrObjectSymbol(kotlin/Int)
+      symbol: KaNamedClassSymbol(kotlin/Int)
       typeArguments: []
   ]
 

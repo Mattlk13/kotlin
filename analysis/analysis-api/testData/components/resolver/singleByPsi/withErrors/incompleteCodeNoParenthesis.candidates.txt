@@ -1,12 +1,12 @@
 KtCallExpression(64,75): 'ALE<String>'
   KaInapplicableCallCandidateInfo:
-    diagnostic = ERROR<null: Inapplicable candidate>
     candidate = KaSimpleFunctionCall:
+      argumentMapping = {}
       isImplicitInvoke = false
       partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
         dispatchReceiver = null
         extensionReceiver = null
-        signature = KaFunctionLikeSignature:
+        signature = KaFunctionSignature:
           receiverType = null
           returnType = ALE<T>
           symbol = <constructor>(): ALE<T>
@@ -15,5 +15,5 @@ KtCallExpression(64,75): 'ALE<String>'
       typeArgumentsMapping = {
         T -> (kotlin.String)
       }
-      argumentMapping = {}
+    diagnostic = ERROR<OTHER_ERROR: Inapplicable candidate>
     isInBestCandidates = false

@@ -1,6 +1,7 @@
 KtCallExpression(76,79): 'f()'
   KaApplicableCallCandidateInfo:
     candidate = KaSimpleFunctionCall:
+      argumentMapping = {}
       isImplicitInvoke = true
       partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
         dispatchReceiver = KaExplicitReceiverValue:
@@ -8,12 +9,12 @@ KtCallExpression(76,79): 'f()'
           isSafeNavigation = false
           type = Foo
         extensionReceiver = null
-        signature = KaFunctionLikeSignature:
+        signature = KaFunctionSignature:
           receiverType = null
           returnType = kotlin.Unit
           symbol = /Foo.invoke(<dispatch receiver>: Foo, vararg a: kotlin.Any): kotlin.Unit
           valueParameters = [
-            KaVariableLikeSignature:
+            KaVariableSignature:
               name = a
               receiverType = null
               returnType = kotlin.Any
@@ -22,5 +23,4 @@ KtCallExpression(76,79): 'f()'
           ]
           callableId = /Foo.invoke
       typeArgumentsMapping = {}
-      argumentMapping = {}
     isInBestCandidates = true

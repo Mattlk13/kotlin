@@ -11,11 +11,11 @@ import com.intellij.testFramework.TestDataFile
 import org.jetbrains.kotlin.analysis.api.KaSession
 import org.jetbrains.kotlin.analysis.api.analyze
 import org.jetbrains.kotlin.analysis.api.analyzeCopy
-import org.jetbrains.kotlin.analysis.project.structure.DanglingFileResolutionMode
+import org.jetbrains.kotlin.analysis.api.projectStructure.KaDanglingFileResolutionMode
 import org.jetbrains.kotlin.analysis.test.framework.AnalysisApiTestDirectives
 import org.jetbrains.kotlin.analysis.test.framework.TestWithDisposable
-import org.jetbrains.kotlin.analysis.test.framework.project.structure.KtTestModule
-import org.jetbrains.kotlin.analysis.test.framework.project.structure.ktTestModuleStructure
+import org.jetbrains.kotlin.analysis.test.framework.projectStructure.KtTestModule
+import org.jetbrains.kotlin.analysis.test.framework.projectStructure.ktTestModuleStructure
 import org.jetbrains.kotlin.analysis.test.framework.services.ExpressionMarkerProvider
 import org.jetbrains.kotlin.analysis.test.framework.services.ExpressionMarkersSourceFilePreprocessor
 import org.jetbrains.kotlin.analysis.test.framework.services.expressionMarkerProvider
@@ -133,14 +133,14 @@ abstract class AbstractAnalysisApiBasedTest : TestWithDisposable() {
 
     /**
      * Consider implementing this method if your test logic needs the whole
-     * [KtTestModuleStructure][org.jetbrains.kotlin.analysis.test.framework.project.structure.KtTestModuleStructure].
+     * [KtTestModuleStructure][org.jetbrains.kotlin.analysis.test.framework.projectStructure.KtTestModuleStructure].
      *
      * Examples of use cases:
      *
      * - Find all files in all modules
      * - Find two declarations from different files and different modules and compare them
      *
-     * The [KtTestModuleStructure][org.jetbrains.kotlin.analysis.test.framework.project.structure.KtTestModuleStructure] can be accessed via
+     * The [KtTestModuleStructure][org.jetbrains.kotlin.analysis.test.framework.projectStructure.KtTestModuleStructure] can be accessed via
      * [ktTestModuleStructure] on [testServices].
      *
      * Use only if [doTestByMainModuleAndOptionalMainFile] is not suitable for your use case.
@@ -380,7 +380,7 @@ abstract class AbstractAnalysisApiBasedTest : TestWithDisposable() {
             val originalContainingFile = contextElement.containingKtFile
             val fileCopy = originalContainingFile.copy() as KtFile
 
-            analyzeCopy(fileCopy, DanglingFileResolutionMode.IGNORE_SELF) {
+            analyzeCopy(fileCopy, KaDanglingFileResolutionMode.IGNORE_SELF) {
                 action(PsiTreeUtil.findSameElementInCopy<KtElement>(contextElement, fileCopy))
             }
         } else {

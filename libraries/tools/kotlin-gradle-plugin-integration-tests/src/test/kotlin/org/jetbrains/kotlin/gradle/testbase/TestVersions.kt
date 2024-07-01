@@ -32,14 +32,14 @@ interface TestVersions {
         const val G_8_5 = "8.5"
         const val G_8_6 = "8.6"
         const val G_8_7 = "8.7"
+        const val G_8_8 = "8.8"
 
         const val MIN_SUPPORTED = minSupportedGradleVersion
-        const val MAX_SUPPORTED = G_8_7
+        const val MAX_SUPPORTED = G_8_8
     }
 
     object Kotlin {
-        const val STABLE_RELEASE = "1.9.23"
-        const val MPP_MIN_SUPPORTED = "1.7.21"
+        const val STABLE_RELEASE = "2.0.0"
 
         // Copied from KOTLIN_VERSION.kt file
         val CURRENT
@@ -56,12 +56,12 @@ interface TestVersions {
         const val AGP_82 = "8.2.2"
         const val AGP_83 = "8.3.2"
         const val AGP_84 = "8.4.0"
-        const val AGP_85 = "8.5.0-beta01"
-        const val AGP_86 = "8.6.0-alpha01"
+        const val AGP_85 = "8.5.0"
+        const val AGP_86 = "8.6.0-alpha05"
 
         // Should be in sync with KotlinMultiplatformAndroidGradlePluginCompatibilityHealthCheck
         const val MIN_SUPPORTED = AGP_71 // KotlinAndroidPlugin.minimalSupportedAgpVersion
-        const val MAX_SUPPORTED = AGP_84 // Update once Gradle MAX_SUPPORTED version will be bumped
+        const val MAX_SUPPORTED = AGP_85 // Update once Gradle MAX_SUPPORTED version will be bumped
     }
 
     enum class AgpCompatibilityMatrix(
@@ -77,10 +77,10 @@ interface TestVersions {
         AGP_80(AGP.AGP_80, GradleVersion.version(Gradle.G_8_0), GradleVersion.version(Gradle.G_8_0), JavaVersion.VERSION_17),
         AGP_81(AGP.AGP_81, GradleVersion.version(Gradle.G_8_1), GradleVersion.version(Gradle.G_8_4), JavaVersion.VERSION_17),
         AGP_82(AGP.AGP_82, GradleVersion.version(Gradle.G_8_2), GradleVersion.version(Gradle.G_8_4), JavaVersion.VERSION_17),
-        AGP_83(AGP.AGP_83, GradleVersion.version(Gradle.G_8_4), GradleVersion.version(Gradle.G_8_7), JavaVersion.VERSION_17),
-        AGP_84(AGP.AGP_84, GradleVersion.version(Gradle.G_8_6), GradleVersion.version(Gradle.G_8_7), JavaVersion.VERSION_17),
-        AGP_85(AGP.AGP_85, GradleVersion.version(Gradle.G_8_6), GradleVersion.version(Gradle.G_8_7), JavaVersion.VERSION_17),
-        AGP_86(AGP.AGP_86, GradleVersion.version(Gradle.G_8_6), GradleVersion.version(Gradle.G_8_7), JavaVersion.VERSION_17),
+        AGP_83(AGP.AGP_83, GradleVersion.version(Gradle.G_8_4), GradleVersion.version(Gradle.G_8_8), JavaVersion.VERSION_17),
+        AGP_84(AGP.AGP_84, GradleVersion.version(Gradle.G_8_6), GradleVersion.version(Gradle.G_8_8), JavaVersion.VERSION_17),
+        AGP_85(AGP.AGP_85, GradleVersion.version(Gradle.G_8_7), GradleVersion.version(Gradle.G_8_8), JavaVersion.VERSION_17),
+        AGP_86(AGP.AGP_86, GradleVersion.version(Gradle.G_8_7), GradleVersion.version(Gradle.G_8_8), JavaVersion.VERSION_17),
         ;
     }
 
@@ -93,7 +93,7 @@ interface TestVersions {
     }
 
     object ThirdPartyDependencies {
-        const val SHADOW_PLUGIN_VERSION = "8.1.1"
+        const val SHADOW_PLUGIN_VERSION = "8.1.7"
         const val GOOGLE_DAGGER = "2.24"
         const val GRADLE_ENTERPRISE_PLUGIN_VERSION = "3.13.4"
         const val KOTLINX_ATOMICFU = "0.23.2"

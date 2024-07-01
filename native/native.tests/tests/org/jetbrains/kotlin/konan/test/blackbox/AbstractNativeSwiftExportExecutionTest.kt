@@ -14,6 +14,7 @@ import org.jetbrains.kotlin.konan.test.blackbox.support.runner.SimpleTestRunProv
 import org.jetbrains.kotlin.konan.test.blackbox.support.runner.TestExecutable
 import org.jetbrains.kotlin.konan.test.blackbox.support.runner.TestRunners.createProperTestRunner
 import org.jetbrains.kotlin.konan.test.blackbox.support.util.createTestProvider
+import org.jetbrains.kotlin.swiftexport.standalone.ErrorTypeStrategy
 import org.jetbrains.kotlin.swiftexport.standalone.SwiftExportConfig
 import org.jetbrains.kotlin.swiftexport.standalone.SwiftExportModule
 import org.jetbrains.kotlin.swiftexport.standalone.createDummyLogger
@@ -28,12 +29,13 @@ abstract class AbstractNativeSwiftExportExecutionTest : AbstractNativeSwiftExpor
     override fun runCompiledTest(
         testPathFull: File,
         testCase: TestCase,
-        swiftExportOutput: SwiftExportModule,
+        swiftExportOutputs: Set<SwiftExportModule>,
         swiftModules: Set<TestCompilationArtifact.Swift.Module>,
+        kotlinBinaryLibrary: TestCompilationArtifact.BinaryLibrary,
     ) {
         val swiftTestFiles = testPathFull.walk().filter { it.extension == "swift" }.map { testPathFull.resolve(it) }.toList()
         val testExecutable =
-            compileTestExecutable(testPathFull.name, swiftTestFiles, swiftModules = swiftModules)
+            compileTestExecutable(testPathFull.name, swiftTestFiles, swiftModules, kotlinBinaryLibrary)
         runExecutableAndVerify(testCase, testExecutable)
     }
 
@@ -43,15 +45,14 @@ abstract class AbstractNativeSwiftExportExecutionTest : AbstractNativeSwiftExpor
         testRunner.run()
     }
 
-    override fun constructSwiftExportConfig(
-        testPathFull: File,
-    ): SwiftExportConfig {
-        val exportResultsPath = buildDir(testPathFull.name).toPath().resolve("swift_export_results")
+    override fun constructSwiftExportConfig(module: TestModule.Exclusive): SwiftExportConfig {
+        val exportResultsPath = buildDir(module.name).toPath().resolve("swift_export_results")
         return SwiftExportConfig(
             settings = mapOf(
                 SwiftExportConfig.BRIDGE_MODULE_NAME to SwiftExportConfig.DEFAULT_BRIDGE_MODULE_NAME,
                 SwiftExportConfig.STABLE_DECLARATIONS_ORDER to "true",
             ),
+            unsupportedTypeStrategy = ErrorTypeStrategy.SpecialType,
             logger = createDummyLogger(),
             outputPath = exportResultsPath
         )
@@ -61,15 +62,20 @@ abstract class AbstractNativeSwiftExportExecutionTest : AbstractNativeSwiftExpor
         testName: String,
         testSources: List<File>,
         swiftModules: Set<TestCompilationArtifact.Swift.Module>,
+        kotlinBinaryLibrary: TestCompilationArtifact.BinaryLibrary,
     ): TestExecutable {
         val swiftExtraOpts = swiftModules.flatMap {
             listOf(
                 "-I", it.rootDir.absolutePath,
                 "-L", it.rootDir.absolutePath,
                 "-l${it.moduleName}",
-                "-Xcc", "-fmodule-map-file=${it.modulemap.absolutePath}",
-            )
-        } + listOf("-Xcc", "-fmodule-map-file=${Distribution(KotlinNativePaths.homePath.absolutePath).kotlinRuntimeForSwiftModuleMap}",)
+            ) + (it.modulemap?.let { listOf("-Xcc", "-fmodule-map-file=${it.absolutePath}") } ?: emptyList())
+        } + listOf(
+            "-Xcc", "-fmodule-map-file=${Distribution(KotlinNativePaths.homePath.absolutePath).kotlinRuntimeForSwiftModuleMap}",
+            "-L", kotlinBinaryLibrary.libraryFile.parentFile.absolutePath,
+            "-l${kotlinBinaryLibrary.libraryFile.nameWithoutExtension.substringAfter("lib")}"
+        )
+
         val provider = createTestProvider(buildDir(testName), testSources)
         val success = SwiftCompilation(
             testRunSettings,

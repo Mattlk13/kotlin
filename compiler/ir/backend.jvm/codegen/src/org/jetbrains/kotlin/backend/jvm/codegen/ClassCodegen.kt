@@ -7,10 +7,7 @@ package org.jetbrains.kotlin.backend.jvm.codegen
 
 import org.jetbrains.kotlin.backend.common.lower.ANNOTATION_IMPLEMENTATION
 import org.jetbrains.kotlin.backend.common.lower.LoweredDeclarationOrigins
-import org.jetbrains.kotlin.backend.jvm.JvmBackendContext
-import org.jetbrains.kotlin.backend.jvm.JvmBackendExtension
-import org.jetbrains.kotlin.backend.jvm.JvmLoweredDeclarationOrigin
-import org.jetbrains.kotlin.backend.jvm.MultifileFacadeFileEntry
+import org.jetbrains.kotlin.backend.jvm.*
 import org.jetbrains.kotlin.backend.jvm.extensions.descriptorOrigin
 import org.jetbrains.kotlin.backend.jvm.ir.*
 import org.jetbrains.kotlin.backend.jvm.mapping.IrTypeMapper
@@ -37,6 +34,7 @@ import org.jetbrains.kotlin.ir.expressions.IrBlockBody
 import org.jetbrains.kotlin.ir.expressions.IrConst
 import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.expressions.impl.IrSetFieldImpl
+import org.jetbrains.kotlin.ir.irAttribute
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.classOrNull
 import org.jetbrains.kotlin.ir.types.getArrayElementType
@@ -274,7 +272,7 @@ class ClassCodegen private constructor(
     }
 
     private fun generateKotlinMetadataAnnotation() {
-        val facadeClassName = context.multifileFacadeForPart[irClass.attributeOwnerId]
+        val facadeClassName = irClass.multifileFacadeForPart
         val metadata = irClass.metadata
         val entry = irClass.fileParent.fileEntry
         val kind = when {
@@ -312,7 +310,7 @@ class ClassCodegen private constructor(
         // 4) Annotation implementation classes used from public inline function. Similar to
         //    public WhenMapping classes, these are collected in `publicAbiSymbols` in
         //    `JvmAnnotationImplementationTransformer`.
-        val isPublicAbi = irClass.symbol in context.publicAbiSymbols || irClass.isInlineSamWrapper ||
+        val isPublicAbi = irClass.isPublicAbi || irClass.isInlineSamWrapper ||
                 type.isAnonymousClass && irClass.isInPublicInlineScope
 
         writeKotlinMetadata(visitor, context.config, kind, isPublicAbi, extraFlags) { av ->
@@ -437,13 +435,13 @@ class ClassCodegen private constructor(
             val continuationClassCodegen = lazy { if (continuationClass != null) getOrCreate(continuationClass, context, method) else this }
 
             // For suspend lambdas continuation class is null, and we need to use containing class to put L$ fields
-            val attributeContainer = continuationClass?.attributeOwnerId ?: irClass.attributeOwnerId
+            val spilledFieldsOwner = continuationClass ?: irClass
 
             node.acceptWithStateMachine(
                 method,
                 this,
                 smapCopyingVisitor,
-                context.continuationClassesVarsCountByType[attributeContainer] ?: emptyMap()
+                spilledFieldsOwner.continuationClassVarsCountByType ?: emptyMap()
             ) {
                 continuationClassCodegen.value.visitor
             }
@@ -550,6 +548,8 @@ class ClassCodegen private constructor(
     }
 
     companion object {
+        private var IrClass.classCodegen: ClassCodegen? by irAttribute(followAttributeOwner = false)
+
         fun getOrCreate(
             irClass: IrClass,
             context: JvmBackendContext,
@@ -564,12 +564,13 @@ class ClassCodegen private constructor(
                 it.origin == JvmLoweredDeclarationOrigin.CLASS_STATIC_INITIALIZER
             },
         ): ClassCodegen =
-            context.getOrCreateClassCodegen(irClass) { ClassCodegen(irClass, context, parentFunction) }.also {
+            irClass.classCodegen ?: ClassCodegen(irClass, context, parentFunction).also {
                 assert(parentFunction == null || it.parentFunction == parentFunction) {
                     "inconsistent parent function for ${irClass.render()}:\n" +
                             "New: ${parentFunction!!.render()}\n" +
                             "Old: ${it.parentFunction?.render()}"
                 }
+                irClass.classCodegen = it
             }
 
         private fun JvmClassSignature.hasInvalidName() =

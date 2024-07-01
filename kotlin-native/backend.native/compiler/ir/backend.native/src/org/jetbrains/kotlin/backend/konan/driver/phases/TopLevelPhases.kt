@@ -11,7 +11,9 @@ import org.jetbrains.kotlin.backend.konan.driver.PhaseEngine
 import org.jetbrains.kotlin.backend.konan.driver.utilities.CExportFiles
 import org.jetbrains.kotlin.backend.konan.driver.utilities.createTempFiles
 import org.jetbrains.kotlin.backend.konan.ir.konanLibrary
+import org.jetbrains.kotlin.cli.common.CommonCompilerPerformanceManager
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
+import org.jetbrains.kotlin.config.KlibConfigurationKeys
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrDeclaration
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
@@ -59,6 +61,7 @@ internal fun <T> PhaseEngine<PhaseContext>.runPsiToIr(
 
 internal fun <C : PhaseContext> PhaseEngine<C>.runBackend(backendContext: Context, irModule: IrModuleFragment) {
     val config = context.config
+    val rootPerformanceManager = backendContext.configuration.performanceManager
     useContext(backendContext) { backendEngine ->
         backendEngine.runPhase(functionsWithoutBoundCheck)
 
@@ -79,7 +82,9 @@ internal fun <C : PhaseContext> PhaseEngine<C>.runBackend(backendContext: Contex
                     if (context.config.produce == CompilerOutputKind.PROGRAM) {
                         generationStateEngine.runPhase(EntryPointPhase, module)
                     }
-                    generationStateEngine.lowerModuleWithDependencies(module)
+                    rootPerformanceManager.trackIRLowering {
+                        generationStateEngine.lowerModuleWithDependencies(module)
+                    }
                 }
                 return generationState
             } catch (t: Throwable) {
@@ -100,6 +105,7 @@ internal fun <C : PhaseContext> PhaseEngine<C>.runBackend(backendContext: Contex
                 return
             }
             try {
+                fragment.performanceManager?.notifyIRGenerationStarted()
                 backendEngine.useContext(generationState) { generationStateEngine ->
                     val bitcodeFile = tempFiles.create(generationState.llvmModuleName, ".bc").javaFile()
                     val cExportFiles = if (config.produceCInterface) {
@@ -123,6 +129,7 @@ internal fun <C : PhaseContext> PhaseEngine<C>.runBackend(backendContext: Contex
                 }
             } finally {
                 tempFiles.dispose()
+                fragment.performanceManager?.notifyIRGenerationFinished()
             }
         }
 
@@ -160,6 +167,7 @@ internal fun <C : PhaseContext> PhaseEngine<C>.runBackend(backendContext: Contex
                 thrownFromThread.get()?.let { throw it }
             }
         }
+        (rootPerformanceManager as? K2NativeCompilerPerformanceManager)?.collectChildMeasurements()
     }
 }
 
@@ -189,12 +197,14 @@ private data class BackendJobFragment(
         val cacheDeserializationStrategy: CacheDeserializationStrategy?,
         val dependenciesTracker: DependenciesTracker,
         val llvmModuleSpecification: LlvmModuleSpecification,
+        val performanceManager: CommonCompilerPerformanceManager?,
 )
 
 private fun PhaseEngine<out Context>.splitIntoFragments(
         input: IrModuleFragment,
 ): Sequence<BackendJobFragment> {
     val config = context.config
+    val performanceManager = config.configuration.performanceManager as? K2NativeCompilerPerformanceManager
     return if (context.config.producePerFileCache) {
         val files = input.files.toList()
         val containsStdlib = config.libraryToCache!!.klib == context.stdlibModule.konanLibrary
@@ -225,6 +235,7 @@ private fun PhaseEngine<out Context>.splitIntoFragments(
                     cacheDeserializationStrategy,
                     dependenciesTracker,
                     llvmModuleSpecification,
+                    performanceManager?.createChild(),
             )
         }
     } else {
@@ -239,7 +250,8 @@ private fun PhaseEngine<out Context>.splitIntoFragments(
                         input,
                         context.config.libraryToCache?.strategy,
                         DependenciesTrackerImpl(llvmModuleSpecification, context.config, context),
-                        llvmModuleSpecification
+                        llvmModuleSpecification,
+                        performanceManager?.createChild(),
                 )
         )
     }
@@ -306,6 +318,7 @@ internal fun <C : PhaseContext> PhaseEngine<C>.compileAndLink(
             listOf(linkerInput.canonicalPath),
             moduleCompilationOutput.dependenciesTrackingResult,
             outputFiles,
+            temporaryFiles,
             cacheBinaries,
     )
     runPhase(LinkerPhase, linkerPhaseInput)
@@ -328,8 +341,23 @@ internal fun PhaseEngine<NativeGenerationState>.lowerModuleWithDependencies(modu
     // (like IR visibility checks).
     // This is what we call a 'lowering synchronization point'.
     runIrValidationPhase(validateIrBeforeLowering, allModulesToLower)
-    runLowerings(getLoweringsUpToAndIncludingInlining(), allModulesToLower)
-    runIrValidationPhase(validateIrAfterInlining, allModulesToLower)
+    run {
+        // This is a so-called "KLIB Common Lowerings Prefix".
+        //
+        // Note: All lowerings up to but excluding "InlineAllFunctions" are supposed to modify only the lowered file.
+        // By contrast, "InlineAllFunctions" may mutate multiple files at the same time, and some files can be even
+        // mutated several times by little pieces. Which is a completely different behavior as compared to other lowerings.
+        // "InlineAllFunctions" expects that for an inlined function all preceding lowerings (including generation of
+        // synthetic accessors) have been already applied.
+        // To avoid overcomplicating things and to keep running the preceding lowerings with "modify-only-lowered-file"
+        // invariant, we would like to put a synchronization point immediately before "InlineAllFunctions".
+        runLowerings(getLoweringsUpToAndIncludingSyntheticAccessors(), allModulesToLower)
+        if (context.config.configuration.getBoolean(KlibConfigurationKeys.EXPERIMENTAL_DOUBLE_INLINING)) {
+            runIrValidationPhase(validateIrAfterInliningOnlyPrivateFunctions, allModulesToLower)
+        }
+        runLowerings(listOf(inlineAllFunctionsPhase), allModulesToLower)
+    }
+    runIrValidationPhase(validateIrAfterInliningAllFunctions, allModulesToLower)
     runLowerings(getLoweringsAfterInlining(), allModulesToLower)
     runIrValidationPhase(validateIrAfterLowering, allModulesToLower)
 

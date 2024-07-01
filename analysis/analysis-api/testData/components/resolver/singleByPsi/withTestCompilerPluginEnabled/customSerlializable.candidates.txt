@@ -1,6 +1,14 @@
 KtNameReferenceExpression(319,339): 'serializeFirstTarget'
   KaApplicableCallCandidateInfo:
     candidate = KaSimpleFunctionCall:
+      argumentMapping = {
+        target -> (KaVariableSignature:
+          name = x
+          receiverType = null
+          returnType = test.FirstTarget
+          symbol = x: test.FirstTarget
+          callableId = null)
+      }
       isImplicitInvoke = false
       partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
         dispatchReceiver = KaExplicitReceiverValue:
@@ -8,12 +16,12 @@ KtNameReferenceExpression(319,339): 'serializeFirstTarget'
           isSafeNavigation = false
           type = test.Serializer
         extensionReceiver = null
-        signature = KaFunctionLikeSignature:
+        signature = KaFunctionSignature:
           receiverType = null
           returnType = kotlin.Unit
           symbol = test/Serializer.serializeFirstTarget(<dispatch receiver>: test.Serializer, x: test.FirstTarget): kotlin.Unit
           valueParameters = [
-            KaVariableLikeSignature:
+            KaVariableSignature:
               name = x
               receiverType = null
               returnType = test.FirstTarget
@@ -22,12 +30,4 @@ KtNameReferenceExpression(319,339): 'serializeFirstTarget'
           ]
           callableId = test/Serializer.serializeFirstTarget
       typeArgumentsMapping = {}
-      argumentMapping = {
-        target -> (KaVariableLikeSignature:
-          name = x
-          receiverType = null
-          returnType = test.FirstTarget
-          symbol = x: test.FirstTarget
-          callableId = null)
-      }
     isInBestCandidates = true

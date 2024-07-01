@@ -7,14 +7,15 @@ package org.jetbrains.kotlin.analysis.api.standalone.base.declarations
 
 import com.intellij.openapi.project.Project
 import com.intellij.psi.search.GlobalSearchScope
+import org.jetbrains.kotlin.analysis.api.KaImplementationDetail
 import org.jetbrains.kotlin.analysis.api.fir.utils.isSubClassOf
 import org.jetbrains.kotlin.analysis.low.level.api.fir.LLFirInternals
 import org.jetbrains.kotlin.analysis.low.level.api.fir.sessions.LLFirSessionCache
-import org.jetbrains.kotlin.analysis.project.structure.KtDanglingFileModule
-import org.jetbrains.kotlin.analysis.project.structure.KtModule
-import org.jetbrains.kotlin.analysis.project.structure.ProjectStructureProvider
-import org.jetbrains.kotlin.analysis.api.platform.KotlinDeclarationProviderFactory
-import org.jetbrains.kotlin.analysis.api.platform.KotlinDirectInheritorsProvider
+import org.jetbrains.kotlin.analysis.api.projectStructure.KaDanglingFileModule
+import org.jetbrains.kotlin.analysis.api.projectStructure.KaModule
+import org.jetbrains.kotlin.analysis.api.platform.projectStructure.KotlinProjectStructureProvider
+import org.jetbrains.kotlin.analysis.api.platform.declarations.KotlinDeclarationProviderFactory
+import org.jetbrains.kotlin.analysis.api.platform.declarations.KotlinDirectInheritorsProvider
 import org.jetbrains.kotlin.fir.declarations.FirClass
 import org.jetbrains.kotlin.fir.resolve.providers.symbolProvider
 import org.jetbrains.kotlin.fir.symbols.SymbolInternals
@@ -60,8 +61,8 @@ internal class KotlinStandaloneFirDirectInheritorsProvider(private val project: 
         //
         // Note that this means we don't support providing inheritors based on the dangling file yet, for example if an inheritor was added
         // or removed only in the dangling file.
-        val baseKtModule = when (val ktModule = ProjectStructureProvider.getModule(project, ktClass, contextualModule = null)) {
-            is KtDanglingFileModule -> ktModule.contextModule
+        val baseKtModule = when (val ktModule = KotlinProjectStructureProvider.getModule(project, ktClass, useSiteModule = null)) {
+            is KaDanglingFileModule -> ktModule.contextModule
             else -> ktModule
         }
 
@@ -79,6 +80,7 @@ internal class KotlinStandaloneFirDirectInheritorsProvider(private val project: 
         }
     }
 
+    @OptIn(KaImplementationDetail::class)
     private fun isValidInheritor(
         candidate: KtClassOrObject,
         baseFirClass: FirClass,
@@ -94,7 +96,7 @@ internal class KotlinStandaloneFirDirectInheritorsProvider(private val project: 
         }
 
         val candidateClassId = candidate.getClassId() ?: return false
-        val candidateKtModule = ProjectStructureProvider.getModule(project, candidate, contextualModule = null)
+        val candidateKtModule = KotlinProjectStructureProvider.getModule(project, candidate, useSiteModule = null)
         val candidateFirSymbol = candidate.toFirSymbol(candidateClassId, candidateKtModule) ?: return false
         val candidateFirClass = candidateFirSymbol.fir as? FirClass ?: return false
 
@@ -103,7 +105,7 @@ internal class KotlinStandaloneFirDirectInheritorsProvider(private val project: 
         return isSubClassOf(candidateFirClass, baseFirClass, candidateFirClass.moduleData.session, allowIndirectSubtyping = false)
     }
 
-    private fun KtClassOrObject.toFirSymbol(classId: ClassId, ktModule: KtModule): FirClassLikeSymbol<*>? {
+    private fun KtClassOrObject.toFirSymbol(classId: ClassId, ktModule: KaModule): FirClassLikeSymbol<*>? {
         // Using a resolve session/source-preferred session will cause class stubs from binary libraries to be AST-loaded in IDE mode tests,
         // which results in an exception since we don't have a decompiler for them. See KT-64898, KT-64899, and KT-64900. If not for these
         // issues, we would be able to use `analyze` instead of custom session logic.

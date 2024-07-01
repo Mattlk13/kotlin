@@ -1,17 +1,24 @@
 KtCallExpression(43,66): 'generic<Int, String>(5)'
   KaInapplicableCallCandidateInfo:
-    diagnostic = ERROR<INAPPLICABLE_CANDIDATE: Inapplicable candidate(s): fun <A> generic(a: A): Unit>
     candidate = KaSimpleFunctionCall:
+      argumentMapping = {
+        5 -> (KaVariableSignature:
+          name = a
+          receiverType = null
+          returnType = kotlin.Int
+          symbol = a: A
+          callableId = null)
+      }
       isImplicitInvoke = false
       partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
         dispatchReceiver = null
         extensionReceiver = null
-        signature = KaFunctionLikeSignature:
+        signature = KaFunctionSignature:
           receiverType = null
           returnType = kotlin.Unit
           symbol = /generic(a: A): kotlin.Unit
           valueParameters = [
-            KaVariableLikeSignature:
+            KaVariableSignature:
               name = a
               receiverType = null
               returnType = kotlin.Int
@@ -22,12 +29,5 @@ KtCallExpression(43,66): 'generic<Int, String>(5)'
       typeArgumentsMapping = {
         A -> (kotlin.Int)
       }
-      argumentMapping = {
-        5 -> (KaVariableLikeSignature:
-          name = a
-          receiverType = null
-          returnType = kotlin.Int
-          symbol = a: A
-          callableId = null)
-      }
+    diagnostic = ERROR<INAPPLICABLE_CANDIDATE: Inapplicable candidate(s): fun <A> generic(a: A): Unit>
     isInBestCandidates = true

@@ -5,7 +5,6 @@
 
 package org.jetbrains.kotlin.generators.tests
 
-import androidx.compose.compiler.plugins.kotlin.AbstractCompilerFacilityTestForComposeCompilerPlugin
 import org.jetbrains.kotlin.allopen.*
 import org.jetbrains.kotlin.android.parcel.AbstractParcelBoxTest
 import org.jetbrains.kotlin.android.parcel.AbstractParcelBytecodeListingTest
@@ -29,7 +28,6 @@ import org.jetbrains.kotlin.generators.impl.generateTestGroupSuite
 import org.jetbrains.kotlin.generators.tests.IncrementalTestsGeneratorUtil.Companion.IcTestTypes.PURE_KOTLIN
 import org.jetbrains.kotlin.generators.tests.IncrementalTestsGeneratorUtil.Companion.IcTestTypes.WITH_JAVA
 import org.jetbrains.kotlin.generators.tests.IncrementalTestsGeneratorUtil.Companion.incrementalJvmTestData
-import org.jetbrains.kotlin.generators.tests.analysis.api.dsl.FrontendConfiguratorTestGenerator
 import org.jetbrains.kotlin.generators.util.TestGeneratorUtil
 import org.jetbrains.kotlin.incremental.*
 import org.jetbrains.kotlin.jvm.abi.AbstractCompareJvmAbiTest
@@ -50,8 +48,7 @@ import org.jetbrains.kotlin.samWithReceiver.*
 import org.jetbrains.kotlin.scripting.test.AbstractScriptWithCustomDefBlackBoxCodegenTest
 import org.jetbrains.kotlin.scripting.test.AbstractScriptWithCustomDefDiagnosticsTestBase
 import org.jetbrains.kotlin.test.TargetBackend
-import org.jetbrains.kotlinx.atomicfu.AbstractAtomicfuJsIrTest
-import org.jetbrains.kotlinx.atomicfu.AbstractAtomicfuJvmIrTest
+import org.jetbrains.kotlinx.atomicfu.*
 
 
 private class ExcludePattern {
@@ -237,14 +234,6 @@ fun main(args: Array<String>) {
         }
     }
 
-    generateTestGroupSuiteWithJUnit5(additionalMethodGenerators = listOf(FrontendConfiguratorTestGenerator)) {
-        testGroup("plugins/compose/compiler-hosted/tests-gen", "plugins/compose/compiler-hosted/testData") {
-            testClass<AbstractCompilerFacilityTestForComposeCompilerPlugin> {
-                model("codegen")
-            }
-        }
-    }
-
     generateTestGroupSuiteWithJUnit5 {
         val excludedFirTestdataPattern = TestGeneratorUtil.KT_OR_KTS_WITH_FIR_PREFIX
 
@@ -300,6 +289,10 @@ fun main(args: Array<String>) {
             testClass<AbstractAtomicfuJsIrTest> {
                 model("box/")
             }
+
+            testClass<AbstractAtomicfuJsFirTest> {
+                model("box/")
+            }
         }
 
         testGroup(
@@ -308,6 +301,10 @@ fun main(args: Array<String>) {
             testRunnerMethodName = "runTest0"
         ) {
             testClass<AbstractAtomicfuJvmIrTest> {
+                model("box/")
+            }
+
+            testClass<AbstractAtomicfuJvmFirLightTreeTest> {
                 model("box/")
             }
         }

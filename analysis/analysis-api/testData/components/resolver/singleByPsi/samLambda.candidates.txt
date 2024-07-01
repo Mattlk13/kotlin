@@ -1,18 +1,26 @@
 KtCallExpression(143,162): 'test { uiMethod() }'
   KaApplicableCallCandidateInfo:
     candidate = KaSimpleFunctionCall:
+      argumentMapping = {
+        { uiMethod() } -> (KaVariableSignature:
+          name = foo
+          receiverType = null
+          returnType = Test.Foo
+          symbol = foo: Test.Foo
+          callableId = null)
+      }
       isImplicitInvoke = false
       partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
         dispatchReceiver = KaImplicitReceiverValue:
           symbol = /Test
           type = Test
         extensionReceiver = null
-        signature = KaFunctionLikeSignature:
+        signature = KaFunctionSignature:
           receiverType = null
           returnType = kotlin.Unit
           symbol = /Test.test(<dispatch receiver>: Test, foo: Test.Foo): kotlin.Unit
           valueParameters = [
-            KaVariableLikeSignature:
+            KaVariableSignature:
               name = foo
               receiverType = null
               returnType = Test.Foo
@@ -21,12 +29,4 @@ KtCallExpression(143,162): 'test { uiMethod() }'
           ]
           callableId = /Test.test
       typeArgumentsMapping = {}
-      argumentMapping = {
-        { uiMethod() } -> (KaVariableLikeSignature:
-          name = foo
-          receiverType = null
-          returnType = Test.Foo
-          symbol = foo: Test.Foo
-          callableId = null)
-      }
     isInBestCandidates = true

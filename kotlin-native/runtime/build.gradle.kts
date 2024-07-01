@@ -12,6 +12,7 @@ import org.jetbrains.kotlin.konan.properties.saveProperties
 import org.jetbrains.kotlin.konan.target.*
 import org.jetbrains.kotlin.library.KLIB_PROPERTY_COMPILER_VERSION
 import org.jetbrains.kotlin.library.KLIB_PROPERTY_NATIVE_TARGETS
+import org.jetbrains.kotlin.library.KOTLIN_NATIVE_STDLIB_NAME
 import org.jetbrains.kotlin.konan.file.File as KFile
 import org.jetbrains.kotlin.konan.target.Architecture as TargetArchitecture
 
@@ -574,7 +575,7 @@ val stdlibBuildTask by tasks.registering(KonanCompileTask::class) {
             "-Werror",
             "-Xexplicit-api=strict",
             "-Xexpect-actual-classes",
-            "-module-name", "stdlib",
+            "-module-name", KOTLIN_NATIVE_STDLIB_NAME,
             "-opt-in=kotlin.RequiresOptIn",
             "-opt-in=kotlin.contracts.ExperimentalContracts",
             "-opt-in=kotlin.ExperimentalMultiplatform",
@@ -591,6 +592,7 @@ val stdlibBuildTask by tasks.registering(KonanCompileTask::class) {
         srcDir(project(":kotlin-stdlib").file("common/src/generated"))
         srcDir(project(":kotlin-stdlib").file("unsigned/src"))
         srcDir(project(":kotlin-stdlib").file("src"))
+        srcDir(project(":kotlin-stdlib").file("native-wasm/src/"))
         srcDir(project(":kotlin-test").files("annotations-common/src/main/kotlin"))
         srcDir(project(":kotlin-test").files("common/src/main/kotlin"))
         srcDir(project(":kotlin-native:Interop:Runtime").file("src/main/kotlin"))
@@ -600,7 +602,6 @@ val stdlibBuildTask by tasks.registering(KonanCompileTask::class) {
         srcDir(project(":kotlin-native:Interop:Runtime").file("src/native/kotlin"))
         srcDir(project(":kotlin-native:Interop:JsRuntime").file("src/main/kotlin"))
         srcDir(project.file("src/main/kotlin"))
-        srcDir(project(":kotlin-stdlib").file("native-wasm/src/"))
     }
 
     dependsOn(":prepare:build.version:writeStdlibVersion")

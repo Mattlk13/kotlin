@@ -13,6 +13,8 @@ import com.intellij.openapi.util.Key
 import com.intellij.psi.PsiComment
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiWhiteSpace
+import org.jetbrains.kotlin.analysis.api.platform.analysisMessageBus
+import org.jetbrains.kotlin.analysis.api.platform.modification.KotlinModificationTopics
 import org.jetbrains.kotlin.analysis.low.level.api.fir.LLFirInternals
 import org.jetbrains.kotlin.analysis.low.level.api.fir.api.getFirResolveSession
 import org.jetbrains.kotlin.analysis.low.level.api.fir.api.getOrBuildFirFile
@@ -23,11 +25,8 @@ import org.jetbrains.kotlin.analysis.low.level.api.fir.sessions.LLFirResolvableM
 import org.jetbrains.kotlin.analysis.low.level.api.fir.sessions.llFirResolvableSession
 import org.jetbrains.kotlin.analysis.low.level.api.fir.util.codeFragment
 import org.jetbrains.kotlin.analysis.low.level.api.fir.util.errorWithFirSpecificEntries
-import org.jetbrains.kotlin.analysis.project.structure.KtModule
-import org.jetbrains.kotlin.analysis.project.structure.ProjectStructureProvider
-import org.jetbrains.kotlin.analysis.api.platform.analysisMessageBus
-import org.jetbrains.kotlin.analysis.api.platform.topics.KotlinTopics.CODE_FRAGMENT_CONTEXT_MODIFICATION
-import org.jetbrains.kotlin.analysis.api.platform.topics.KotlinTopics.MODULE_OUT_OF_BLOCK_MODIFICATION
+import org.jetbrains.kotlin.analysis.api.projectStructure.KaModule
+import org.jetbrains.kotlin.analysis.api.platform.projectStructure.KotlinProjectStructureProvider
 import org.jetbrains.kotlin.fir.FirElementWithResolveState
 import org.jetbrains.kotlin.fir.declarations.FirCodeFragment
 import org.jetbrains.kotlin.fir.declarations.FirProperty
@@ -53,11 +52,12 @@ import org.jetbrains.kotlin.psi.psiUtil.isContractDescriptionCallPsiCheck
  *
  * For local changes (in-block modification), this service will do all required work.
  *
- * In case of non-local changes (out-of-block modification), this service will publish event to [MODULE_OUT_OF_BLOCK_MODIFICATION].
+ * In case of non-local changes (out-of-block modification), this service will publish event to
+ * [KotlinModificationTopics.MODULE_OUT_OF_BLOCK_MODIFICATION].
  *
  * @see getNonLocalReanalyzableContainingDeclaration
- * @see MODULE_OUT_OF_BLOCK_MODIFICATION
- * @see org.jetbrains.kotlin.analysis.api.platform.topics.KotlinModuleOutOfBlockModificationListener
+ * @see KotlinModificationTopics.MODULE_OUT_OF_BLOCK_MODIFICATION
+ * @see org.jetbrains.kotlin.analysis.api.platform.modification.KotlinModuleOutOfBlockModificationListener
  */
 @LLFirInternals
 class LLFirDeclarationModificationService(val project: Project) : Disposable {
@@ -88,10 +88,10 @@ class LLFirDeclarationModificationService(val project: Project) : Disposable {
     }
 
     /**
-     * We can avoid processing of in-block modification with the same [KtModule] because they
+     * We can avoid processing of in-block modification with the same [KaModule] because they
      * will be invalidated anyway by OOBM
      */
-    private fun dropOutdatedModifications(ktModuleWithOutOfBlockModification: KtModule) {
+    private fun dropOutdatedModifications(ktModuleWithOutOfBlockModification: KaModule) {
         processQueue { value, iterator ->
             if (value.ktModule == ktModuleWithOutOfBlockModification) iterator.remove()
         }
@@ -153,7 +153,7 @@ class LLFirDeclarationModificationService(val project: Project) : Disposable {
      * This method should be called during some [PsiElement] modification.
      * This method must be called from write action.
      *
-     * Will publish event to [MODULE_OUT_OF_BLOCK_MODIFICATION] in case of out-of-block modification.
+     * Will publish event to [KotlinModificationTopics.MODULE_OUT_OF_BLOCK_MODIFICATION] in case of out-of-block modification.
      *
      * @param element is an element that we want to/did already modify, remove, or add.
      * Some examples:
@@ -233,7 +233,7 @@ class LLFirDeclarationModificationService(val project: Project) : Disposable {
     private fun ModificationType.isContractRemoval(): Boolean =
         this is ModificationType.ElementRemoved && (removedElement as? KtExpression)?.isContractDescriptionCallPsiCheck() == true
 
-    private fun inBlockModification(declaration: KtAnnotated, ktModule: KtModule) {
+    private fun inBlockModification(declaration: KtAnnotated, ktModule: KaModule) {
         val resolveSession = ktModule.getFirResolveSession(project)
         val firDeclaration = when (declaration) {
             is KtCodeFragment -> declaration.getOrBuildFirFile(resolveSession).codeFragment
@@ -262,15 +262,15 @@ class LLFirDeclarationModificationService(val project: Project) : Disposable {
 
         fileStructure.invalidateElement(declaration)
 
-        project.analysisMessageBus.syncPublisher(CODE_FRAGMENT_CONTEXT_MODIFICATION).onModification(ktModule)
+        project.analysisMessageBus.syncPublisher(KotlinModificationTopics.CODE_FRAGMENT_CONTEXT_MODIFICATION).onModification(ktModule)
     }
 
     private fun outOfBlockModification(element: PsiElement) {
-        val ktModule = ProjectStructureProvider.getModule(project, element, contextualModule = null)
+        val ktModule = KotlinProjectStructureProvider.getModule(project, element, useSiteModule = null)
 
-        // We should check outdated modifications before to avoid cache dropping (e.g., KtModule cache)
+        // We should check outdated modifications before to avoid cache dropping (e.g., KaModule cache)
         dropOutdatedModifications(ktModule)
-        project.analysisMessageBus.syncPublisher(MODULE_OUT_OF_BLOCK_MODIFICATION).onModification(ktModule)
+        project.analysisMessageBus.syncPublisher(KotlinModificationTopics.MODULE_OUT_OF_BLOCK_MODIFICATION).onModification(ktModule)
     }
 
     /**
@@ -344,8 +344,8 @@ private sealed class ChangeType {
     object Invisible : ChangeType()
 
     class InBlock(val blockOwner: KtAnnotated, val project: Project) : ChangeType() {
-        val ktModule: KtModule by lazy(LazyThreadSafetyMode.NONE) {
-            ProjectStructureProvider.getModule(project, blockOwner, contextualModule = null)
+        val ktModule: KaModule by lazy(LazyThreadSafetyMode.NONE) {
+            KotlinProjectStructureProvider.getModule(project, blockOwner, useSiteModule = null)
         }
 
         override fun equals(other: Any?): Boolean = other === this || other is InBlock && other.blockOwner == blockOwner

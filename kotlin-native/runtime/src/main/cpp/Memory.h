@@ -378,6 +378,7 @@ OBJ_GETTER(Kotlin_native_internal_GC_detectCycles, ObjHeader*);
 OBJ_GETTER(Kotlin_native_internal_GC_findCycle, ObjHeader*, ObjHeader* root);
 bool Kotlin_native_internal_GC_getCyclicCollector(ObjHeader* gc);
 void Kotlin_native_internal_GC_setCyclicCollector(ObjHeader* gc, bool value);
+RUNTIME_NOTHROW bool Kotlin_native_runtime_Debugging_dumpMemory(ObjHeader*, int fd);
 
 bool Kotlin_Any_isShareable(ObjHeader* thiz);
 void Kotlin_Any_share(ObjHeader* thiz);
@@ -389,6 +390,10 @@ void CheckGlobalsAccessible();
 CODEGEN_INLINE_POLICY RUNTIME_NOTHROW void Kotlin_mm_switchThreadStateNative();
 // Sets state of the current thread to RUNNABLE (used by the new MM).
 CODEGEN_INLINE_POLICY RUNTIME_NOTHROW void Kotlin_mm_switchThreadStateRunnable();
+// No-inline versions of the functions above are used in debug mode to workaround KT-67567 
+// by outlining certain CAS instructions from user code:
+NO_INLINE RUNTIME_NOTHROW void Kotlin_mm_switchThreadStateNative_debug();
+NO_INLINE RUNTIME_NOTHROW void Kotlin_mm_switchThreadStateRunnable_debug();
 
 // Safe point callbacks from Kotlin code generator.
 CODEGEN_INLINE_POLICY void Kotlin_mm_safePointFunctionPrologue() RUNTIME_NOTHROW;

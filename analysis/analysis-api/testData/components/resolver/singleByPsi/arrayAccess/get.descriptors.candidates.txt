@@ -1,6 +1,14 @@
 KtArrayAccessExpression(70,77): 'list[0]'
   KaApplicableCallCandidateInfo:
     candidate = KaSimpleFunctionCall:
+      argumentMapping = {
+        0 -> (KaVariableSignature:
+          name = index
+          receiverType = null
+          returnType = kotlin.Int
+          symbol = index: kotlin.Int
+          callableId = null)
+      }
       isImplicitInvoke = false
       partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
         dispatchReceiver = KaExplicitReceiverValue:
@@ -8,12 +16,12 @@ KtArrayAccessExpression(70,77): 'list[0]'
           isSafeNavigation = false
           type = kotlin.collections.MutableList<kotlin.Int>
         extensionReceiver = null
-        signature = KaFunctionLikeSignature:
+        signature = KaFunctionSignature:
           receiverType = null
           returnType = kotlin.Int
           symbol = kotlin/collections/MutableList.get(<dispatch receiver>: kotlin.collections.List<E>, index: kotlin.Int): E
           valueParameters = [
-            KaVariableLikeSignature:
+            KaVariableSignature:
               name = index
               receiverType = null
               returnType = kotlin.Int
@@ -22,19 +30,18 @@ KtArrayAccessExpression(70,77): 'list[0]'
           ]
           callableId = kotlin/collections/MutableList.get
       typeArgumentsMapping = {}
-      argumentMapping = {
-        0 -> (KaVariableLikeSignature:
-          name = index
-          receiverType = null
-          returnType = kotlin.Int
-          symbol = index: kotlin.Int
-          callableId = null)
-      }
     isInBestCandidates = true
   
   KaInapplicableCallCandidateInfo:
-    diagnostic = ERROR<null: RECEIVER_TYPE_ERROR with get>
     candidate = KaSimpleFunctionCall:
+      argumentMapping = {
+        0 -> (KaVariableSignature:
+          name = key
+          receiverType = null
+          returnType = kotlin.Int
+          symbol = key: K
+          callableId = null)
+      }
       isImplicitInvoke = false
       partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
         dispatchReceiver = null
@@ -42,12 +49,12 @@ KtArrayAccessExpression(70,77): 'list[0]'
           expression = list
           isSafeNavigation = false
           type = kotlin.collections.MutableList<kotlin.Int>
-        signature = KaFunctionLikeSignature:
+        signature = KaFunctionSignature:
           receiverType = kotlin.collections.Map<out kotlin.Int, ERROR_TYPE>
           returnType = ERROR_TYPE?
           symbol = kotlin/collections/get(<extension receiver>: kotlin.collections.Map<out K, V>, key: K): V?
           valueParameters = [
-            KaVariableLikeSignature:
+            KaVariableSignature:
               name = key
               receiverType = null
               returnType = kotlin.Int
@@ -59,19 +66,19 @@ KtArrayAccessExpression(70,77): 'list[0]'
         K -> (kotlin.Int),
         V -> (ERROR_TYPE)
       }
-      argumentMapping = {
-        0 -> (KaVariableLikeSignature:
-          name = key
-          receiverType = null
-          returnType = kotlin.Int
-          symbol = key: K
-          callableId = null)
-      }
+    diagnostic = ERROR<UNRESOLVED_REFERENCE: RECEIVER_TYPE_ERROR with get>
     isInBestCandidates = false
   
   KaInapplicableCallCandidateInfo:
-    diagnostic = ERROR<CONSTANT_EXPECTED_TYPE_MISMATCH: The integer literal does not conform to the expected type String>
     candidate = KaSimpleFunctionCall:
+      argumentMapping = {
+        0 -> (KaVariableSignature:
+          name = name
+          receiverType = null
+          returnType = kotlin.String
+          symbol = name: kotlin.String
+          callableId = null)
+      }
       isImplicitInvoke = false
       partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
         dispatchReceiver = null
@@ -79,12 +86,12 @@ KtArrayAccessExpression(70,77): 'list[0]'
           expression = list
           isSafeNavigation = false
           type = kotlin.collections.MutableList<kotlin.Int>
-        signature = KaFunctionLikeSignature:
+        signature = KaFunctionSignature:
           receiverType = kotlin.text.MatchGroupCollection
           returnType = kotlin.text.MatchGroup?
           symbol = kotlin/text/get(<extension receiver>: kotlin.text.MatchGroupCollection, name: kotlin.String): kotlin.text.MatchGroup?
           valueParameters = [
-            KaVariableLikeSignature:
+            KaVariableSignature:
               name = name
               receiverType = null
               returnType = kotlin.String
@@ -93,12 +100,5 @@ KtArrayAccessExpression(70,77): 'list[0]'
           ]
           callableId = kotlin/text/get
       typeArgumentsMapping = {}
-      argumentMapping = {
-        0 -> (KaVariableLikeSignature:
-          name = name
-          receiverType = null
-          returnType = kotlin.String
-          symbol = name: kotlin.String
-          callableId = null)
-      }
+    diagnostic = ERROR<CONSTANT_EXPECTED_TYPE_MISMATCH: The integer literal does not conform to the expected type String>
     isInBestCandidates = false

@@ -146,6 +146,12 @@ public class FirOldFrontendMPPDiagnosticsWithPsiTestGenerated extends AbstractFi
   }
 
   @Test
+  @TestMetadata("delegationToExpectInterfacesWithClashingScopes.kt")
+  public void testDelegationToExpectInterfacesWithClashingScopes() {
+    runTest("compiler/testData/diagnostics/tests/multiplatform/delegationToExpectInterfacesWithClashingScopes.kt");
+  }
+
+  @Test
   @TestMetadata("expectAbstractToString.kt")
   public void testExpectAbstractToString() {
     runTest("compiler/testData/diagnostics/tests/multiplatform/expectAbstractToString.kt");
@@ -179,6 +185,12 @@ public class FirOldFrontendMPPDiagnosticsWithPsiTestGenerated extends AbstractFi
   @TestMetadata("expectActualMainInTheSameModuleDifferentFiles.kt")
   public void testExpectActualMainInTheSameModuleDifferentFiles() {
     runTest("compiler/testData/diagnostics/tests/multiplatform/expectActualMainInTheSameModuleDifferentFiles.kt");
+  }
+
+  @Test
+  @TestMetadata("expectConstructors.kt")
+  public void testExpectConstructors() {
+    runTest("compiler/testData/diagnostics/tests/multiplatform/expectConstructors.kt");
   }
 
   @Test
@@ -386,6 +398,12 @@ public class FirOldFrontendMPPDiagnosticsWithPsiTestGenerated extends AbstractFi
   }
 
   @Test
+  @TestMetadata("overloadsWithPotentialRecursion.kt")
+  public void testOverloadsWithPotentialRecursion() {
+    runTest("compiler/testData/diagnostics/tests/multiplatform/overloadsWithPotentialRecursion.kt");
+  }
+
+  @Test
   @TestMetadata("packageConflictsWithClassifierInMultiplatform.kt")
   public void testPackageConflictsWithClassifierInMultiplatform() {
     runTest("compiler/testData/diagnostics/tests/multiplatform/packageConflictsWithClassifierInMultiplatform.kt");
@@ -464,6 +482,12 @@ public class FirOldFrontendMPPDiagnosticsWithPsiTestGenerated extends AbstractFi
   }
 
   @Test
+  @TestMetadata("valueClassWithPrivateConstructor.kt")
+  public void testValueClassWithPrivateConstructor() {
+    runTest("compiler/testData/diagnostics/tests/multiplatform/valueClassWithPrivateConstructor.kt");
+  }
+
+  @Test
   @TestMetadata("varSetterVisibility.kt")
   public void testVarSetterVisibility() {
     runTest("compiler/testData/diagnostics/tests/multiplatform/varSetterVisibility.kt");
@@ -513,6 +537,24 @@ public class FirOldFrontendMPPDiagnosticsWithPsiTestGenerated extends AbstractFi
     @TestMetadata("actualInnerClassMissingMember.kt")
     public void testActualInnerClassMissingMember() {
       runTest("compiler/testData/diagnostics/tests/multiplatform/actualAnnotationsNotMatchExpect/actualInnerClassMissingMember.kt");
+    }
+
+    @Test
+    @TestMetadata("actualizeExpectProtectedToJavaProtected.kt")
+    public void testActualizeExpectProtectedToJavaProtected() {
+      runTest("compiler/testData/diagnostics/tests/multiplatform/actualAnnotationsNotMatchExpect/actualizeExpectProtectedToJavaProtected.kt");
+    }
+
+    @Test
+    @TestMetadata("actualizePropertyByJavaField_supportedCase.kt")
+    public void testActualizePropertyByJavaField_supportedCase() {
+      runTest("compiler/testData/diagnostics/tests/multiplatform/actualAnnotationsNotMatchExpect/actualizePropertyByJavaField_supportedCase.kt");
+    }
+
+    @Test
+    @TestMetadata("actualizePropertyByJavaField_unsupportedCase.kt")
+    public void testActualizePropertyByJavaField_unsupportedCase() {
+      runTest("compiler/testData/diagnostics/tests/multiplatform/actualAnnotationsNotMatchExpect/actualizePropertyByJavaField_unsupportedCase.kt");
     }
 
     @Test
@@ -1483,9 +1525,21 @@ public class FirOldFrontendMPPDiagnosticsWithPsiTestGenerated extends AbstractFi
     }
 
     @Test
+    @TestMetadata("expectEnumIntersection.kt")
+    public void testExpectEnumIntersection() {
+      runTest("compiler/testData/diagnostics/tests/multiplatform/exhaustiveness/expectEnumIntersection.kt");
+    }
+
+    @Test
     @TestMetadata("expectSealedClass.kt")
     public void testExpectSealedClass() {
       runTest("compiler/testData/diagnostics/tests/multiplatform/exhaustiveness/expectSealedClass.kt");
+    }
+
+    @Test
+    @TestMetadata("expectSealedClassIntersection.kt")
+    public void testExpectSealedClassIntersection() {
+      runTest("compiler/testData/diagnostics/tests/multiplatform/exhaustiveness/expectSealedClassIntersection.kt");
     }
 
     @Test

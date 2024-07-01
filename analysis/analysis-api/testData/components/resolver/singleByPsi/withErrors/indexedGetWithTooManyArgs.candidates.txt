@@ -1,7 +1,20 @@
 KtArrayAccessExpression(100,118): 'c[1, "foo", false]'
   KaInapplicableCallCandidateInfo:
-    diagnostic = ERROR<TOO_MANY_ARGUMENTS: Too many arguments for 'public final operator fun /C.get(a: kotlin/Int, b: kotlin/String): kotlin/Boolean'.>
     candidate = KaSimpleFunctionCall:
+      argumentMapping = {
+        1 -> (KaVariableSignature:
+          name = a
+          receiverType = null
+          returnType = kotlin.Int
+          symbol = a: kotlin.Int
+          callableId = null),
+        "foo" -> (KaVariableSignature:
+          name = b
+          receiverType = null
+          returnType = kotlin.String
+          symbol = b: kotlin.String
+          callableId = null)
+      }
       isImplicitInvoke = false
       partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
         dispatchReceiver = KaExplicitReceiverValue:
@@ -9,18 +22,18 @@ KtArrayAccessExpression(100,118): 'c[1, "foo", false]'
           isSafeNavigation = false
           type = C
         extensionReceiver = null
-        signature = KaFunctionLikeSignature:
+        signature = KaFunctionSignature:
           receiverType = null
           returnType = kotlin.Boolean
           symbol = /C.get(<dispatch receiver>: C, a: kotlin.Int, b: kotlin.String): kotlin.Boolean
           valueParameters = [
-            KaVariableLikeSignature:
+            KaVariableSignature:
               name = a
               receiverType = null
               returnType = kotlin.Int
               symbol = a: kotlin.Int
               callableId = null,
-            KaVariableLikeSignature:
+            KaVariableSignature:
               name = b
               receiverType = null
               returnType = kotlin.String
@@ -29,18 +42,5 @@ KtArrayAccessExpression(100,118): 'c[1, "foo", false]'
           ]
           callableId = /C.get
       typeArgumentsMapping = {}
-      argumentMapping = {
-        1 -> (KaVariableLikeSignature:
-          name = a
-          receiverType = null
-          returnType = kotlin.Int
-          symbol = a: kotlin.Int
-          callableId = null),
-        "foo" -> (KaVariableLikeSignature:
-          name = b
-          receiverType = null
-          returnType = kotlin.String
-          symbol = b: kotlin.String
-          callableId = null)
-      }
+    diagnostic = ERROR<TOO_MANY_ARGUMENTS: Too many arguments for 'fun get(a: Int, b: String): Boolean'.>
     isInBestCandidates = true

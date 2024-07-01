@@ -205,6 +205,12 @@ public class SerializationIrBoxTestGenerated extends AbstractSerializationIrBoxT
   }
 
   @Test
+  @TestMetadata("localSerializable.kt")
+  public void testLocalSerializable() {
+    runTest("plugins/kotlinx-serialization/testData/boxIr/localSerializable.kt");
+  }
+
+  @Test
   @TestMetadata("metaSerializable.kt")
   public void testMetaSerializable() {
     runTest("plugins/kotlinx-serialization/testData/boxIr/metaSerializable.kt");
@@ -310,6 +316,12 @@ public class SerializationIrBoxTestGenerated extends AbstractSerializationIrBoxT
   @TestMetadata("starProjections.kt")
   public void testStarProjections() {
     runTest("plugins/kotlinx-serialization/testData/boxIr/starProjections.kt");
+  }
+
+  @Test
+  @TestMetadata("typealiasesInContextualTest.kt")
+  public void testTypealiasesInContextualTest() {
+    runTest("plugins/kotlinx-serialization/testData/boxIr/typealiasesInContextualTest.kt");
   }
 
   @Test

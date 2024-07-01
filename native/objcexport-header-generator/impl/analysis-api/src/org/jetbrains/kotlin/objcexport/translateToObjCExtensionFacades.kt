@@ -1,6 +1,6 @@
 package org.jetbrains.kotlin.objcexport
 
-import org.jetbrains.kotlin.analysis.api.KtAnalysisSession
+import org.jetbrains.kotlin.analysis.api.KaSession
 import org.jetbrains.kotlin.backend.konan.objcexport.ObjCInterface
 import org.jetbrains.kotlin.backend.konan.objcexport.ObjCInterfaceImpl
 
@@ -46,10 +46,11 @@ internal val ObjCInterface.isExtensionsFacade: Boolean
  *
  * See related [translateToObjCTopLevelFacade]
  */
-context(KtAnalysisSession, KtObjCExportSession)
+context(KaSession, KtObjCExportSession)
+@Suppress("CONTEXT_RECEIVERS_DEPRECATED")
 fun KtResolvedObjCExportFile.translateToObjCExtensionFacades(): List<ObjCInterface> {
     val extensions = callableSymbols
-        .filter { it.isExtension }
+        .filter { it.getClassIfCategory() != null && it.isExtension }
         .sortedWith(StableCallableOrder)
         .ifEmpty { return emptyList() }
         .groupBy {

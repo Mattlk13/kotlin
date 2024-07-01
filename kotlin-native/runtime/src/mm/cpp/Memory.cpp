@@ -7,6 +7,7 @@
 #include "MemoryPrivate.hpp"
 
 #include "Allocator.hpp"
+#include "CallsChecker.hpp"
 #include "Exceptions.h"
 #include "ExtraObjectData.hpp"
 #include "Freezing.hpp"
@@ -26,6 +27,7 @@
 #include "ThreadRegistry.hpp"
 #include "ThreadState.hpp"
 #include "Utils.hpp"
+#include "MemoryDump.hpp"
 
 using namespace kotlin;
 
@@ -290,6 +292,18 @@ extern "C" void Kotlin_native_internal_GC_collect(ObjHeader*) {
 
 extern "C" void Kotlin_native_internal_GC_schedule(ObjHeader*) {
     mm::GlobalData::Instance().gcScheduler().schedule();
+}
+
+extern "C" RUNTIME_NOTHROW bool Kotlin_native_runtime_Debugging_dumpMemory(ObjHeader*, int fd) {
+    auto* threadData = mm::ThreadRegistry::Instance().CurrentThreadData();
+    threadData->suspensionData().requestThreadsSuspension("Heap Dump");
+    CallsCheckerIgnoreGuard guard;
+    // We're in the runnable state, but everything else (including the GC thread) will be suspended.
+    // It's fine to wait for that suspension and execute long running operations (I/O) here.
+    mm::WaitForThreadsSuspension();
+    bool success = mm::DumpMemory(fd);
+    mm::ResumeThreads();
+    return success;
 }
 
 extern "C" void Kotlin_native_internal_GC_collectCyclic(ObjHeader*) {
@@ -579,7 +593,15 @@ extern "C" CODEGEN_INLINE_POLICY RUNTIME_NOTHROW void Kotlin_mm_switchThreadStat
     SwitchThreadState(mm::ThreadRegistry::Instance().CurrentThreadData(), ThreadState::kNative);
 }
 
+extern "C" NO_INLINE RUNTIME_NOTHROW void Kotlin_mm_switchThreadStateNative_debug() {
+    SwitchThreadState(mm::ThreadRegistry::Instance().CurrentThreadData(), ThreadState::kNative);
+}
+
 extern "C" CODEGEN_INLINE_POLICY RUNTIME_NOTHROW void Kotlin_mm_switchThreadStateRunnable() {
+    SwitchThreadState(mm::ThreadRegistry::Instance().CurrentThreadData(), ThreadState::kRunnable);
+}
+
+extern "C" NO_INLINE RUNTIME_NOTHROW void Kotlin_mm_switchThreadStateRunnable_debug() {
     SwitchThreadState(mm::ThreadRegistry::Instance().CurrentThreadData(), ThreadState::kRunnable);
 }
 

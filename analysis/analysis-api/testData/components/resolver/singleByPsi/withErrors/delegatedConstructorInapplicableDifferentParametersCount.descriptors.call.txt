@@ -2,17 +2,17 @@ KtConstructorCalleeExpression(31,32): 'A'
   KaErrorCallInfo:
     candidateCalls = [
       KaDelegatedConstructorCall:
+        argumentMapping = {}
         kind = SUPER_CALL
         partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
           dispatchReceiver = null
           extensionReceiver = null
-          signature = KaFunctionLikeSignature:
+          signature = KaFunctionSignature:
             receiverType = null
             returnType = A
             symbol = <constructor>(): A
             valueParameters = []
             callableId = null
         typeArgumentsMapping = {}
-        argumentMapping = {}
     ]
-    diagnostic = ERROR<null: OTHER_ERROR with <init>>
+    diagnostic = ERROR<UNRESOLVED_REFERENCE: OTHER_ERROR with <init>>

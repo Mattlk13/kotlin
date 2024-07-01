@@ -4,16 +4,17 @@ KtNameReferenceExpression(44,47): 'foo'
       partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
         dispatchReceiver = KaImplicitReceiverValue:
           symbol = KaReceiverParameterSymbol:
-            annotationsList: []
+            annotations: []
+            location: LOCAL
             origin: SOURCE
-            owningCallableSymbol: KaFunctionSymbol(/call)
+            owningCallableSymbol: KaNamedFunctionSymbol(/call)
             type: KaUsualClassType:
-              annotationsList: []
+              annotations: []
               typeArguments: []
               type: JavaClass
           type = JavaClass
         extensionReceiver = null
-        signature = KaVariableLikeSignature:
+        signature = KaVariableSignature:
           name = foo
           receiverType = null
           returnType = kotlin.Int

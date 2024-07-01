@@ -1,6 +1,7 @@
 KtCallExpression(68,71): 'x()'
   KaApplicableCallCandidateInfo:
     candidate = KaSimpleFunctionCall:
+      argumentMapping = {}
       isImplicitInvoke = true
       partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
         dispatchReceiver = null
@@ -8,12 +9,11 @@ KtCallExpression(68,71): 'x()'
           expression = x
           isSafeNavigation = false
           type = kotlin.Int
-        signature = KaFunctionLikeSignature:
+        signature = KaFunctionSignature:
           receiverType = kotlin.Int
           returnType = kotlin.String
           symbol = /invoke(<extension receiver>: kotlin.Int): kotlin.String
           valueParameters = []
           callableId = /invoke
       typeArgumentsMapping = {}
-      argumentMapping = {}
     isInBestCandidates = true

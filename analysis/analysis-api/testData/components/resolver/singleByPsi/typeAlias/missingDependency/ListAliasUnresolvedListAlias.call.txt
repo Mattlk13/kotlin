@@ -1,6 +1,14 @@
 KtNameReferenceExpression(157,162): 'check'
   KaSuccessCallInfo:
     call = KaSimpleFunctionCall:
+      argumentMapping = {
+        emptyList() -> (KaVariableSignature:
+          name = list
+          receiverType = null
+          returnType = {library2.ListAlias<{library1.StringAlias=} kotlin.String>=} kotlin.collections.List<{library1.StringAlias=} kotlin.String>
+          symbol = list: {library2.ListAlias<{library1.StringAlias=} kotlin.String>=} kotlin.collections.List<{library1.StringAlias=} kotlin.String>
+          callableId = null)
+      }
       isImplicitInvoke = false
       partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
         dispatchReceiver = KaExplicitReceiverValue:
@@ -8,12 +16,12 @@ KtNameReferenceExpression(157,162): 'check'
           isSafeNavigation = false
           type = library3.MyInterface
         extensionReceiver = null
-        signature = KaFunctionLikeSignature:
+        signature = KaFunctionSignature:
           receiverType = null
           returnType = kotlin.Unit
           symbol = library3/MyInterface.check(<dispatch receiver>: library3.MyInterface, list: {library2.ListAlias<{library1.StringAlias=} kotlin.String>=} kotlin.collections.List<{library1.StringAlias=} kotlin.String>): kotlin.Unit
           valueParameters = [
-            KaVariableLikeSignature:
+            KaVariableSignature:
               name = list
               receiverType = null
               returnType = {library2.ListAlias<{library1.StringAlias=} kotlin.String>=} kotlin.collections.List<{library1.StringAlias=} kotlin.String>
@@ -22,11 +30,3 @@ KtNameReferenceExpression(157,162): 'check'
           ]
           callableId = library3/MyInterface.check
       typeArgumentsMapping = {}
-      argumentMapping = {
-        emptyList() -> (KaVariableLikeSignature:
-          name = list
-          receiverType = null
-          returnType = {library2.ListAlias<{library1.StringAlias=} kotlin.String>=} kotlin.collections.List<{library1.StringAlias=} kotlin.String>
-          symbol = list: {library2.ListAlias<{library1.StringAlias=} kotlin.String>=} kotlin.collections.List<{library1.StringAlias=} kotlin.String>
-          callableId = null)
-      }

@@ -11,7 +11,7 @@ import org.jetbrains.kotlin.fir.expressions.impl.FirElseIfTrueCondition
 import org.jetbrains.kotlin.fir.expressions.impl.FirEmptyExpressionBlock
 import org.jetbrains.kotlin.fir.references.FirResolvedNamedReference
 import org.jetbrains.kotlin.fir.resolve.ResolutionMode
-import org.jetbrains.kotlin.fir.resolve.calls.isUnitOrFlexibleUnit
+import org.jetbrains.kotlin.fir.types.isUnitOrFlexibleUnit
 import org.jetbrains.kotlin.fir.resolve.fullyExpandedType
 import org.jetbrains.kotlin.fir.resolve.transformWhenSubjectExpressionUsingSmartcastInfo
 import org.jetbrains.kotlin.fir.resolve.transformers.FirSyntheticCallGenerator
@@ -114,17 +114,10 @@ class FirControlFlowStatementsResolveTransformer(transformer: FirAbstractBodyRes
                     whenExpression = completionResult
                 }
                 dataFlowAnalyzer.exitWhenExpression(whenExpression, data.forceFullCompletion)
-                whenExpression = whenExpression.replaceReturnTypeIfNotExhaustive()
+                whenExpression.replaceReturnTypeIfNotExhaustive(session)
                 whenExpression
             }
         }
-    }
-
-    private fun FirWhenExpression.replaceReturnTypeIfNotExhaustive(): FirWhenExpression {
-        if (!isProperlyExhaustive && !usedAsExpression) {
-            resultType = session.builtinTypes.unitType.type
-        }
-        return this
     }
 
     private fun FirWhenExpression.isOneBranch(): Boolean {

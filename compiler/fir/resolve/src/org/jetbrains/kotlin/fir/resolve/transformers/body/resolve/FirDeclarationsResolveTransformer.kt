@@ -25,12 +25,12 @@ import org.jetbrains.kotlin.fir.expressions.impl.FirSingleExpressionBlock
 import org.jetbrains.kotlin.fir.references.FirResolvedErrorReference
 import org.jetbrains.kotlin.fir.references.FirResolvedNamedReference
 import org.jetbrains.kotlin.fir.resolve.*
-import org.jetbrains.kotlin.fir.resolve.calls.Candidate
-import org.jetbrains.kotlin.fir.resolve.calls.candidate
+import org.jetbrains.kotlin.fir.resolve.calls.ConeResolvedLambdaAtom
+import org.jetbrains.kotlin.fir.resolve.calls.candidate.Candidate
+import org.jetbrains.kotlin.fir.resolve.calls.candidate.candidate
 import org.jetbrains.kotlin.fir.resolve.dfa.FirControlFlowGraphReferenceImpl
 import org.jetbrains.kotlin.fir.resolve.diagnostics.ConeLocalVariableNoTypeOrInitializer
 import org.jetbrains.kotlin.fir.resolve.inference.FirDelegatedPropertyInferenceSession
-import org.jetbrains.kotlin.fir.resolve.inference.ResolvedLambdaAtom
 import org.jetbrains.kotlin.fir.resolve.inference.extractLambdaInfoFromFunctionType
 import org.jetbrains.kotlin.fir.resolve.substitution.ChainedSubstitutor
 import org.jetbrains.kotlin.fir.resolve.substitution.ConeSubstitutor
@@ -1130,7 +1130,7 @@ open class FirDeclarationsResolveTransformer(
     ): FirAnonymousFunction {
         val resolvedLambdaAtom = (expectedTypeRef as? FirResolvedTypeRef)?.let {
             extractLambdaInfoFromFunctionType(
-                it.type, anonymousFunction, returnTypeVariable = null, components, candidate = null,
+                it.type, argument = null, anonymousFunction, returnTypeVariable = null, components, candidate = null,
                 allowCoercionToExtensionReceiver = true,
                 sourceForFunctionExpression = null,
             )
@@ -1194,7 +1194,7 @@ open class FirDeclarationsResolveTransformer(
     }
 
     private fun obtainValueParametersFromResolvedLambdaAtom(
-        resolvedLambdaAtom: ResolvedLambdaAtom,
+        resolvedLambdaAtom: ConeResolvedLambdaAtom,
         lambda: FirAnonymousFunction,
     ): List<FirValueParameter> {
         val singleParameterType = resolvedLambdaAtom.parameters.singleOrNull()
@@ -1204,7 +1204,7 @@ open class FirDeclarationsResolveTransformer(
                 val itParam = buildValueParameter {
                     resolvePhase = FirResolvePhase.BODY_RESOLVE
                     source = lambda.source?.fakeElement(KtFakeSourceElementKind.ItLambdaParameter)
-                    containingFunctionSymbol = resolvedLambdaAtom.atom.symbol
+                    containingFunctionSymbol = resolvedLambdaAtom.fir.symbol
                     moduleData = session.moduleData
                     origin = FirDeclarationOrigin.Source
                     returnTypeRef = singleParameterType.toFirResolvedTypeRef()

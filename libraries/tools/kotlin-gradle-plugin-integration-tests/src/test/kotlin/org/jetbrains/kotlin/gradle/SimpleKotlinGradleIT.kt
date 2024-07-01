@@ -90,22 +90,6 @@ class SimpleKotlinGradleIT : KGPBaseTest() {
     }
 
     @GradleTest
-    fun testDataClassInternalConstructorUsageWillBecomeInaccessible(gradleVersion: GradleVersion) {
-        project("dataClassInternalConstructorUsageWillBecomeInaccessible", gradleVersion) {
-            buildAndFail("assemble") {
-                assertOutputContains("This 'copy()' exposes the non-public primary constructor of a 'data class'. Please migrate the usage.")
-            }
-        }
-    }
-
-    @GradleTest
-    fun testDataClassNonPublicConstructorIrrelevantCopyFunctions(gradleVersion: GradleVersion) {
-        project("dataClassNonPublicConstructorIrrelevantCopyFunctions", gradleVersion) {
-            build("assemble")
-        }
-    }
-
-    @GradleTest
     @DisplayName("Should produce '.kotlin_module' file with specified name")
     fun testModuleName(gradleVersion: GradleVersion) {
         project("moduleName", gradleVersion) {
@@ -122,7 +106,7 @@ class SimpleKotlinGradleIT : KGPBaseTest() {
     fun testDestinationDirReferencedDuringEvaluation(gradleVersion: GradleVersion) {
         project("destinationDirReferencedDuringEvaluation", gradleVersion) {
             build("build") {
-                assertOutputContains("foo.GreeterTest > testHelloWorld PASSED")
+                assertOutputContains("GreeterTest > testHelloWorld PASSED")
             }
         }
     }
@@ -231,10 +215,8 @@ class SimpleKotlinGradleIT : KGPBaseTest() {
             TestVersions.Gradle.G_8_0,
             TestVersions.Gradle.G_8_1,
             TestVersions.Gradle.G_8_2,
-            TestVersions.Gradle.G_8_3,
             TestVersions.Gradle.G_8_4,
             TestVersions.Gradle.G_8_5,
-            TestVersions.Gradle.G_8_6,
         ],
     )
     @GradleTest
@@ -242,6 +224,7 @@ class SimpleKotlinGradleIT : KGPBaseTest() {
         project("kotlinProject", gradleVersion) {
             build("help") {
                 val expectedVariant = when (gradleVersion) {
+                    GradleVersion.version(TestVersions.Gradle.G_8_8) -> "gradle85"
                     GradleVersion.version(TestVersions.Gradle.G_8_7) -> "gradle85"
                     GradleVersion.version(TestVersions.Gradle.G_8_6) -> "gradle85"
                     GradleVersion.version(TestVersions.Gradle.G_8_5) -> "gradle85"

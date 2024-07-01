@@ -2,6 +2,7 @@ KtDotQualifiedExpression(59,66): 'a.foo()'
   KaErrorCallInfo:
     candidateCalls = [
       KaSimpleFunctionCall:
+        argumentMapping = {}
         isImplicitInvoke = false
         partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
           dispatchReceiver = KaExplicitReceiverValue:
@@ -9,13 +10,12 @@ KtDotQualifiedExpression(59,66): 'a.foo()'
             isSafeNavigation = false
             type = A
           extensionReceiver = null
-          signature = KaFunctionLikeSignature:
+          signature = KaFunctionSignature:
             receiverType = null
             returnType = kotlin.Unit
             symbol = /A.foo(<dispatch receiver>: A): kotlin.Unit
             valueParameters = []
             callableId = /A.foo
         typeArgumentsMapping = {}
-        argumentMapping = {}
     ]
     diagnostic = ERROR<INVISIBLE_REFERENCE: Cannot access 'fun foo(): Unit': it is private in '/A'.>

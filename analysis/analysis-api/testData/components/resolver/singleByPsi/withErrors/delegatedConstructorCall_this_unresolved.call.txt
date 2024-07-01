@@ -2,22 +2,23 @@ KtConstructorDelegationCall(115,132): 'this(i, j, i * j)'
   KaErrorCallInfo:
     candidateCalls = [
       KaDelegatedConstructorCall:
+        argumentMapping = {}
         kind = THIS_CALL
         partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
           dispatchReceiver = null
           extensionReceiver = null
-          signature = KaFunctionLikeSignature:
+          signature = KaFunctionSignature:
             receiverType = null
             returnType = Sub
             symbol = <constructor>(i: kotlin.Int, j: kotlin.Int): Sub
             valueParameters = [
-              KaVariableLikeSignature:
+              KaVariableSignature:
                 name = i
                 receiverType = null
                 returnType = kotlin.Int
                 symbol = i: kotlin.Int
                 callableId = null,
-              KaVariableLikeSignature:
+              KaVariableSignature:
                 name = j
                 receiverType = null
                 returnType = kotlin.Int
@@ -25,19 +26,19 @@ KtConstructorDelegationCall(115,132): 'this(i, j, i * j)'
                 callableId = null
             ]
             callableId = null
-        typeArgumentsMapping = {}
-        argumentMapping = {},
+        typeArgumentsMapping = {},
       KaDelegatedConstructorCall:
+        argumentMapping = {}
         kind = THIS_CALL
         partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
           dispatchReceiver = null
           extensionReceiver = null
-          signature = KaFunctionLikeSignature:
+          signature = KaFunctionSignature:
             receiverType = null
             returnType = Sub
             symbol = <constructor>(p: kotlin.Int): Sub
             valueParameters = [
-              KaVariableLikeSignature:
+              KaVariableSignature:
                 name = p
                 receiverType = null
                 returnType = kotlin.Int
@@ -46,7 +47,6 @@ KtConstructorDelegationCall(115,132): 'this(i, j, i * j)'
             ]
             callableId = null
         typeArgumentsMapping = {}
-        argumentMapping = {}
     ]
     diagnostic = ERROR<NONE_APPLICABLE: None of the following candidates is applicable:
     constructor(p: Int): Sub

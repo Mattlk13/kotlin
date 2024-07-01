@@ -1,6 +1,6 @@
 // KIND: STANDALONE
 // FREE_COMPILER_ARGS: -opt-in=kotlin.native.internal.InternalForKotlinNative
-// MODULE: ReferenceTypes
+// MODULE: ReferenceTypes(deps)
 // FILE: Bar.kt
 class Bar(var foo: Foo) {
     fun getAndSetFoo(newFoo: Foo): Foo {
@@ -68,3 +68,51 @@ fun getGlobalPermanent(): Permanent {
     check(Permanent.isPermanent())
     return Permanent
 }
+
+// FILE: Any.kt
+annotation class Class() // intentially unsupported
+
+val instance = Class()
+
+object Object {
+    val instance: Any
+        get() = Object
+
+    fun isInstance(obj: Any) = obj == Object
+}
+
+class SomeFoo(var storage: Any)
+class SomeBar
+class SomeBaz
+
+fun isMainObject(obj: Any): Boolean = obj == instance
+
+val mainObject: Any get() = instance
+
+fun isMainPermanentObject(obj: Any): Boolean = obj == Object
+
+fun getMainPermanentObject(): Any = Object
+
+// FILE: dependency_usage.kt
+import dependency.*
+
+val deps_instance: Any = DepsFoo()
+
+fun isDepsObject(obj: Any): Boolean = obj is DepsFoo
+fun isSavedDepsObject(obj: Any): Boolean = obj == deps_instance
+
+// MODULE: second_main(deps)
+// FILE: second_main.kt
+
+import dependency.*
+
+val deps_instance_2: Any = DepsFoo()
+
+fun isDepsObject_2(obj: Any): Boolean = obj is DepsFoo
+fun isSavedDepsObject_2(obj: Any): Boolean = obj == deps_instance_2
+
+// MODULE: deps
+// FILE: deps_file.kt
+package dependency
+
+class DepsFoo

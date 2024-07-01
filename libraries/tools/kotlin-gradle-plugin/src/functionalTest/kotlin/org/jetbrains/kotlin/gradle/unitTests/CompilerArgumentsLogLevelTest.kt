@@ -8,11 +8,9 @@ package org.jetbrains.kotlin.gradle.unitTests
 
 import org.jetbrains.kotlin.compilerRunner.KotlinCompilerArgumentsLogLevel
 import org.jetbrains.kotlin.compilerRunner.KotlinNativeCompilerRunner
-import org.jetbrains.kotlin.compilerRunner.konanDataDir
-import org.jetbrains.kotlin.compilerRunner.konanHome
+import org.jetbrains.kotlin.gradle.internal.properties.nativeProperties
 import org.jetbrains.kotlin.gradle.plugin.extraProperties
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
-import org.jetbrains.kotlin.gradle.tasks.KotlinNativeCompile
 import org.jetbrains.kotlin.gradle.util.buildProjectWithJvm
 import org.jetbrains.kotlin.gradle.util.buildProjectWithMPP
 import org.jetbrains.kotlin.gradle.util.kotlin
@@ -82,7 +80,12 @@ class CompilerArgumentsLogLevelTest {
 
         project.evaluate()
 
-        val runnerSettings = KotlinNativeCompilerRunner.Settings.of(project.konanHome.absolutePath, project.konanDataDir, project)
+        val runnerSettings = KotlinNativeCompilerRunner.Settings.of(
+            project.nativeProperties.actualNativeHomeDirectory.get().absolutePath,
+            project.nativeProperties.konanDataDir.orNull?.absolutePath,
+            project
+        )
+
         assertEquals(KotlinCompilerArgumentsLogLevel.WARNING, runnerSettings.parent.kotlinCompilerArgumentsLogLevel.get())
     }
 }

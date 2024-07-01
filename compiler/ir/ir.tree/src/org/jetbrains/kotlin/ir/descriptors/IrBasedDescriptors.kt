@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2024 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -533,7 +533,6 @@ fun IrFunction.toIrBasedDescriptor(): FunctionDescriptor =
     when (this) {
         is IrSimpleFunction -> toIrBasedDescriptor()
         is IrConstructor -> toIrBasedDescriptor()
-        else -> error("Unknown function kind")
     }
 
 open class IrBasedClassDescriptor(owner: IrClass) : ClassDescriptor, IrBasedDeclarationDescriptor<IrClass>(owner) {
@@ -1151,8 +1150,8 @@ fun IrType.toIrBasedKotlinType(builtins: KotlinBuiltIns? = null): KotlinType = w
                 it
             }
         }
-    is IrDynamicType -> kotlinType ?: builtins?.let(::createDynamicType) ?: error("Couldn't instantiate DynamicType")
-    is IrErrorType -> kotlinType ?: error("Can't find KotlinType in IrErrorType: " + (this as IrType).render())
+    is IrDynamicType -> originalKotlinType ?: builtins?.let(::createDynamicType) ?: error("Couldn't instantiate DynamicType")
+    is IrErrorType -> originalKotlinType ?: error("Can't find KotlinType in IrErrorType: " + (this as IrType).render())
     else ->
         throw AssertionError("Unexpected type: $this = ${this.render()}")
 }

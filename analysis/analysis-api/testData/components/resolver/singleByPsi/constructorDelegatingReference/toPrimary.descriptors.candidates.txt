@@ -1,33 +1,41 @@
 KtConstructorDelegationReferenceExpression(38,42): 'this'
   KaInapplicableCallCandidateInfo:
-    diagnostic = ERROR<null: OTHER_ERROR with <init>>
     candidate = KaDelegatedConstructorCall:
+      argumentMapping = {}
       kind = THIS_CALL
       partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
         dispatchReceiver = null
         extensionReceiver = null
-        signature = KaFunctionLikeSignature:
+        signature = KaFunctionSignature:
           receiverType = null
           returnType = A
           symbol = <constructor>(): A
           valueParameters = []
           callableId = null
       typeArgumentsMapping = {}
-      argumentMapping = {}
+    diagnostic = ERROR<UNRESOLVED_REFERENCE: OTHER_ERROR with <init>>
     isInBestCandidates = false
   
   KaApplicableCallCandidateInfo:
     candidate = KaDelegatedConstructorCall:
+      argumentMapping = {
+        2 -> (KaVariableSignature:
+          name = a
+          receiverType = null
+          returnType = kotlin.Int
+          symbol = a: kotlin.Int
+          callableId = null)
+      }
       kind = THIS_CALL
       partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
         dispatchReceiver = null
         extensionReceiver = null
-        signature = KaFunctionLikeSignature:
+        signature = KaFunctionSignature:
           receiverType = null
           returnType = A
           symbol = <constructor>(a: kotlin.Int): A
           valueParameters = [
-            KaVariableLikeSignature:
+            KaVariableSignature:
               name = a
               receiverType = null
               returnType = kotlin.Int
@@ -36,12 +44,4 @@ KtConstructorDelegationReferenceExpression(38,42): 'this'
           ]
           callableId = null
       typeArgumentsMapping = {}
-      argumentMapping = {
-        2 -> (KaVariableLikeSignature:
-          name = a
-          receiverType = null
-          returnType = kotlin.Int
-          symbol = a: kotlin.Int
-          callableId = null)
-      }
     isInBestCandidates = true

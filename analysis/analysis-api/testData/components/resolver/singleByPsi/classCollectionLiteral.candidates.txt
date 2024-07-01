@@ -1,16 +1,30 @@
 KtCollectionLiteralExpression(206,256): '[AnnoWithKClass::class, one.AnnoWithKClass::class]'
   KaApplicableCallCandidateInfo:
     candidate = KaSimpleFunctionCall:
+      argumentMapping = {
+        AnnoWithKClass::class -> (KaVariableSignature:
+          name = elements
+          receiverType = null
+          returnType = kotlin.reflect.KClass<*>
+          symbol = vararg elements: T
+          callableId = null),
+        one.AnnoWithKClass::class -> (KaVariableSignature:
+          name = elements
+          receiverType = null
+          returnType = kotlin.reflect.KClass<*>
+          symbol = vararg elements: T
+          callableId = null)
+      }
       isImplicitInvoke = false
       partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
         dispatchReceiver = null
         extensionReceiver = null
-        signature = KaFunctionLikeSignature:
+        signature = KaFunctionSignature:
           receiverType = null
           returnType = kotlin.Array<kotlin.reflect.KClass<*>>
           symbol = kotlin/arrayOf(vararg elements: T): kotlin.Array<T>
           valueParameters = [
-            KaVariableLikeSignature:
+            KaVariableSignature:
               name = elements
               receiverType = null
               returnType = kotlin.reflect.KClass<*>
@@ -20,19 +34,5 @@ KtCollectionLiteralExpression(206,256): '[AnnoWithKClass::class, one.AnnoWithKCl
           callableId = kotlin/arrayOf
       typeArgumentsMapping = {
         T -> (kotlin.reflect.KClass<*>)
-      }
-      argumentMapping = {
-        AnnoWithKClass::class -> (KaVariableLikeSignature:
-          name = elements
-          receiverType = null
-          returnType = kotlin.reflect.KClass<*>
-          symbol = vararg elements: T
-          callableId = null),
-        one.AnnoWithKClass::class -> (KaVariableLikeSignature:
-          name = elements
-          receiverType = null
-          returnType = kotlin.reflect.KClass<*>
-          symbol = vararg elements: T
-          callableId = null)
       }
     isInBestCandidates = true

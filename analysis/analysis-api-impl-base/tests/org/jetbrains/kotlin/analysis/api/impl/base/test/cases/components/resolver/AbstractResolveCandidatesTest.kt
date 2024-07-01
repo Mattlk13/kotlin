@@ -6,29 +6,31 @@
 package org.jetbrains.kotlin.analysis.api.impl.base.test.cases.components.resolver
 
 import org.jetbrains.kotlin.analysis.api.KaSession
-import org.jetbrains.kotlin.analysis.api.calls.KaCallCandidateInfo
-import org.jetbrains.kotlin.analysis.api.calls.KaCallableMemberCall
-import org.jetbrains.kotlin.analysis.api.calls.successfulCallOrNull
-import org.jetbrains.kotlin.analysis.api.calls.symbol
 import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.components.assertStableSymbolResult
 import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.components.compareCalls
 import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.components.stringRepresentation
+import org.jetbrains.kotlin.analysis.api.resolution.KaCallCandidateInfo
+import org.jetbrains.kotlin.analysis.api.resolution.KaCallInfo
+import org.jetbrains.kotlin.analysis.api.resolution.KaCallableMemberCall
+import org.jetbrains.kotlin.analysis.api.resolution.successfulCallOrNull
+import org.jetbrains.kotlin.analysis.api.resolution.symbol
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.test.services.TestServices
 import org.jetbrains.kotlin.test.services.assertions
-import org.jetbrains.kotlin.test.services.moduleStructure
 
 abstract class AbstractResolveCandidatesTest : AbstractResolveByElementTest() {
     override val resolveKind: String get() = "candidates"
 
     override fun generateResolveOutput(mainElement: KtElement, testServices: TestServices): String = analyseForTest(mainElement) {
         val candidates = collectCallCandidates(mainElement)
-        ignoreStabilityIfNeeded(testServices.moduleStructure.allDirectives) {
-            val candidatesAgain = collectCallCandidates(mainElement)
+        val candidatesAgain = collectCallCandidates(mainElement)
+        val callInfo = mainElement.resolveToCall()
+
+        ignoreStabilityIfNeeded {
             assertStableSymbolResult(testServices, candidates, candidatesAgain)
+            checkConsistencyWithResolveCall(callInfo, candidates, testServices)
         }
 
-        checkConsistencyWithResolveCall(mainElement, candidates, testServices)
         if (candidates.isEmpty()) {
             "NO_CANDIDATES"
         } else {
@@ -37,11 +39,11 @@ abstract class AbstractResolveCandidatesTest : AbstractResolveByElementTest() {
     }
 
     private fun KaSession.checkConsistencyWithResolveCall(
-        mainElement: KtElement,
+        callInfo: KaCallInfo?,
         candidates: List<KaCallCandidateInfo>,
         testServices: TestServices,
     ) {
-        val resolvedCall = mainElement.resolveCallOld()?.successfulCallOrNull<KaCallableMemberCall<*, *>>()
+        val resolvedCall = callInfo?.successfulCallOrNull<KaCallableMemberCall<*, *>>()
         if (candidates.isEmpty()) {
             testServices.assertions.assertEquals(null, resolvedCall) {
                 "Inconsistency between candidates and resolved call. " +
@@ -66,7 +68,7 @@ abstract class AbstractResolveCandidatesTest : AbstractResolveByElementTest() {
     }
 
     private fun KaSession.collectCallCandidates(element: KtElement): List<KaCallCandidateInfo> {
-        val candidates = element.collectCallCandidatesOld()
+        val candidates = element.resolveToCallCandidates()
         return candidates.sortedWith { candidate1, candidate2 ->
             compareCalls(candidate1.candidate, candidate2.candidate)
         }

@@ -1,6 +1,7 @@
 KtCallExpression(135,138): 'i()'
   KaSuccessCallInfo:
     call = KaSimpleFunctionCall:
+      argumentMapping = {}
       isImplicitInvoke = true
       partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
         dispatchReceiver = null
@@ -8,11 +9,10 @@ KtCallExpression(135,138): 'i()'
           expression = i
           isSafeNavigation = false
           type = kotlin.Int
-        signature = KaFunctionLikeSignature:
+        signature = KaFunctionSignature:
           receiverType = kotlin.Int
           returnType = kotlin.Long
           symbol = /invoke(<extension receiver>: kotlin.Int): kotlin.Long
           valueParameters = []
           callableId = /invoke
       typeArgumentsMapping = {}
-      argumentMapping = {}

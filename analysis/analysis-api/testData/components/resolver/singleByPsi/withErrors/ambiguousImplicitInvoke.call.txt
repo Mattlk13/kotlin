@@ -2,6 +2,7 @@ KtCallExpression(134,137): 'x()'
   KaErrorCallInfo:
     candidateCalls = [
       KaSimpleFunctionCall:
+        argumentMapping = {}
         isImplicitInvoke = true
         partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
           dispatchReceiver = null
@@ -9,12 +10,12 @@ KtCallExpression(134,137): 'x()'
             expression = x
             isSafeNavigation = false
             type = kotlin.Int
-          signature = KaFunctionLikeSignature:
+          signature = KaFunctionSignature:
             receiverType = kotlin.Int
             returnType = kotlin.Unit
             symbol = invoke(<extension receiver>: kotlin.Int, a: kotlin.String): kotlin.Unit
             valueParameters = [
-              KaVariableLikeSignature:
+              KaVariableSignature:
                 name = a
                 receiverType = null
                 returnType = kotlin.String
@@ -22,9 +23,9 @@ KtCallExpression(134,137): 'x()'
                 callableId = null
             ]
             callableId = null
-        typeArgumentsMapping = {}
-        argumentMapping = {},
+        typeArgumentsMapping = {},
       KaSimpleFunctionCall:
+        argumentMapping = {}
         isImplicitInvoke = true
         partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
           dispatchReceiver = null
@@ -32,12 +33,12 @@ KtCallExpression(134,137): 'x()'
             expression = x
             isSafeNavigation = false
             type = kotlin.Int
-          signature = KaFunctionLikeSignature:
+          signature = KaFunctionSignature:
             receiverType = kotlin.Int
             returnType = kotlin.Unit
             symbol = invoke(<extension receiver>: kotlin.Int, b: kotlin.Boolean): kotlin.Unit
             valueParameters = [
-              KaVariableLikeSignature:
+              KaVariableSignature:
                 name = b
                 receiverType = null
                 returnType = kotlin.Boolean
@@ -46,7 +47,6 @@ KtCallExpression(134,137): 'x()'
             ]
             callableId = null
         typeArgumentsMapping = {}
-        argumentMapping = {}
     ]
     diagnostic = ERROR<NONE_APPLICABLE: None of the following candidates is applicable:
     fun Int.invoke(a: String): Unit

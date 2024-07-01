@@ -123,6 +123,7 @@ internal open class BaseKotlinCompileConfig<TASK : KotlinCompile> : AbstractKotl
         private const val JAR_ARTIFACT_TYPE = "jar"
         const val CLASSPATH_ENTRY_SNAPSHOT_ARTIFACT_TYPE = "classpath-entry-snapshot"
         const val READONLY_CACHE_ENV_VAR = "GRADLE_RO_DEP_CACHE"
+        internal const val CLASSES_SECONDARY_VARIANT_NAME = "classes"
     }
 
     private fun registerTransformsOnce(
@@ -188,13 +189,27 @@ internal open class BaseKotlinCompileConfig<TASK : KotlinCompile> : AbstractKotl
         project.dependencies.registerTransform(BuildToolsApiClasspathEntrySnapshotTransform::class.java) {
             it.from.setAttribute(ARTIFACT_TYPE_ATTRIBUTE, JAR_ARTIFACT_TYPE)
             it.to.setAttribute(ARTIFACT_TYPE_ATTRIBUTE, CLASSPATH_ENTRY_SNAPSHOT_ARTIFACT_TYPE)
-            it.configureCommonParameters(kgpVersion, classLoadersCachingService, classpath, jvmToolchain, runKotlinCompilerViaBuildToolsApi, suppressVersionInconsistencyChecks)
+            it.configureCommonParameters(
+                kgpVersion,
+                classLoadersCachingService,
+                classpath,
+                jvmToolchain,
+                runKotlinCompilerViaBuildToolsApi,
+                suppressVersionInconsistencyChecks
+            )
             it.parameters.setupKotlinToolingDiagnosticsParameters(project)
         }
         project.dependencies.registerTransform(BuildToolsApiClasspathEntrySnapshotTransform::class.java) {
             it.from.setAttribute(ARTIFACT_TYPE_ATTRIBUTE, DIRECTORY_ARTIFACT_TYPE)
             it.to.setAttribute(ARTIFACT_TYPE_ATTRIBUTE, CLASSPATH_ENTRY_SNAPSHOT_ARTIFACT_TYPE)
-            it.configureCommonParameters(kgpVersion, classLoadersCachingService, classpath, jvmToolchain, runKotlinCompilerViaBuildToolsApi, suppressVersionInconsistencyChecks)
+            it.configureCommonParameters(
+                kgpVersion,
+                classLoadersCachingService,
+                classpath,
+                jvmToolchain,
+                runKotlinCompilerViaBuildToolsApi,
+                suppressVersionInconsistencyChecks
+            )
             it.parameters.setupKotlinToolingDiagnosticsParameters(project)
         }
     }

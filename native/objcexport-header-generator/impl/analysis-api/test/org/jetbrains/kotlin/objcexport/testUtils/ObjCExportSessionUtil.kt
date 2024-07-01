@@ -5,17 +5,18 @@
 
 package org.jetbrains.kotlin.objcexport.testUtils
 
-import org.jetbrains.kotlin.analysis.api.KtAnalysisSession
+import org.jetbrains.kotlin.analysis.api.KaSession
 import org.jetbrains.kotlin.analysis.api.analyze
 import org.jetbrains.kotlin.objcexport.KtObjCExportConfiguration
 import org.jetbrains.kotlin.objcexport.KtObjCExportSession
 import org.jetbrains.kotlin.objcexport.withKtObjCExportSession
 import org.jetbrains.kotlin.psi.KtElement
 
+@Suppress("CONTEXT_RECEIVERS_DEPRECATED")
 inline fun <T> analyzeWithObjCExport(
     useSiteKtElement: KtElement,
     configuration: KtObjCExportConfiguration = KtObjCExportConfiguration(),
-    action: context(KtAnalysisSession, KtObjCExportSession) () -> T,
+    action: context(KaSession, KtObjCExportSession) () -> T,
 ): T = analyze(useSiteKtElement) {
     withKtObjCExportSession(configuration) {
         action(this@analyze, this)

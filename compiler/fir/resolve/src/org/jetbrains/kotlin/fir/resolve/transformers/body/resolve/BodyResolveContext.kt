@@ -593,6 +593,7 @@ class BodyResolveContext(
             .map { it.asTowerDataElement(isLocal = false) }
 
         val base = towerDataContext
+            // KT-69102: this line can lead to duplicate context receivers in the implicit receiver stack
             .addNonLocalTowerDataElements(towerDataContext.nonLocalTowerDataElements)
             .addNonLocalTowerDataElements(fragmentImportTowerDataElements)
 
@@ -697,7 +698,7 @@ class BodyResolveContext(
                 }
                 val receiverTypeRef = function.receiverParameter?.typeRef
                 val type = receiverTypeRef?.coneType
-                val additionalLabelName = type?.labelName(holder.session)
+                val additionalLabelName = type?.abbreviatedTypeOrSelf?.labelName(holder.session)
                 withLabelAndReceiverType(function.name, function, type, holder, additionalLabelName, f)
             } else {
                 f()
@@ -866,7 +867,7 @@ class BodyResolveContext(
             }
             withContainer(accessor) {
                 val type = receiverTypeRef?.coneType
-                val additionalLabelName = type?.labelName(holder.session)
+                val additionalLabelName = type?.abbreviatedTypeOrSelf?.labelName(holder.session)
                 withLabelAndReceiverType(property.name, property, type, holder, additionalLabelName, f)
             }
         }
@@ -923,8 +924,8 @@ class BodyResolveContext(
                     }
                 } ?: f()
             } else {
-                addInaccessibleImplicitReceiverValue(owningClass, holder)
                 withTowerDataCleanup {
+                    addInaccessibleImplicitReceiverValue(owningClass, holder)
                     addLocalScope(buildSecondaryConstructorParametersScope(constructor, holder.session))
                     constructor.valueParameters.forEach { storeVariable(it, holder.session) }
                     f()

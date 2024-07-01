@@ -25,13 +25,15 @@ import org.jetbrains.kotlin.util.PrivateForInline
 object JVM_DIAGNOSTICS_LIST : DiagnosticList("FirJvmErrors") {
     val DECLARATIONS by object : DiagnosticGroup("Declarations") {
         val OVERRIDE_CANNOT_BE_STATIC by error<PsiElement>()
-        val JVM_STATIC_NOT_IN_OBJECT_OR_CLASS_COMPANION by error<PsiElement>(PositioningStrategy.DECLARATION_SIGNATURE)
-        val JVM_STATIC_NOT_IN_OBJECT_OR_COMPANION by error<PsiElement>(PositioningStrategy.DECLARATION_SIGNATURE)
-        val JVM_STATIC_ON_NON_PUBLIC_MEMBER by error<PsiElement>(PositioningStrategy.DECLARATION_SIGNATURE)
-        val JVM_STATIC_ON_CONST_OR_JVM_FIELD by error<PsiElement>(PositioningStrategy.DECLARATION_SIGNATURE)
-        val JVM_STATIC_ON_EXTERNAL_IN_INTERFACE by error<PsiElement>(PositioningStrategy.DECLARATION_SIGNATURE)
+        val JVM_STATIC_NOT_IN_OBJECT_OR_CLASS_COMPANION by error<PsiElement>()
+        val JVM_STATIC_NOT_IN_OBJECT_OR_COMPANION by error<PsiElement>()
+        val JVM_STATIC_ON_NON_PUBLIC_MEMBER by error<PsiElement>()
+        val JVM_STATIC_ON_CONST_OR_JVM_FIELD by error<PsiElement>()
+        val JVM_STATIC_ON_EXTERNAL_IN_INTERFACE by error<PsiElement>()
 
-        val INAPPLICABLE_JVM_NAME by error<PsiElement>()
+        val INAPPLICABLE_JVM_NAME by error<PsiElement>() {
+            isSuppressible = true
+        }
         val ILLEGAL_JVM_NAME by error<PsiElement>()
 
         val FUNCTION_DELEGATE_MEMBER_NAME_CLASH by error<PsiElement>(PositioningStrategy.DECLARATION_NAME)
@@ -49,6 +51,8 @@ object JVM_DIAGNOSTICS_LIST : DiagnosticList("FirJvmErrors") {
             parameter<String>("overrideDescription")
             parameter<FirNamedFunctionSymbol>("regular")
         }
+
+        val NOT_YET_SUPPORTED_LOCAL_INLINE_FUNCTION by error<KtDeclaration>(PositioningStrategy.NOT_SUPPORTED_IN_INLINE_MOST_RELEVANT)
     }
 
     val TYPES by object : DiagnosticGroup("Types") {
@@ -145,6 +149,7 @@ object JVM_DIAGNOSTICS_LIST : DiagnosticList("FirJvmErrors") {
         val JAVA_MODULE_DOES_NOT_EXPORT_PACKAGE by error<PsiElement>() {
             parameter<String>("moduleName")
             parameter<String>("packageName")
+            isSuppressible = true
         }
     }
 

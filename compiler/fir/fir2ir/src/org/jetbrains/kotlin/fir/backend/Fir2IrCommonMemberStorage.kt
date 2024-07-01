@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentHashMap
  *
  * See `/docs/fir/k2_kmp.md`
  */
-class Fir2IrCommonMemberStorage(val mangler: FirMangler) {
+class Fir2IrCommonMemberStorage {
     val lock: IrLock = IrLock()
 
     val classCache: MutableMap<FirRegularClass, IrClassSymbol> = mutableMapOf()
@@ -49,6 +49,23 @@ class Fir2IrCommonMemberStorage(val mangler: FirMangler) {
     val delegateVariableForPropertyCache: ConcurrentHashMap<IrLocalDelegatedPropertySymbol, IrVariableSymbol> = ConcurrentHashMap()
 
     val irForFirSessionDependantDeclarationMap: MutableMap<Fir2IrDeclarationStorage.FakeOverrideIdentifier, IrSymbol> = mutableMapOf()
+
+    /**
+     * This map contains information about classes, which implement interfaces by delegation
+     *
+     * ```
+     * class Some(val a: A, b: B) : A by a, B by b
+     * ```
+     *
+     * delegatedClassesMap = {
+     *     Some -> {
+     *         A -> backingField of val a,
+     *         B -> field for delegate b
+     *     }
+     * }
+     */
+    val delegatedClassesInfo: MutableMap<IrClassSymbol, MutableMap<IrClassSymbol, IrFieldSymbol>> = mutableMapOf()
+    val firClassesWithInheritanceByDelegation: MutableSet<FirClass> = mutableSetOf()
 
     /**
      * Contains information about synthetic methods generated for data and value classes

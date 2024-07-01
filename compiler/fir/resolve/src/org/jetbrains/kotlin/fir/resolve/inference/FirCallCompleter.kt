@@ -19,7 +19,11 @@ import org.jetbrains.kotlin.fir.diagnostics.ConeCannotInferReceiverParameterType
 import org.jetbrains.kotlin.fir.diagnostics.ConeCannotInferValueParameterType
 import org.jetbrains.kotlin.fir.expressions.*
 import org.jetbrains.kotlin.fir.resolve.ResolutionMode
-import org.jetbrains.kotlin.fir.resolve.calls.*
+import org.jetbrains.kotlin.fir.resolve.calls.ConeResolvedLambdaAtom
+import org.jetbrains.kotlin.fir.resolve.calls.ResolutionContext
+import org.jetbrains.kotlin.fir.resolve.calls.candidate.Candidate
+import org.jetbrains.kotlin.fir.resolve.calls.candidate.FirNamedReferenceWithCandidate
+import org.jetbrains.kotlin.fir.resolve.calls.stages.TypeArgumentMapping
 import org.jetbrains.kotlin.fir.resolve.fullyExpandedType
 import org.jetbrains.kotlin.fir.resolve.inference.model.ConeArgumentConstraintPosition
 import org.jetbrains.kotlin.fir.resolve.inference.model.ConeExpectedTypeConstraintPosition
@@ -105,7 +109,16 @@ class FirCallCompleter(
                 runCompletionForCall(candidate, completionMode, call, initialType, analyzer)
 
                 val readOnlyConstraintStorage = candidate.system.asReadOnlyStorage()
-                checkStorageConstraintsAfterFullCompletion(readOnlyConstraintStorage)
+                if (inferenceSession !is FirPCLAInferenceSession) {
+                    // With FirPCLAInferenceSession we either have here a situation when the candidate system uses
+                    // an outer system, and completionMode is PCLA_POSTPONED_CALL (see customCompletionModeInsteadOfFull);
+                    // or, the candidate system does not use an outer system; then the PCLA common system is somewhere on top,
+                    // and after fixing type variables of this candidate we still may have some unfixed variables from the common system
+                    // TODO: KT-69040. We think some better decision is possible here, e.g. in a situation when the candidate system
+                    // does not use an outer system either the completionMode should not be FULL,
+                    // or it should not be added as a "base" system.
+                    checkStorageConstraintsAfterFullCompletion(readOnlyConstraintStorage)
+                }
 
                 val finalSubstitutor = readOnlyConstraintStorage
                     .buildAbstractResultingSubstitutor(session.typeContext) as ConeSubstitutor
@@ -256,10 +269,10 @@ class FirCallCompleter(
     }
 
     fun prepareLambdaAtomForFactoryPattern(
-        atom: ResolvedLambdaAtom,
+        atom: ConeResolvedLambdaAtom,
         candidate: Candidate,
     ) {
-        val returnVariable = ConeTypeVariableForLambdaReturnType(atom.atom, "_R")
+        val returnVariable = ConeTypeVariableForLambdaReturnType(atom.fir, "_R")
         val csBuilder = candidate.system.getBuilder()
         csBuilder.registerVariable(returnVariable)
         val functionalType = csBuilder.buildCurrentSubstitutor()
@@ -271,7 +284,7 @@ class FirCallCompleter(
             isNullable = functionalType.isNullable,
             functionalType.attributes
         )
-        csBuilder.addSubtypeConstraint(expectedType, functionalType, ConeArgumentConstraintPosition(atom.atom))
+        csBuilder.addSubtypeConstraint(expectedType, functionalType, ConeArgumentConstraintPosition(atom.fir))
         atom.replaceExpectedType(expectedType, returnVariable.defaultType)
         atom.replaceTypeVariableForLambdaReturnType(returnVariable)
     }
@@ -303,7 +316,7 @@ class FirCallCompleter(
 
     private inner class LambdaAnalyzerImpl : LambdaAnalyzer {
         override fun analyzeAndGetLambdaReturnArguments(
-            lambdaAtom: ResolvedLambdaAtom,
+            lambdaAtom: ConeResolvedLambdaAtom,
             receiverType: ConeKotlinType?,
             contextReceivers: List<ConeKotlinType>,
             parameters: List<ConeKotlinType>,
@@ -312,10 +325,10 @@ class FirCallCompleter(
             withPCLASession: Boolean,
             forOverloadByLambdaReturnType: Boolean,
         ): ReturnArgumentsAnalysisResult {
-            val lambdaArgument: FirAnonymousFunction = lambdaAtom.atom
+            val lambdaArgument: FirAnonymousFunction = lambdaAtom.fir
             val needItParam = lambdaArgument.valueParameters.isEmpty() && parameters.size == 1
 
-            val matchedParameter = candidate.argumentMapping?.firstNotNullOfOrNull { (currentArgument, currentValueParameter) ->
+            val matchedParameter = candidate.argumentMapping.firstNotNullOfOrNull { (currentArgument, currentValueParameter) ->
                 val currentLambdaArgument =
                     (currentArgument as? FirAnonymousFunctionExpression)?.anonymousFunction
                 if (currentLambdaArgument === lambdaArgument) {
@@ -333,7 +346,7 @@ class FirCallCompleter(
                     val itType = parameters.single()
                     buildValueParameter {
                         resolvePhase = FirResolvePhase.BODY_RESOLVE
-                        source = lambdaAtom.atom.source?.fakeElement(KtFakeSourceElementKind.ItLambdaParameter)
+                        source = lambdaAtom.fir.source?.fakeElement(KtFakeSourceElementKind.ItLambdaParameter)
                         containingFunctionSymbol = lambdaArgument.symbol
                         moduleData = session.moduleData
                         origin = FirDeclarationOrigin.Source
@@ -341,7 +354,7 @@ class FirCallCompleter(
                         symbol = FirValueParameterSymbol(name)
                         returnTypeRef =
                             itType.approximateLambdaInputType(symbol, withPCLASession).toFirResolvedTypeRef(
-                                lambdaAtom.atom.source?.fakeElement(KtFakeSourceElementKind.ItLambdaParameter)
+                                lambdaAtom.fir.source?.fakeElement(KtFakeSourceElementKind.ItLambdaParameter)
                             )
                         defaultValue = null
                         isCrossinline = false

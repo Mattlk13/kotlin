@@ -228,8 +228,8 @@ class IsVisibleInObjCTest(
 
         analyze(file) {
             val foo = file
-                .getClassOrFail("PublicA").getMemberScope()
-                .getClassOrFail("PublicB").getMemberScope()
+                .getClassOrFail("PublicA").memberScope
+                .getClassOrFail("PublicB").memberScope
                 .getClassOrFail("PublicC")
                 .getFunctionOrFail("foo")
             assertTrue(foo.isVisibleInObjC())
@@ -237,7 +237,7 @@ class IsVisibleInObjCTest(
     }
 
     @Test
-    fun `test - nested invisible function`() {
+    fun `test - nested invisible function inside private class`() {
         val file = inlineSourceCodeAnalysis.createKtFile(
             """
             class PublicA {
@@ -252,8 +252,8 @@ class IsVisibleInObjCTest(
 
         analyze(file) {
             val foo = file
-                .getClassOrFail("PublicA").getMemberScope()
-                .getClassOrFail("PrivateB").getMemberScope()
+                .getClassOrFail("PublicA").memberScope
+                .getClassOrFail("PrivateB").memberScope
                 .getClassOrFail("PublicC")
                 .getFunctionOrFail("foo")
             assertFalse(foo.isVisibleInObjC())
@@ -261,26 +261,7 @@ class IsVisibleInObjCTest(
     }
 
     @Test
-    fun `test - invisible symbol inside public class marked with @HidesFromObjC`() {
-        val file = inlineSourceCodeAnalysis.createKtFile(
-            """
-                @kotlin.native.HidesFromObjC
-                annotation class HideIt                       
-
-                @HideIt
-                class PublicClass {
-                    fun foo()
-                }
-            """.trimIndent()
-        )
-
-        analyze(file) {
-            assertFalse(file.getClassOrFail("PublicClass").getFunctionOrFail("foo").isVisibleInObjC())
-        }
-    }
-
-    @Test
-    fun `test - invisible member inside nested class marked with @HidesFromObjC`() {
+    fun `test - invisible classes with @HidesFromObjC and visible members`() {
         val file = inlineSourceCodeAnalysis.createKtFile(
             """
             @kotlin.native.HidesFromObjC
@@ -292,10 +273,10 @@ class IsVisibleInObjCTest(
             
                 @HideIt
                 class HiddenB {
-                    fun hiddenB() = Unit
+                    fun publicB() = Unit
 
                     class HiddenC {
-                        fun hiddenC() = Unit
+                        fun publicC() = Unit
                     }   
                 }
             }
@@ -304,15 +285,15 @@ class IsVisibleInObjCTest(
 
         analyze(file) {
             val publicA = file.getClassOrFail("PublicA")
-            val hiddenB = publicA.getMemberScope().getClassOrFail("HiddenB")
-            val hiddenC = hiddenB.getMemberScope().getClassOrFail("HiddenC")
+            val hiddenB = publicA.memberScope.getClassOrFail("HiddenB")
+            val hiddenC = hiddenB.memberScope.getClassOrFail("HiddenC")
 
             assertFalse(hiddenB.isVisibleInObjC())
             assertFalse(hiddenC.isVisibleInObjC())
 
             assertTrue(publicA.getFunctionOrFail("publicA").isVisibleInObjC())
-            assertFalse(hiddenB.getFunctionOrFail("hiddenB").isVisibleInObjC())
-            assertFalse(hiddenC.getFunctionOrFail("hiddenC").isVisibleInObjC())
+            assertTrue(hiddenB.getFunctionOrFail("publicB").isVisibleInObjC())
+            assertTrue(hiddenC.getFunctionOrFail("publicC").isVisibleInObjC())
         }
     }
 }

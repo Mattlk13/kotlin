@@ -1,9 +1,14 @@
+/*
+ * Copyright 2010-2024 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
+ */
+
 package org.jetbrains.kotlin.objcexport
 
-import org.jetbrains.kotlin.analysis.api.KtAnalysisSession
-import org.jetbrains.kotlin.analysis.api.symbols.KtClassKind
-import org.jetbrains.kotlin.analysis.api.symbols.KtClassOrObjectSymbol
-import org.jetbrains.kotlin.analysis.api.symbols.KtFunctionLikeSymbol
+import org.jetbrains.kotlin.analysis.api.KaSession
+import org.jetbrains.kotlin.analysis.api.symbols.KaClassKind
+import org.jetbrains.kotlin.analysis.api.symbols.KaClassSymbol
+import org.jetbrains.kotlin.analysis.api.symbols.KaFunctionSymbol
 import org.jetbrains.kotlin.backend.konan.descriptors.arrayTypes
 import org.jetbrains.kotlin.backend.konan.objcexport.ObjCInstanceType
 import org.jetbrains.kotlin.backend.konan.objcexport.ObjCMethod
@@ -13,12 +18,13 @@ import org.jetbrains.kotlin.objcexport.analysisApiUtils.getSuperClassSymbolNotAn
 import org.jetbrains.kotlin.objcexport.analysisApiUtils.hasExportForCompilerAnnotation
 import org.jetbrains.kotlin.objcexport.analysisApiUtils.isVisibleInObjC
 
-context(KtAnalysisSession, KtObjCExportSession)
-fun KtClassOrObjectSymbol.translateToObjCConstructors(): List<ObjCMethod> {
+context(KaSession, KtObjCExportSession)
+@Suppress("CONTEXT_RECEIVERS_DEPRECATED")
+fun KaClassSymbol.translateToObjCConstructors(): List<ObjCMethod> {
 
     /* Translate declared constructors */
-    val result = getDeclaredMemberScope()
-        .getConstructors()
+    val result = declaredMemberScope
+        .constructors
         .filter { !it.hasExportForCompilerAnnotation }
         .filter { it.isVisibleInObjC() }
         .sortedWith(StableCallableOrder)
@@ -30,7 +36,7 @@ fun KtClassOrObjectSymbol.translateToObjCConstructors(): List<ObjCMethod> {
 
     /* Create special 'alloc' constructors */
     if (this.classId?.asFqNameString() in arrayTypes ||
-        classKind.isObject || classKind == KtClassKind.ENUM_CLASS
+        classKind.isObject || classKind == KaClassKind.ENUM_CLASS
     ) {
         result.add(
             ObjCMethod(
@@ -58,7 +64,7 @@ fun KtClassOrObjectSymbol.translateToObjCConstructors(): List<ObjCMethod> {
     }
 
     // Hide "unimplemented" super constructors:
-    getSuperClassSymbolNotAny()?.getMemberScope()?.getConstructors().orEmpty()
+    getSuperClassSymbolNotAny()?.memberScope?.constructors.orEmpty()
         .filter { it.isVisibleInObjC() }
         .forEach { superClassConstructor ->
             val translatedSuperClassConstructor = superClassConstructor.buildObjCMethod(unavailable = true)
@@ -73,8 +79,9 @@ fun KtClassOrObjectSymbol.translateToObjCConstructors(): List<ObjCMethod> {
 /**
  * Additional primary constructor which goes always after primary constructor ([ObjCMethod.name] == "init")
  */
-context(KtAnalysisSession)
-private fun buildNewInitConstructor(constructor: KtFunctionLikeSymbol): ObjCMethod {
+context(KaSession)
+@Suppress("CONTEXT_RECEIVERS_DEPRECATED")
+private fun buildNewInitConstructor(constructor: KaFunctionSymbol): ObjCMethod {
     return ObjCMethod(
         comment = null,
         origin = constructor.getObjCExportStubOrigin(),

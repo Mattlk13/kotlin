@@ -13,8 +13,8 @@ package org.jetbrains.kotlin.analysis.api.platform
  * is usually a merge function which allows to create a single provider from a list of providers. Mergers of composable providers may
  * produce a merged provider which is more efficient than the naive sequential composite provider.
  *
- * @see KotlinDeclarationProvider
- * @see KotlinPackageProvider
+ * @see org.jetbrains.kotlin.analysis.api.platform.declarations.KotlinDeclarationProvider
+ * @see org.jetbrains.kotlin.analysis.api.platform.packages.KotlinPackageProvider
  */
 public interface KotlinComposableProvider
 

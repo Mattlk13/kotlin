@@ -11,16 +11,31 @@ import com.intellij.psi.search.ProjectScope
 import org.jetbrains.kotlin.analysis.low.level.api.fir.LLFirGlobalResolveComponents
 import org.jetbrains.kotlin.analysis.low.level.api.fir.LLFirLazyDeclarationResolver
 import org.jetbrains.kotlin.analysis.low.level.api.fir.LLFirModuleResolveComponents
-import org.jetbrains.kotlin.analysis.low.level.api.fir.project.structure.*
 import org.jetbrains.kotlin.analysis.low.level.api.fir.providers.*
-import org.jetbrains.kotlin.analysis.project.structure.*
-import org.jetbrains.kotlin.analysis.api.platform.KotlinAnchorModuleProvider
-import org.jetbrains.kotlin.analysis.api.platform.KotlinDeclarationProvider
-import org.jetbrains.kotlin.analysis.api.platform.createAnnotationResolver
-import org.jetbrains.kotlin.analysis.api.platform.createDeclarationProvider
-import org.jetbrains.kotlin.analysis.api.platform.impl.declarationProviders.FileBasedKotlinDeclarationProvider
-import org.jetbrains.kotlin.analysis.api.platform.impl.util.mergeInto
-import org.jetbrains.kotlin.analysis.utils.errors.withKtModuleEntry
+import org.jetbrains.kotlin.analysis.api.platform.projectStructure.KotlinAnchorModuleProvider
+import org.jetbrains.kotlin.analysis.api.platform.declarations.KotlinDeclarationProvider
+import org.jetbrains.kotlin.analysis.api.platform.declarations.createAnnotationResolver
+import org.jetbrains.kotlin.analysis.api.platform.declarations.createDeclarationProvider
+import org.jetbrains.kotlin.analysis.api.platform.declarations.KotlinFileBasedDeclarationProvider
+import org.jetbrains.kotlin.analysis.api.platform.projectStructure.KotlinProjectStructureProvider
+import org.jetbrains.kotlin.analysis.api.platform.utils.mergeInto
+import org.jetbrains.kotlin.analysis.api.projectStructure.KaDanglingFileResolutionMode
+import org.jetbrains.kotlin.analysis.api.projectStructure.KaBuiltinsModule
+import org.jetbrains.kotlin.analysis.api.projectStructure.KaDanglingFileModule
+import org.jetbrains.kotlin.analysis.api.projectStructure.KaLibraryModule
+import org.jetbrains.kotlin.analysis.api.projectStructure.KaLibrarySourceModule
+import org.jetbrains.kotlin.analysis.api.projectStructure.KaModule
+import org.jetbrains.kotlin.analysis.api.projectStructure.KaNotUnderContentRootModule
+import org.jetbrains.kotlin.analysis.api.projectStructure.KaScriptDependencyModule
+import org.jetbrains.kotlin.analysis.api.projectStructure.KaScriptModule
+import org.jetbrains.kotlin.analysis.api.projectStructure.KaSourceModule
+import org.jetbrains.kotlin.analysis.api.projectStructure.isStable
+import org.jetbrains.kotlin.analysis.api.utils.errors.withKaModuleEntry
+import org.jetbrains.kotlin.analysis.low.level.api.fir.projectStructure.LLFirBuiltinsSessionFactory
+import org.jetbrains.kotlin.analysis.low.level.api.fir.projectStructure.LLFirModuleData
+import org.jetbrains.kotlin.analysis.low.level.api.fir.projectStructure.registerCompilerPluginExtensions
+import org.jetbrains.kotlin.analysis.low.level.api.fir.projectStructure.registerCompilerPluginServices
+import org.jetbrains.kotlin.analysis.low.level.api.fir.projectStructure.registerIdeComponents
 import org.jetbrains.kotlin.assignment.plugin.AssignmentCommandLineProcessor
 import org.jetbrains.kotlin.assignment.plugin.AssignmentConfigurationKeys
 import org.jetbrains.kotlin.assignment.plugin.k2.FirAssignmentPluginExtensionRegistrar
@@ -69,9 +84,9 @@ internal abstract class LLFirAbstractSessionFactory(protected val project: Proje
     private val globalResolveComponents: LLFirGlobalResolveComponents
         get() = LLFirGlobalResolveComponents.getInstance(project)
 
-    abstract fun createSourcesSession(module: KtSourceModule): LLFirSourcesSession
-    abstract fun createLibrarySession(module: KtModule): LLFirLibraryOrLibrarySourceResolvableModuleSession
-    abstract fun createBinaryLibrarySession(module: KtBinaryModule): LLFirLibrarySession
+    abstract fun createSourcesSession(module: KaSourceModule): LLFirSourcesSession
+    abstract fun createLibrarySession(module: KaModule): LLFirLibraryOrLibrarySourceResolvableModuleSession
+    abstract fun createBinaryLibrarySession(module: KaLibraryModule): LLFirLibrarySession
 
     private fun createLibraryProvidersForScope(
         session: LLFirSession,
@@ -111,8 +126,8 @@ internal abstract class LLFirAbstractSessionFactory(protected val project: Proje
         isFallbackDependenciesProvider: Boolean = false,
     ): List<FirSymbolProvider>
 
-    fun createScriptSession(module: KtScriptModule): LLFirScriptSession {
-        val platform = module.platform
+    fun createScriptSession(module: KaScriptModule): LLFirScriptSession {
+        val platform = module.targetPlatform
         val builtinsSession = LLFirBuiltinsSessionFactory.getInstance(project).getBuiltinsSession(platform)
         val languageVersionSettings = wrapLanguageVersionSettings(module.languageVersionSettings)
         val scopeProvider = FirKotlinScopeProvider(::wrapScopeWithJvmMapped)
@@ -209,9 +224,9 @@ internal abstract class LLFirAbstractSessionFactory(protected val project: Proje
         }.configure()
     }
 
-    fun createNotUnderContentRootResolvableSession(module: KtNotUnderContentRootModule): LLFirNotUnderContentRootResolvableModuleSession {
+    fun createNotUnderContentRootResolvableSession(module: KaNotUnderContentRootModule): LLFirNotUnderContentRootResolvableModuleSession {
         val builtinsSession = LLFirBuiltinsSessionFactory.getInstance(project).getBuiltinsSession(JvmPlatforms.unspecifiedJvmPlatform)
-        val languageVersionSettings = ProjectStructureProvider.getInstance(project).globalLanguageVersionSettings
+        val languageVersionSettings = KotlinProjectStructureProvider.getInstance(project).globalLanguageVersionSettings
         val scopeProvider = FirKotlinScopeProvider(::wrapScopeWithJvmMapped)
         val components = LLFirModuleResolveComponents(module, globalResolveComponents, scopeProvider)
 
@@ -275,11 +290,11 @@ internal abstract class LLFirAbstractSessionFactory(protected val project: Proje
     )
 
     protected fun doCreateSourcesSession(
-        module: KtSourceModule,
+        module: KaSourceModule,
         scopeProvider: FirKotlinScopeProvider = FirKotlinScopeProvider(),
         additionalSessionConfiguration: LLFirSourcesSession.(context: SourceSessionCreationContext) -> Unit,
     ): LLFirSourcesSession {
-        val platform = module.platform
+        val platform = module.targetPlatform
         val builtinsSession = LLFirBuiltinsSessionFactory.getInstance(project).getBuiltinsSession(platform)
         val languageVersionSettings = wrapLanguageVersionSettings(module.languageVersionSettings)
 
@@ -349,20 +364,20 @@ internal abstract class LLFirAbstractSessionFactory(protected val project: Proje
     )
 
     protected fun doCreateLibrarySession(
-        module: KtModule,
+        module: KaModule,
         additionalSessionConfiguration: LLFirLibraryOrLibrarySourceResolvableModuleSession.(context: LibrarySessionCreationContext) -> Unit
     ): LLFirLibraryOrLibrarySourceResolvableModuleSession {
-        val libraryModule = when (module) {
-            is KtLibraryModule -> module
-            is KtLibrarySourceModule -> module.binaryLibrary
+        val binaryModule = when (module) {
+            is KaLibraryModule, is KaBuiltinsModule -> module
+            is KaLibrarySourceModule -> module.binaryLibrary
             else -> errorWithAttachment("Unexpected module ${module::class.simpleName}") {
-                withKtModuleEntry("module", module)
+                withKaModuleEntry("module", module)
             }
         }
 
-        val platform = module.platform
+        val platform = module.targetPlatform
         val builtinsSession = LLFirBuiltinsSessionFactory.getInstance(project).getBuiltinsSession(platform)
-        val languageVersionSettings = ProjectStructureProvider.getInstance(project).libraryLanguageVersionSettings
+        val languageVersionSettings = KotlinProjectStructureProvider.getInstance(project).libraryLanguageVersionSettings
 
         val scopeProvider = FirKotlinScopeProvider()
         val components = LLFirModuleResolveComponents(module, globalResolveComponents, scopeProvider)
@@ -398,13 +413,15 @@ internal abstract class LLFirAbstractSessionFactory(protected val project: Proje
 
             val dependencyProvider = LLFirDependenciesSymbolProvider(this) {
                 buildList {
-                    add(builtinsSession.symbolProvider)
+                    if (module !is KaBuiltinsModule) {
+                        add(builtinsSession.symbolProvider)
+                    }
 
                     // Script dependencies are self-contained and should not depend on other libraries
-                    if (module !is KtScriptDependencyModule) {
+                    if (module !is KaScriptDependencyModule) {
                         // Add all libraries excluding the current one
                         val librariesSearchScope = ProjectScope.getLibrariesScope(project)
-                            .intersectWith(GlobalSearchScope.notScope(libraryModule.contentScope))
+                            .intersectWith(GlobalSearchScope.notScope(binaryModule.contentScope))
 
                         val restLibrariesProvider = createProjectLibraryProvidersForScope(
                             session,
@@ -418,12 +435,15 @@ internal abstract class LLFirAbstractSessionFactory(protected val project: Proje
 
                         addAll(restLibrariesProvider)
 
-                        KotlinAnchorModuleProvider.getInstance(project)?.getAnchorModule(libraryModule)?.let { anchorModule ->
-                            val anchorModuleSession = LLFirSessionCache.getInstance(project).getSession(anchorModule)
-                            val anchorModuleSymbolProvider = anchorModuleSession.symbolProvider as LLFirModuleWithDependenciesSymbolProvider
+                        if (binaryModule is KaLibraryModule) {
+                            KotlinAnchorModuleProvider.getInstance(project)?.getAnchorModule(binaryModule)?.let { anchorModule ->
+                                val anchorModuleSession = LLFirSessionCache.getInstance(project).getSession(anchorModule)
+                                val anchorModuleSymbolProvider =
+                                    anchorModuleSession.symbolProvider as LLFirModuleWithDependenciesSymbolProvider
 
-                            addAll(anchorModuleSymbolProvider.providers)
-                            addAll(anchorModuleSymbolProvider.dependencyProvider.providers)
+                                addAll(anchorModuleSymbolProvider.providers)
+                                addAll(anchorModuleSymbolProvider.dependencyProvider.providers)
+                            }
                         }
                     }
                 }
@@ -442,10 +462,10 @@ internal abstract class LLFirAbstractSessionFactory(protected val project: Proje
     protected class BinaryLibrarySessionCreationContext
 
     protected fun doCreateBinaryLibrarySession(
-        module: KtBinaryModule,
+        module: KaLibraryModule,
         additionalSessionConfiguration: LLFirLibrarySession.(context: BinaryLibrarySessionCreationContext) -> Unit,
     ): LLFirLibrarySession {
-        val platform = module.platform
+        val platform = module.targetPlatform
         val builtinsSession = LLFirBuiltinsSessionFactory.getInstance(project).getBuiltinsSession(platform)
 
         val session = LLFirLibrarySession(module, builtinsSession.builtinTypes)
@@ -456,7 +476,7 @@ internal abstract class LLFirAbstractSessionFactory(protected val project: Proje
             registerModuleData(moduleData)
             registerIdeComponents(project)
             register(FirLazyDeclarationResolver::class, FirDummyCompilerLazyDeclarationResolver)
-            registerCommonComponents(ProjectStructureProvider.getInstance(project).libraryLanguageVersionSettings)
+            registerCommonComponents(KotlinProjectStructureProvider.getInstance(project).libraryLanguageVersionSettings)
             registerCommonComponentsAfterExtensionsAreConfigured()
             registerDefaultComponents()
 
@@ -483,15 +503,16 @@ internal abstract class LLFirAbstractSessionFactory(protected val project: Proje
         }
     }
 
-    abstract fun createDanglingFileSession(module: KtDanglingFileModule, contextSession: LLFirSession): LLFirSession
+    abstract fun createDanglingFileSession(module: KaDanglingFileModule, contextSession: LLFirSession): LLFirSession
 
+    @Suppress("CONTEXT_RECEIVERS_DEPRECATED")
     protected fun doCreateDanglingFileSession(
-        module: KtDanglingFileModule,
+        module: KaDanglingFileModule,
         contextSession: LLFirSession,
         additionalSessionConfiguration: context(DanglingFileSessionCreationContext) LLFirDanglingFileSession.() -> Unit,
     ): LLFirSession {
         val danglingFile = module.file
-        val platform = module.platform
+        val platform = module.targetPlatform
 
         val builtinsSession = LLFirBuiltinsSessionFactory.getInstance(project).getBuiltinsSession(platform)
         val languageVersionSettings = wrapLanguageVersionSettings(contextSession.languageVersionSettings)
@@ -514,7 +535,7 @@ internal abstract class LLFirAbstractSessionFactory(protected val project: Proje
                 this,
                 components,
                 canContainKotlinPackage = true,
-                disregardSelfDeclarations = module.resolutionMode == DanglingFileResolutionMode.IGNORE_SELF,
+                disregardSelfDeclarations = module.resolutionMode == KaDanglingFileResolutionMode.IGNORE_SELF,
                 declarationProviderFactory = { scope -> scope.createScopedDeclarationProviderForFile(danglingFile) }
             )
 
@@ -522,7 +543,7 @@ internal abstract class LLFirAbstractSessionFactory(protected val project: Proje
             register(FirLazyDeclarationResolver::class, LLFirLazyDeclarationResolver())
 
             val contextModule = module.contextModule
-            if (contextModule is KtSourceModule) {
+            if (contextModule is KaSourceModule) {
                 registerCompilerPluginServices(project, contextModule)
                 registerCompilerPluginExtensions(project, contextModule)
             } else {
@@ -557,7 +578,7 @@ internal abstract class LLFirAbstractSessionFactory(protected val project: Proje
                 .createIfNeeded(this)
                 ?.also { register(FirSwitchableExtensionDeclarationsSymbolProvider::class, it) }
 
-            if (contextModule is KtScriptModule) {
+            if (contextModule is KaScriptModule) {
                 registerScriptExtensions(this, contextModule.file)
             }
 
@@ -599,33 +620,29 @@ internal abstract class LLFirAbstractSessionFactory(protected val project: Proje
         }
     }
 
-    private fun collectDependencySymbolProviders(module: KtModule): List<FirSymbolProvider> {
+    private fun collectDependencySymbolProviders(module: KaModule): List<FirSymbolProvider> {
         val llFirSessionCache = LLFirSessionCache.getInstance(project)
 
-        fun getOrCreateSessionForDependency(dependency: KtModule): LLFirSession? = when (dependency) {
-            is KtBuiltinsModule -> null // Built-ins are already added
+        fun getOrCreateSessionForDependency(dependency: KaModule): LLFirSession? = when (dependency) {
+            is KaBuiltinsModule -> null // Built-ins are already added
 
-            is KtBinaryModule -> llFirSessionCache.getSession(dependency, preferBinary = true)
+            is KaLibraryModule -> llFirSessionCache.getSession(dependency, preferBinary = true)
 
-            is KtSourceModule -> llFirSessionCache.getSession(dependency)
+            is KaSourceModule -> llFirSessionCache.getSession(dependency)
 
-            is KtDanglingFileModule -> {
+            is KaDanglingFileModule -> {
                 requireWithAttachment(dependency.isStable, message = { "Unstable dangling modules cannot be used as a dependency" }) {
-                    withKtModuleEntry("module", module)
-                    withKtModuleEntry("dependency", dependency)
+                    withKaModuleEntry("module", module)
+                    withKaModuleEntry("dependency", dependency)
                     withPsiEntry("dependencyFile", dependency.file)
                 }
                 llFirSessionCache.getSession(dependency)
             }
 
-            is KtScriptModule,
-            is KtScriptDependencyModule,
-            is KtNotUnderContentRootModule,
-            is KtLibrarySourceModule,
-            -> {
+            else -> {
                 errorWithAttachment("Module ${module::class} cannot depend on ${dependency::class}") {
-                    withKtModuleEntry("module", module)
-                    withKtModuleEntry("dependency", dependency)
+                    withKaModuleEntry("module", module)
+                    withKaModuleEntry("dependency", dependency)
                 }
             }
         }
@@ -671,6 +688,7 @@ internal abstract class LLFirAbstractSessionFactory(protected val project: Proje
      * See [mergeDependencySymbolProvidersInto] for more information on symbol provider merging.
      */
     context(LLFirSession)
+    @Suppress("CONTEXT_RECEIVERS_DEPRECATED")
     private fun MutableList<FirSymbolProvider>.addMerged(dependencies: List<FirSymbolProvider>) {
         dependencies.mergeDependencySymbolProvidersInto(this@LLFirSession, this)
     }
@@ -702,7 +720,7 @@ internal abstract class LLFirAbstractSessionFactory(protected val project: Proje
     private fun GlobalSearchScope.createScopedDeclarationProviderForFile(file: KtFile): KotlinDeclarationProvider? =
         // KtFiles without a backing VirtualFile can't be covered by a shadow scope, and are thus assumed in-scope.
         if (file.virtualFile == null || contains(file.virtualFile)) {
-            FileBasedKotlinDeclarationProvider(file)
+            KotlinFileBasedDeclarationProvider(file)
         } else {
             null
         }

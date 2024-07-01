@@ -1,6 +1,14 @@
 KtNameReferenceExpression(119,125): 'equals'
   KaApplicableCallCandidateInfo:
     candidate = KaSimpleFunctionCall:
+      argumentMapping = {
+        m2 -> (KaVariableSignature:
+          name = other
+          receiverType = null
+          returnType = kotlin.Any?
+          symbol = other: kotlin.Any?
+          callableId = null)
+      }
       isImplicitInvoke = false
       partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
         dispatchReceiver = KaExplicitReceiverValue:
@@ -8,12 +16,12 @@ KtNameReferenceExpression(119,125): 'equals'
           isSafeNavigation = false
           type = MyClass
         extensionReceiver = null
-        signature = KaFunctionLikeSignature:
+        signature = KaFunctionSignature:
           receiverType = null
           returnType = kotlin.Boolean
           symbol = /MyClass.equals(<dispatch receiver>: MyClass, other: kotlin.Any?): kotlin.Boolean
           valueParameters = [
-            KaVariableLikeSignature:
+            KaVariableSignature:
               name = other
               receiverType = null
               returnType = kotlin.Any?
@@ -22,12 +30,4 @@ KtNameReferenceExpression(119,125): 'equals'
           ]
           callableId = /MyClass.equals
       typeArgumentsMapping = {}
-      argumentMapping = {
-        m2 -> (KaVariableLikeSignature:
-          name = other
-          receiverType = null
-          returnType = kotlin.Any?
-          symbol = other: kotlin.Any?
-          callableId = null)
-      }
     isInBestCandidates = true

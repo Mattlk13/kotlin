@@ -35,7 +35,9 @@ import org.jetbrains.kotlin.fir.references.impl.FirSimpleNamedReference
 import org.jetbrains.kotlin.fir.references.impl.FirStubReference
 import org.jetbrains.kotlin.fir.references.isError
 import org.jetbrains.kotlin.fir.resolve.*
-import org.jetbrains.kotlin.fir.resolve.calls.*
+import org.jetbrains.kotlin.fir.resolve.calls.FirSyntheticFunctionSymbol
+import org.jetbrains.kotlin.fir.resolve.calls.ResolutionContext
+import org.jetbrains.kotlin.fir.resolve.calls.candidate.*
 import org.jetbrains.kotlin.fir.resolve.diagnostics.ConeAmbiguityError
 import org.jetbrains.kotlin.fir.resolve.diagnostics.ConeInapplicableCandidateError
 import org.jetbrains.kotlin.fir.resolve.diagnostics.ConeUnresolvedNameError
@@ -57,7 +59,6 @@ import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.ArrayFqNames
 import org.jetbrains.kotlin.resolve.calls.tasks.ExplicitReceiverKind
 import org.jetbrains.kotlin.resolve.calls.tower.CandidateApplicability
-import org.jetbrains.kotlin.resolve.calls.tower.isSuccess
 import org.jetbrains.kotlin.types.Variance
 
 class FirSyntheticCallGenerator(
@@ -471,25 +472,29 @@ class FirSyntheticCallGenerator(
 
     private fun generateSyntheticCheckNotNullFunction(): FirSimpleFunction {
         // Synthetic function signature:
-        //   fun <K : Any> checkNotNull(arg: K?): K
+        //   fun <K> checkNotNull(arg: K?): K & Any
         val functionSymbol = FirSyntheticFunctionSymbol(SyntheticCallableId.CHECK_NOT_NULL)
-        val (typeParameter, returnType) = generateSyntheticSelectTypeParameter(functionSymbol, isNullableBound = false)
-
-        val argumentType = buildResolvedTypeRef {
-            type = returnType.type.withNullability(ConeNullability.NULLABLE, session.typeContext)
-        }
-        val typeArgument = buildTypeProjectionWithVariance {
-            typeRef = returnType
-            variance = Variance.INVARIANT
-        }
+        val (typeParameter, typeParameterTypeRef) = generateSyntheticSelectTypeParameter(functionSymbol, isNullableBound = true)
 
         return generateMemberFunction(
             functionSymbol,
             SyntheticCallableId.CHECK_NOT_NULL.callableName,
-            typeArgument.typeRef
+            returnType = typeParameterTypeRef.withReplacedConeType(
+                typeParameterTypeRef.type.makeConeTypeDefinitelyNotNullOrNotNull(
+                    session.typeContext,
+                    // No checks are necessary because we're sure that the type parameter has default (nullable) upper bound.
+                    // At the same time, not having `avoidComprehensiveCheck = true` might lead to plugin initialization issues.
+                    avoidComprehensiveCheck = true,
+                )
+            ),
         ).apply {
             typeParameters += typeParameter
-            valueParameters += argumentType.toValueParameter("arg", functionSymbol)
+
+            val valueParameterTypeRef = buildResolvedTypeRef {
+                type = typeParameterTypeRef.type.withNullability(ConeNullability.NULLABLE, session.typeContext)
+            }
+
+            valueParameters += valueParameterTypeRef.toValueParameter("arg", functionSymbol)
         }.build()
     }
 

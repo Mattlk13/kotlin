@@ -15,7 +15,6 @@ import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.symbols.*
 import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.types.impl.IrCapturedType
-import org.jetbrains.kotlin.ir.types.impl.originalKotlinType
 import org.jetbrains.kotlin.ir.visitors.IrElementVisitor
 import org.jetbrains.kotlin.renderer.DescriptorRenderer
 import org.jetbrains.kotlin.types.Variance
@@ -125,7 +124,6 @@ open class RenderIrElementVisitor(private val options: DumpIrTreeOptions = DumpI
                 when (declaration) {
                     is IrSimpleFunction -> append("fun ")
                     is IrConstructor -> append("constructor ")
-                    else -> append("{${declaration.javaClass.simpleName}}")
                 }
 
                 append(declaration.name.asString())
@@ -903,6 +901,8 @@ private fun StringBuilder.renderAsAnnotationArgument(irElement: IrElement?, rend
             appendIterableWith(irElement.elements, prefix = "[", postfix = "]", separator = ", ") {
                 renderAsAnnotationArgument(it, renderer, options)
             }
+            append(" type=${irElement.type.render()}")
+            append(" varargElementType=${irElement.varargElementType.render()}")
         }
         else -> if (renderer != null) {
             append(irElement.accept(renderer, null))

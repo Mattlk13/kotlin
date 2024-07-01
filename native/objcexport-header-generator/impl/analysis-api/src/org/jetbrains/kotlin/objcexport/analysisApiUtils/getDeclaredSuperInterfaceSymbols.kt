@@ -5,20 +5,21 @@
 
 package org.jetbrains.kotlin.objcexport.analysisApiUtils
 
-import org.jetbrains.kotlin.analysis.api.KtAnalysisSession
-import org.jetbrains.kotlin.analysis.api.symbols.KtClassKind
-import org.jetbrains.kotlin.analysis.api.symbols.KtClassOrObjectSymbol
+import org.jetbrains.kotlin.analysis.api.KaSession
+import org.jetbrains.kotlin.analysis.api.symbols.KaClassKind
+import org.jetbrains.kotlin.analysis.api.symbols.KaClassSymbol
 import org.jetbrains.kotlin.analysis.api.types.symbol
 
 /**
  * @return The **declared** super interfaces (**not the transitive closure**)
  */
-context(KtAnalysisSession)
-internal fun KtClassOrObjectSymbol.getDeclaredSuperInterfaceSymbols(): List<KtClassOrObjectSymbol> {
+context(KaSession)
+@Suppress("CONTEXT_RECEIVERS_DEPRECATED")
+internal fun KaClassSymbol.getDeclaredSuperInterfaceSymbols(): List<KaClassSymbol> {
     return superTypes
         .asSequence()
-        .mapNotNull { type -> type.symbol as? KtClassOrObjectSymbol }
+        .mapNotNull { type -> type.symbol as? KaClassSymbol }
         .filter { !it.isCloneable } // TODO: Write unit test for this
-        .filter { superInterface -> superInterface.classKind == KtClassKind.INTERFACE }
+        .filter { superInterface -> superInterface.classKind == KaClassKind.INTERFACE }
         .toList()
 }

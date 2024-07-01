@@ -13,8 +13,8 @@ import org.jetbrains.kotlin.descriptors.ClassKind
 import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.descriptors.Visibility
 import org.jetbrains.kotlin.descriptors.annotations.AnnotationUseSiteTarget
-import org.jetbrains.kotlin.fir.tree.generator.context.generatedType
-import org.jetbrains.kotlin.fir.tree.generator.context.type
+import org.jetbrains.kotlin.fir.tree.generator.util.generatedType
+import org.jetbrains.kotlin.fir.tree.generator.util.type
 import org.jetbrains.kotlin.fir.types.ConeClassLikeType
 import org.jetbrains.kotlin.fir.types.ConeErrorType
 import org.jetbrains.kotlin.fir.types.ConeKotlinType
@@ -30,6 +30,7 @@ import org.jetbrains.kotlin.types.SmartcastStability
 import org.jetbrains.kotlin.types.Variance
 
 val anyType = type<Any>()
+val stringType = type<String>()
 val sourceElementType = type<KtSourceElement>()
 val sourceFileType = type<KtSourceFile>()
 val sourceFileLinesMappingType = type<KtSourceFileLinesMapping>()
@@ -56,11 +57,11 @@ val coneClassLikeTypeType = type<ConeClassLikeType>()
 val standardClassIdsType = type<StandardClassIds>()
 
 val whenRefType = generatedType("", "FirExpressionRef")
-    .withArgs(FirTreeBuilder.whenExpression)
+    .withArgs(FirTree.whenExpression)
 val referenceToSimpleExpressionType = generatedType("", "FirExpressionRef")
-    .withArgs(FirTreeBuilder.expression)
+    .withArgs(FirTree.expression)
 val safeCallCheckedSubjectReferenceType = generatedType("", "FirExpressionRef")
-    .withArgs(FirTreeBuilder.checkedSafeCallSubject)
+    .withArgs(FirTree.checkedSafeCallSubject)
 
 val firModuleDataType = type("fir", "FirModuleData")
 val firImplicitTypeWithoutSourceType = generatedType("types.impl", "FirImplicitTypeRefImplWithoutSource")

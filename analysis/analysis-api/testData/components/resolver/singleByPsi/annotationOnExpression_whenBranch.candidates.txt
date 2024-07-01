@@ -1,15 +1,23 @@
 KtAnnotationEntry(54,78): '@Suppress("DEPRECATION")'
   KaApplicableCallCandidateInfo:
     candidate = KaAnnotationCall:
+      argumentMapping = {
+        "DEPRECATION" -> (KaVariableSignature:
+          name = names
+          receiverType = null
+          returnType = kotlin.String
+          symbol = vararg names: kotlin.String
+          callableId = null)
+      }
       partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
         dispatchReceiver = null
         extensionReceiver = null
-        signature = KaFunctionLikeSignature:
+        signature = KaFunctionSignature:
           receiverType = null
           returnType = kotlin.Suppress
           symbol = <constructor>(vararg names: kotlin.String): kotlin.Suppress
           valueParameters = [
-            KaVariableLikeSignature:
+            KaVariableSignature:
               name = names
               receiverType = null
               returnType = kotlin.String
@@ -18,12 +26,4 @@ KtAnnotationEntry(54,78): '@Suppress("DEPRECATION")'
           ]
           callableId = null
       typeArgumentsMapping = {}
-      argumentMapping = {
-        "DEPRECATION" -> (KaVariableLikeSignature:
-          name = names
-          receiverType = null
-          returnType = kotlin.String
-          symbol = vararg names: kotlin.String
-          callableId = null)
-      }
     isInBestCandidates = true

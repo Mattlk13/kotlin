@@ -30,14 +30,13 @@ import org.jetbrains.kotlin.types.Variance
 object FirProjectionRelationChecker : FirTypeRefChecker(MppCheckerKind.Common) {
     override fun check(typeRef: FirTypeRef, context: CheckerContext, reporter: DiagnosticReporter) {
         if (typeRef.source?.kind?.shouldSkipErrorTypeReporting != false) return
-        val type = typeRef.coneTypeSafe<ConeClassLikeType>()
+        val type = typeRef.coneTypeSafe<ConeClassLikeType>()?.abbreviatedTypeOrSelf
         val fullyExpandedType = type?.fullyExpandedType(context.session) ?: return
 
         val potentiallyProblematicArguments = collectPotentiallyProblematicArguments(typeRef, context.session)
 
         for (argumentData in potentiallyProblematicArguments) {
-            val declaration = argumentData.constructor.toRegularClassSymbol(context.session)
-                ?: error("Shouldn't be here")
+            val declaration = argumentData.constructor.toRegularClassSymbol(context.session) ?: continue
             val proto = declaration.typeParameterSymbols[argumentData.index]
             val actual = argumentData.projection
             val protoVariance = proto.variance
@@ -80,9 +79,9 @@ object FirProjectionRelationChecker : FirTypeRefChecker(MppCheckerKind.Common) {
 
     private fun extractImmediateTypeArgumentData(typeRef: FirTypeRef): List<TypeArgumentData> =
         extractArgumentsTypeRefAndSource(typeRef)
-            ?.let { typeRef.coneType.typeArguments.zip(it) }
+            ?.let { typeRef.coneType.abbreviatedTypeOrSelf.typeArguments.zip(it) }
             ?.mapIndexed { index, it ->
-                TypeArgumentData(typeRef.coneType, index, it.first, it.second)
+                TypeArgumentData(typeRef.coneType.abbreviatedTypeOrSelf, index, it.first, it.second)
             }
             .orEmpty()
 
@@ -116,7 +115,8 @@ object FirProjectionRelationChecker : FirTypeRefChecker(MppCheckerKind.Common) {
      */
     private fun collectPotentiallyProblematicArguments(typeRef: FirTypeRef, session: FirSession): List<TypeArgumentData> {
         val shallowArgumentsData = extractImmediateTypeArgumentData(typeRef).filter { it.projection.kind.canBeProblematic }
-        val symbol = typeRef.coneType.toSymbol(session)
+        val coneType = typeRef.coneType.abbreviatedTypeOrSelf
+        val symbol = coneType.toSymbol(session)
 
         if (symbol !is FirTypeAliasSymbol) {
             return shallowArgumentsData
@@ -129,8 +129,8 @@ object FirProjectionRelationChecker : FirTypeRefChecker(MppCheckerKind.Common) {
 
         return buildList {
             collectPotentiallyProblematicArgumentsFromTypeAliasExpansion(
-                symbol, typeRef.coneType, ConeSubstitutor.Empty, this, session,
-                argumentIndexToSource = { projectionToSource[typeRef.coneType.typeArguments[it]] },
+                symbol, coneType, ConeSubstitutor.Empty, this, session,
+                argumentIndexToSource = { projectionToSource[coneType.typeArguments[it]] },
             )
         }
     }
@@ -166,7 +166,7 @@ object FirProjectionRelationChecker : FirTypeRefChecker(MppCheckerKind.Common) {
             }
 
             val substitutedArgument = previousSubstitutor.substituteArgument(argument, index) ?: continue
-            val source = (argument.type as? ConeTypeParameterType)?.toSymbol(session)?.let { parametersToSources[it] }
+            val source = unsubstitutedType.toSymbol(session)?.let { parametersToSources[it] }
                 ?: error("Should have calculated")
             result += TypeArgumentData(substitutedType, index, substitutedArgument, source)
         }
@@ -198,7 +198,7 @@ object FirProjectionRelationChecker : FirTypeRefChecker(MppCheckerKind.Common) {
         )
 
         collectPotentiallyProblematicArguments(
-            alias.expandedTypeRef.coneType,
+            alias.expandedTypeRef.coneType.abbreviatedTypeOrSelf,
             nextStepSubstitutor.chain(previousSubstitutor),
             parametersToSources, result, session,
         )

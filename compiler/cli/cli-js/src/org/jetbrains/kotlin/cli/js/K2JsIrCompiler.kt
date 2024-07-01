@@ -33,11 +33,7 @@ import org.jetbrains.kotlin.cli.js.klib.*
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.cli.jvm.plugins.PluginCliParser
-import org.jetbrains.kotlin.config.CommonConfigurationKeys
-import org.jetbrains.kotlin.config.CompilerConfiguration
-import org.jetbrains.kotlin.config.KlibConfigurationKeys
-import org.jetbrains.kotlin.config.Services
-import org.jetbrains.kotlin.config.getModuleNameForSource
+import org.jetbrains.kotlin.config.*
 import org.jetbrains.kotlin.diagnostics.DiagnosticReporterFactory
 import org.jetbrains.kotlin.fir.pipeline.Fir2KlibMetadataSerializer
 import org.jetbrains.kotlin.incremental.components.ExpectActualTracker
@@ -231,6 +227,8 @@ class K2JsIrCompiler : CLICompiler<K2JSCompilerArguments>() {
         configuration.put(KlibConfigurationKeys.KLIB_NORMALIZE_ABSOLUTE_PATH, arguments.normalizeAbsolutePath)
         configuration.put(KlibConfigurationKeys.PRODUCE_KLIB_SIGNATURES_CLASH_CHECKS, arguments.enableSignatureClashChecks)
 
+        configuration.put(KlibConfigurationKeys.EXPERIMENTAL_DOUBLE_INLINING, arguments.experimentalDoubleInlining)
+
         // ----
 
         val environmentForJS =
@@ -401,10 +399,19 @@ class K2JsIrCompiler : CLICompiler<K2JSCompilerArguments>() {
             val generateDts = configuration.getBoolean(JSConfigurationKeys.GENERATE_DTS)
             val generateSourceMaps = configuration.getBoolean(JSConfigurationKeys.SOURCE_MAP)
 
-            val (allModules, backendContext, typeScriptFragment) = compileToLoweredIr(
+            val irModuleInfo = loadIr(
                 depsDescriptors = module,
-                phaseConfig = createPhaseConfig(wasmPhases, arguments, messageCollector),
                 irFactory = IrFactoryImpl,
+                verifySignatures = false,
+                loadFunctionInterfacesIntoStdlib = true,
+            )
+
+            val (allModules, backendContext, typeScriptFragment) = compileToLoweredIr(
+                irModuleInfo,
+                module.mainModule,
+                configuration,
+                performanceManager,
+                phaseConfig = createPhaseConfig(wasmPhases, arguments, messageCollector),
                 exportedDeclarations = setOf(FqName("main")),
                 generateTypeScriptFragment = generateDts,
                 propertyLazyInitialization = arguments.irPropertyLazyInitialization,

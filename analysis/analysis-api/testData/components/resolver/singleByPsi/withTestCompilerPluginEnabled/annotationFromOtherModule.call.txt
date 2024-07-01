@@ -1,6 +1,7 @@
 KtNameReferenceExpression(140,151): 'materialize'
   KaSuccessCallInfo:
     call = KaSimpleFunctionCall:
+      argumentMapping = {}
       isImplicitInvoke = false
       partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
         dispatchReceiver = KaExplicitReceiverValue:
@@ -8,11 +9,10 @@ KtNameReferenceExpression(140,151): 'materialize'
           isSafeNavigation = false
           type = test.MyClass
         extensionReceiver = null
-        signature = KaFunctionLikeSignature:
+        signature = KaFunctionSignature:
           receiverType = null
           returnType = test.MyClass
           symbol = test/MyClass.materialize(<dispatch receiver>: test.MyClass): test.MyClass
           valueParameters = []
           callableId = test/MyClass.materialize
       typeArgumentsMapping = {}
-      argumentMapping = {}

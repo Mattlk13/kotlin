@@ -1,17 +1,24 @@
 KtConstructorCalleeExpression(40,41): 'A'
   KaInapplicableCallCandidateInfo:
-    diagnostic = ERROR<ARGUMENT_TYPE_MISMATCH: Argument type mismatch: actual type is 'kotlin.Int', but 'kotlin.String' was expected.>
     candidate = KaDelegatedConstructorCall:
+      argumentMapping = {
+        5 -> (KaVariableSignature:
+          name = x
+          receiverType = null
+          returnType = kotlin.String
+          symbol = x: kotlin.String
+          callableId = null)
+      }
       kind = SUPER_CALL
       partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
         dispatchReceiver = null
         extensionReceiver = null
-        signature = KaFunctionLikeSignature:
+        signature = KaFunctionSignature:
           receiverType = null
           returnType = A
           symbol = <constructor>(x: kotlin.String): A
           valueParameters = [
-            KaVariableLikeSignature:
+            KaVariableSignature:
               name = x
               receiverType = null
               returnType = kotlin.String
@@ -20,12 +27,5 @@ KtConstructorCalleeExpression(40,41): 'A'
           ]
           callableId = null
       typeArgumentsMapping = {}
-      argumentMapping = {
-        5 -> (KaVariableLikeSignature:
-          name = x
-          receiverType = null
-          returnType = kotlin.String
-          symbol = x: kotlin.String
-          callableId = null)
-      }
+    diagnostic = ERROR<ARGUMENT_TYPE_MISMATCH: Argument type mismatch: actual type is 'kotlin.Int', but 'kotlin.String' was expected.>
     isInBestCandidates = true

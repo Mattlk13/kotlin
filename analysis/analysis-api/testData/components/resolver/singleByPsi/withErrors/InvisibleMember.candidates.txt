@@ -1,6 +1,5 @@
 KtNameReferenceExpression(63,64): 'i'
   KaInapplicableCallCandidateInfo:
-    diagnostic = ERROR<INVISIBLE_REFERENCE: Cannot access 'val i: Int': it is private in '/A'.>
     candidate = KaSimpleVariableAccessCall:
       partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
         dispatchReceiver = KaExplicitReceiverValue:
@@ -8,7 +7,7 @@ KtNameReferenceExpression(63,64): 'i'
           isSafeNavigation = false
           type = A
         extensionReceiver = null
-        signature = KaVariableLikeSignature:
+        signature = KaVariableSignature:
           name = i
           receiverType = null
           returnType = kotlin.Int
@@ -16,4 +15,5 @@ KtNameReferenceExpression(63,64): 'i'
           callableId = /A.i
       simpleAccess = Read
       typeArgumentsMapping = {}
+    diagnostic = ERROR<INVISIBLE_REFERENCE: Cannot access 'val i: Int': it is private in '/A'.>
     isInBestCandidates = true

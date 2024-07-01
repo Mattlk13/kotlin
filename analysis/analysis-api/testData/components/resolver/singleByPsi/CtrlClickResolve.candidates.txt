@@ -1,16 +1,24 @@
 KtNameReferenceExpression(202,210): 'IntArray'
   KaApplicableCallCandidateInfo:
     candidate = KaSimpleFunctionCall:
+      argumentMapping = {
+        array("1", "2", "3") -> (KaVariableSignature:
+          name = content
+          receiverType = null
+          returnType = kotlin.String
+          symbol = vararg content: kotlin.String
+          callableId = null)
+      }
       isImplicitInvoke = false
       partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
         dispatchReceiver = null
         extensionReceiver = null
-        signature = KaFunctionLikeSignature:
+        signature = KaFunctionSignature:
           receiverType = null
           returnType = kotlin.Array<out kotlin.String>
           symbol = ctrl_click/IntArray(vararg content: kotlin.String): kotlin.Array<out kotlin.String>
           valueParameters = [
-            KaVariableLikeSignature:
+            KaVariableSignature:
               name = content
               receiverType = null
               returnType = kotlin.String
@@ -19,29 +27,28 @@ KtNameReferenceExpression(202,210): 'IntArray'
           ]
           callableId = ctrl_click/IntArray
       typeArgumentsMapping = {}
-      argumentMapping = {
-        array("1", "2", "3") -> (KaVariableLikeSignature:
-          name = content
-          receiverType = null
-          returnType = kotlin.String
-          symbol = vararg content: kotlin.String
-          callableId = null)
-      }
     isInBestCandidates = true
   
   KaInapplicableCallCandidateInfo:
-    diagnostic = ERROR<NON_VARARG_SPREAD: The spread operator (*foo) can only be applied in a vararg position.>
     candidate = KaSimpleFunctionCall:
+      argumentMapping = {
+        array("1", "2", "3") -> (KaVariableSignature:
+          name = size
+          receiverType = null
+          returnType = kotlin.Int
+          symbol = size: kotlin.Int
+          callableId = null)
+      }
       isImplicitInvoke = false
       partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
         dispatchReceiver = null
         extensionReceiver = null
-        signature = KaFunctionLikeSignature:
+        signature = KaFunctionSignature:
           receiverType = null
           returnType = kotlin.IntArray
           symbol = <constructor>(size: kotlin.Int): kotlin.IntArray
           valueParameters = [
-            KaVariableLikeSignature:
+            KaVariableSignature:
               name = size
               receiverType = null
               returnType = kotlin.Int
@@ -50,35 +57,35 @@ KtNameReferenceExpression(202,210): 'IntArray'
           ]
           callableId = null
       typeArgumentsMapping = {}
+    diagnostic = ERROR<NON_VARARG_SPREAD: The spread operator (*foo) can only be applied in a vararg position.>
+    isInBestCandidates = false
+  
+  KaInapplicableCallCandidateInfo:
+    candidate = KaSimpleFunctionCall:
       argumentMapping = {
-        array("1", "2", "3") -> (KaVariableLikeSignature:
+        array("1", "2", "3") -> (KaVariableSignature:
           name = size
           receiverType = null
           returnType = kotlin.Int
           symbol = size: kotlin.Int
           callableId = null)
       }
-    isInBestCandidates = false
-  
-  KaInapplicableCallCandidateInfo:
-    diagnostic = ERROR<NON_VARARG_SPREAD: The spread operator (*foo) can only be applied in a vararg position.>
-    candidate = KaSimpleFunctionCall:
       isImplicitInvoke = false
       partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
         dispatchReceiver = null
         extensionReceiver = null
-        signature = KaFunctionLikeSignature:
+        signature = KaFunctionSignature:
           receiverType = null
           returnType = kotlin.IntArray
           symbol = <constructor>(size: kotlin.Int, init: kotlin.Function1<kotlin.Int, kotlin.Int>): kotlin.IntArray
           valueParameters = [
-            KaVariableLikeSignature:
+            KaVariableSignature:
               name = size
               receiverType = null
               returnType = kotlin.Int
               symbol = size: kotlin.Int
               callableId = null,
-            KaVariableLikeSignature:
+            KaVariableSignature:
               name = init
               receiverType = null
               returnType = kotlin.Function1<kotlin.Int, kotlin.Int>
@@ -87,12 +94,5 @@ KtNameReferenceExpression(202,210): 'IntArray'
           ]
           callableId = null
       typeArgumentsMapping = {}
-      argumentMapping = {
-        array("1", "2", "3") -> (KaVariableLikeSignature:
-          name = size
-          receiverType = null
-          returnType = kotlin.Int
-          symbol = size: kotlin.Int
-          callableId = null)
-      }
+    diagnostic = ERROR<NON_VARARG_SPREAD: The spread operator (*foo) can only be applied in a vararg position.>
     isInBestCandidates = false

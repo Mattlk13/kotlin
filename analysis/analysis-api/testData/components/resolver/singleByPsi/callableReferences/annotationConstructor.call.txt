@@ -1,16 +1,17 @@
 KtCallableReferenceExpression(114,120): '::Anno'
   KaSuccessCallInfo:
     call = KaSimpleFunctionCall:
+      argumentMapping = {}
       isImplicitInvoke = false
       partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
         dispatchReceiver = null
         extensionReceiver = null
-        signature = KaFunctionLikeSignature:
+        signature = KaFunctionSignature:
           receiverType = null
           returnType = Anno
           symbol = <constructor>(value: kotlin.String): Anno
           valueParameters = [
-            KaVariableLikeSignature:
+            KaVariableSignature:
               name = value
               receiverType = null
               returnType = kotlin.String
@@ -19,4 +20,3 @@ KtCallableReferenceExpression(114,120): '::Anno'
           ]
           callableId = null
       typeArgumentsMapping = {}
-      argumentMapping = {}

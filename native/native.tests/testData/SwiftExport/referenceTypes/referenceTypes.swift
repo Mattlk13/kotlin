@@ -1,4 +1,6 @@
 import ReferenceTypes
+import second_main
+import KotlinRuntime
 
 func initProducesNewObject() throws {
     let one = Foo(x: 1)
@@ -157,6 +159,45 @@ func typealiasPreservesIdentity() throws {
     try assertTrue(Foo.Type.self == FooAsTypealias.Type.self)
 }
 
+func objectsTravelBridgeAsAny() throws {
+    let obj: KotlinBase = mainObject
+    try assertTrue((obj as Any) is KotlinBase)
+    try assertTrue(isMainObject(obj: obj))
+}
+
+func permanentObjectsTravelBridgeAsAny() throws {
+    let obj: KotlinBase = getMainPermanentObject()
+    try assertTrue(isMainPermanentObject(obj: obj))
+    try assertFalse(isMainPermanentObject(obj: mainObject))
+
+    let fieldObj = Object.shared.instance
+    try assertTrue(Object.shared.isInstance(obj: fieldObj))
+}
+
+func anyPersistsAsProperty() throws {
+    let bar = SomeBar()
+    let baz = SomeBaz()
+    let foo = SomeFoo(storage: bar)
+
+    try assertTrue(foo.storage === bar)
+    foo.storage = baz
+    try assertTrue(foo.storage === baz)
+}
+
+func depsObjectsTravelBridgeAsAny() throws {
+    let obj: KotlinBase = deps_instance
+    try assertTrue((obj as Any) is KotlinBase)
+    try assertTrue(isDepsObject(obj: obj))
+    try assertTrue(isSavedDepsObject(obj: obj))
+}
+
+func depsObjectsTravelBridgeAsAny2() throws {
+    let obj: KotlinBase = deps_instance_2
+    try assertTrue((obj as Any) is KotlinBase)
+    try assertTrue(isDepsObject_2(obj: obj))
+    try assertTrue(isSavedDepsObject_2(obj: obj))
+}
+
 class ReferenceTypesTests : TestProvider {
     var tests: [TestCase] = []
 
@@ -185,6 +226,11 @@ class ReferenceTypesTests : TestProvider {
             TestCase(name: "objectMethodInObject", method: withAutorelease(objectMethodInObject)),
             TestCase(name: "multipleConstructors", method: withAutorelease(multipleConstructors)),
             TestCase(name: "typealiasPreservesIdentity", method: withAutorelease(typealiasPreservesIdentity)),
+            TestCase(name: "objectsTravelBridgeAsAny", method: withAutorelease(objectsTravelBridgeAsAny)),
+            TestCase(name: "permanentObjectsTravelBridgeAsAny", method: withAutorelease(permanentObjectsTravelBridgeAsAny)),
+            TestCase(name: "anyPersistsAsProperty", method: withAutorelease(anyPersistsAsProperty)),
+            TestCase(name: "depsObjectsTravelBridgeAsAny", method: withAutorelease(depsObjectsTravelBridgeAsAny)),
+            TestCase(name: "depsObjectsTravelBridgeAsAny2", method: withAutorelease(depsObjectsTravelBridgeAsAny2)),
         ]
     }
 }

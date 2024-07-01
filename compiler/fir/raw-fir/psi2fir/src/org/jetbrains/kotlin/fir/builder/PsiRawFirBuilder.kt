@@ -876,7 +876,7 @@ open class PsiRawFirBuilder(
                             }
                             entry.extractArgumentsTo(this)
                             typeArguments.appendTypeArguments(entry.typeArguments)
-                            containingDeclarationSymbol = this@buildTypeParameter.symbol
+                            containingDeclarationSymbol = context.containerSymbol
                         }
                     }
                 }
@@ -1935,13 +1935,6 @@ open class PsiRawFirBuilder(
                             KtFakeSourceElementKind.LambdaDestructuringBlock
                         }
                         val bodyBlock = configureBlockWithoutBuilding(ktBody, kind).apply {
-                            statements.firstOrNull()?.let {
-                                if (it.isContractBlockFirCheck()) {
-                                    this@buildAnonymousFunction.contractDescription = it.toLegacyRawContractDescription()
-                                    statements[0] = FirContractCallBlock(it)
-                                }
-                            }
-
                             if (statements.isEmpty()) {
                                 statements.add(
                                     buildReturnExpression {
@@ -2001,7 +1994,7 @@ open class PsiRawFirBuilder(
                     }
                     dispatchReceiverType = owner.obtainDispatchReceiverForConstructor()
                     contextReceivers.addAll(convertContextReceivers(owner.contextReceivers))
-                    if (!owner.hasModifier(EXTERNAL_KEYWORD) || isExplicitDelegationCall()) {
+                    if (!owner.hasModifier(EXTERNAL_KEYWORD) && !status.isExpect || isExplicitDelegationCall()) {
                         delegatedConstructor = buildOrLazyDelegatedConstructorCall(
                             isThis = isDelegatedCallToThis(),
                             constructedTypeRef = delegatedTypeRef,

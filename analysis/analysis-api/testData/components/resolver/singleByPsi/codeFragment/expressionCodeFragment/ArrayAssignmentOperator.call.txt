@@ -1,6 +1,20 @@
 KtOperationReferenceExpression(150,151): '='
   KaSuccessCallInfo:
     call = KaSimpleFunctionCall:
+      argumentMapping = {
+        10 -> (KaVariableSignature:
+          name = index
+          receiverType = null
+          returnType = kotlin.Int
+          symbol = index: kotlin.Int
+          callableId = null),
+        "value" -> (KaVariableSignature:
+          name = value
+          receiverType = null
+          returnType = kotlin.String
+          symbol = value: kotlin.String
+          callableId = null)
+      }
       isImplicitInvoke = false
       partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
         dispatchReceiver = KaExplicitReceiverValue:
@@ -8,18 +22,18 @@ KtOperationReferenceExpression(150,151): '='
           isSafeNavigation = false
           type = MyList
         extensionReceiver = null
-        signature = KaFunctionLikeSignature:
+        signature = KaFunctionSignature:
           receiverType = null
           returnType = kotlin.Unit
           symbol = /MyList.set(<dispatch receiver>: MyList, index: kotlin.Int, value: kotlin.String): kotlin.Unit
           valueParameters = [
-            KaVariableLikeSignature:
+            KaVariableSignature:
               name = index
               receiverType = null
               returnType = kotlin.Int
               symbol = index: kotlin.Int
               callableId = null,
-            KaVariableLikeSignature:
+            KaVariableSignature:
               name = value
               receiverType = null
               returnType = kotlin.String
@@ -28,17 +42,3 @@ KtOperationReferenceExpression(150,151): '='
           ]
           callableId = /MyList.set
       typeArgumentsMapping = {}
-      argumentMapping = {
-        10 -> (KaVariableLikeSignature:
-          name = index
-          receiverType = null
-          returnType = kotlin.Int
-          symbol = index: kotlin.Int
-          callableId = null),
-        "value" -> (KaVariableLikeSignature:
-          name = value
-          receiverType = null
-          returnType = kotlin.String
-          symbol = value: kotlin.String
-          callableId = null)
-      }

@@ -540,6 +540,18 @@ public class KotlinKapt4ContextTestGenerated extends AbstractKotlinKapt4ContextT
   }
 
   @Test
+  @TestMetadata("kt67903.kt")
+  public void testKt67903() {
+    runTest("plugins/kapt4/../kapt3/kapt3-compiler/testData/converter/kt67903.kt");
+  }
+
+  @Test
+  @TestMetadata("kt68145.kt")
+  public void testKt68145() {
+    runTest("plugins/kapt4/../kapt3/kapt3-compiler/testData/converter/kt68145.kt");
+  }
+
+  @Test
   @TestMetadata("lazyProperty.kt")
   public void testLazyProperty() {
     runTest("plugins/kapt4/../kapt3/kapt3-compiler/testData/converter/lazyProperty.kt");
@@ -639,6 +651,12 @@ public class KotlinKapt4ContextTestGenerated extends AbstractKotlinKapt4ContextT
   @TestMetadata("nonExistentClassWIthoutCorrection.kt")
   public void testNonExistentClassWIthoutCorrection() {
     runTest("plugins/kapt4/../kapt3/kapt3-compiler/testData/converter/nonExistentClassWIthoutCorrection.kt");
+  }
+
+  @Test
+  @TestMetadata("overriddenReturnTypeNullability.kt")
+  public void testOverriddenReturnTypeNullability() {
+    runTest("plugins/kapt4/../kapt3/kapt3-compiler/testData/converter/overriddenReturnTypeNullability.kt");
   }
 
   @Test

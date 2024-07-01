@@ -6,10 +6,10 @@
 package org.jetbrains.kotlin.objcexport
 
 import com.intellij.openapi.util.io.FileUtil
-import org.jetbrains.kotlin.analysis.api.KtAnalysisSession
-import org.jetbrains.kotlin.analysis.api.symbols.KtCallableSymbol
-import org.jetbrains.kotlin.analysis.api.symbols.KtClassOrObjectSymbol
-import org.jetbrains.kotlin.analysis.project.structure.KtLibraryModule
+import org.jetbrains.kotlin.analysis.api.KaSession
+import org.jetbrains.kotlin.analysis.api.projectStructure.KaLibraryModule
+import org.jetbrains.kotlin.analysis.api.symbols.KaCallableSymbol
+import org.jetbrains.kotlin.analysis.api.symbols.KaClassSymbol
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.native.analysis.api.*
 import org.jetbrains.kotlin.objcexport.analysisApiUtils.getAllClassOrObjectSymbols
@@ -20,7 +20,8 @@ interface KtObjCExportFile {
     val fileName: String
     val packageFqName: FqName
 
-    context(KtAnalysisSession)
+    context(KaSession)
+    @Suppress("CONTEXT_RECEIVERS_DEPRECATED")
     fun resolve(): KtResolvedObjCExportFile
 }
 
@@ -32,8 +33,8 @@ interface KtObjCExportFile {
 data class KtResolvedObjCExportFile(
     val fileName: String,
     val packageFqName: FqName,
-    val classifierSymbols: List<KtClassOrObjectSymbol>,
-    val callableSymbols: List<KtCallableSymbol>,
+    val classifierSymbols: List<KaClassSymbol>,
+    val callableSymbols: List<KaCallableSymbol>,
 )
 
 /* Factory functions */
@@ -44,9 +45,9 @@ fun KtObjCExportFile(file: KtFile): KtObjCExportFile {
 
 /**
  * Will read the klib (if any) and returns the list of [KtObjCExportFile] that were found.
- * Returns an empty list if this [KtLibraryModule] is not a klib
+ * Returns an empty list if this [KaLibraryModule] is not a klib
  */
-fun KtLibraryModule.readKtObjCExportFiles(): List<KtObjCExportFile> {
+fun KaLibraryModule.readKtObjCExportFiles(): List<KtObjCExportFile> {
     val klibAddresses = readKlibDeclarationAddresses() ?: return emptyList()
     return createKtObjCExportFiles(klibAddresses)
 }
@@ -87,14 +88,15 @@ private class KtPsiObjCExportFile(
     /**
      * See [KtResolvedObjCExportFile]
      */
-    context(KtAnalysisSession)
+    context(KaSession)
+    @Suppress("CONTEXT_RECEIVERS_DEPRECATED")
     override fun resolve(): KtResolvedObjCExportFile {
-        val symbol = file.getFileSymbol()
+        val symbol = file.symbol
         return KtResolvedObjCExportFile(
             fileName = fileName,
             packageFqName = packageFqName,
             classifierSymbols = symbol.getAllClassOrObjectSymbols(),
-            callableSymbols = symbol.getFileScope().getCallableSymbols().toList()
+            callableSymbols = symbol.fileScope.callables.toList()
         )
     }
 }
@@ -121,7 +123,8 @@ private class KtKlibObjCExportFile(
         return result
     }
 
-    context(KtAnalysisSession)
+    context(KaSession)
+    @Suppress("CONTEXT_RECEIVERS_DEPRECATED")
     override fun resolve(): KtResolvedObjCExportFile {
         val classifierAddresses = addresses.filterIsInstance<KlibClassAddress>()
         val callableAddresses = addresses.filterIsInstance<KlibCallableAddress>()
@@ -131,8 +134,8 @@ private class KtKlibObjCExportFile(
             packageFqName = packageFqName,
             classifierSymbols = classifierAddresses
                 .mapNotNull { classAddress -> classAddress.getClassOrObjectSymbol() }
-                .withClosure<KtClassOrObjectSymbol> { symbol ->
-                    symbol.getMemberScope().getClassifierSymbols().filterIsInstance<KtClassOrObjectSymbol>().asIterable()
+                .withClosure<KaClassSymbol> { symbol ->
+                    symbol.memberScope.classifiers.filterIsInstance<KaClassSymbol>().asIterable()
                 }.toList(),
             callableSymbols = callableAddresses.flatMap { address ->
                 address.getCallableSymbols()

@@ -2,6 +2,7 @@ KtDotQualifiedExpression(68,76): 's.action'
   KaErrorCallInfo:
     candidateCalls = [
       KaSimpleFunctionCall:
+        argumentMapping = {}
         isImplicitInvoke = true
         partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
           dispatchReceiver = KaExplicitReceiverValue:
@@ -12,12 +13,12 @@ KtDotQualifiedExpression(68,76): 's.action'
             expression = s
             isSafeNavigation = false
             type = kotlin.String
-          signature = KaFunctionLikeSignature:
+          signature = KaFunctionSignature:
             receiverType = null
             returnType = kotlin.Unit
             symbol = kotlin/Function1.invoke(<dispatch receiver>: kotlin.Function1<P1, R>, p1: P1): R
             valueParameters = [
-              KaVariableLikeSignature:
+              KaVariableSignature:
                 name = p1
                 receiverType = null
                 returnType = kotlin.String
@@ -26,6 +27,5 @@ KtDotQualifiedExpression(68,76): 's.action'
             ]
             callableId = kotlin/Function1.invoke
         typeArgumentsMapping = {}
-        argumentMapping = {}
     ]
     diagnostic = ERROR<FUNCTION_CALL_EXPECTED: Function invocation 'action(...)' expected.>

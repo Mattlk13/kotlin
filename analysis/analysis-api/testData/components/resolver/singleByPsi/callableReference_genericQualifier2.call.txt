@@ -2,11 +2,12 @@ KtCallExpression(76,85): 'Test<Bar>'
   KaErrorCallInfo:
     candidateCalls = [
       KaSimpleFunctionCall:
+        argumentMapping = {}
         isImplicitInvoke = false
         partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
           dispatchReceiver = null
           extensionReceiver = null
-          signature = KaFunctionLikeSignature:
+          signature = KaFunctionSignature:
             receiverType = null
             returnType = test.Test<T>
             symbol = <constructor>(): test.Test<T>
@@ -15,6 +16,5 @@ KtCallExpression(76,85): 'Test<Bar>'
         typeArgumentsMapping = {
           T -> (test.Bar)
         }
-        argumentMapping = {}
     ]
-    diagnostic = ERROR<null: Inapplicable candidate>
+    diagnostic = ERROR<OTHER_ERROR: Inapplicable candidate>

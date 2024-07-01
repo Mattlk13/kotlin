@@ -1,6 +1,26 @@
 KtArrayAccessExpression(93,104): 'c[1, "foo"]'
   KaApplicableCallCandidateInfo:
     candidate = KaSimpleFunctionCall:
+      argumentMapping = {
+        1 -> (KaVariableSignature:
+          name = a
+          receiverType = null
+          returnType = kotlin.Int
+          symbol = a: kotlin.Int
+          callableId = null),
+        "foo" -> (KaVariableSignature:
+          name = b
+          receiverType = null
+          returnType = kotlin.String
+          symbol = b: kotlin.String
+          callableId = null),
+        false -> (KaVariableSignature:
+          name = value
+          receiverType = null
+          returnType = kotlin.Boolean
+          symbol = value: kotlin.Boolean
+          callableId = null)
+      }
       isImplicitInvoke = false
       partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
         dispatchReceiver = KaExplicitReceiverValue:
@@ -8,24 +28,24 @@ KtArrayAccessExpression(93,104): 'c[1, "foo"]'
           isSafeNavigation = false
           type = C
         extensionReceiver = null
-        signature = KaFunctionLikeSignature:
+        signature = KaFunctionSignature:
           receiverType = null
           returnType = kotlin.Unit
           symbol = /C.set(<dispatch receiver>: C, a: kotlin.Int, b: kotlin.String, value: kotlin.Boolean): kotlin.Unit
           valueParameters = [
-            KaVariableLikeSignature:
+            KaVariableSignature:
               name = a
               receiverType = null
               returnType = kotlin.Int
               symbol = a: kotlin.Int
               callableId = null,
-            KaVariableLikeSignature:
+            KaVariableSignature:
               name = b
               receiverType = null
               returnType = kotlin.String
               symbol = b: kotlin.String
               callableId = null,
-            KaVariableLikeSignature:
+            KaVariableSignature:
               name = value
               receiverType = null
               returnType = kotlin.Boolean
@@ -34,24 +54,4 @@ KtArrayAccessExpression(93,104): 'c[1, "foo"]'
           ]
           callableId = /C.set
       typeArgumentsMapping = {}
-      argumentMapping = {
-        1 -> (KaVariableLikeSignature:
-          name = a
-          receiverType = null
-          returnType = kotlin.Int
-          symbol = a: kotlin.Int
-          callableId = null),
-        "foo" -> (KaVariableLikeSignature:
-          name = b
-          receiverType = null
-          returnType = kotlin.String
-          symbol = b: kotlin.String
-          callableId = null),
-        false -> (KaVariableLikeSignature:
-          name = value
-          receiverType = null
-          returnType = kotlin.Boolean
-          symbol = value: kotlin.Boolean
-          callableId = null)
-      }
     isInBestCandidates = true

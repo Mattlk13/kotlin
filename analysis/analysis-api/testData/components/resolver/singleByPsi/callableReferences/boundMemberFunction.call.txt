@@ -1,6 +1,7 @@
 KtCallableReferenceExpression(72,80): 'obj::foo'
   KaSuccessCallInfo:
     call = KaSimpleFunctionCall:
+      argumentMapping = {}
       isImplicitInvoke = false
       partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
         dispatchReceiver = KaExplicitReceiverValue:
@@ -8,12 +9,12 @@ KtCallableReferenceExpression(72,80): 'obj::foo'
           isSafeNavigation = false
           type = Foo
         extensionReceiver = null
-        signature = KaFunctionLikeSignature:
+        signature = KaFunctionSignature:
           receiverType = null
           returnType = kotlin.Unit
           symbol = /Foo.foo(<dispatch receiver>: Foo, a: kotlin.Int): kotlin.Unit
           valueParameters = [
-            KaVariableLikeSignature:
+            KaVariableSignature:
               name = a
               receiverType = null
               returnType = kotlin.Int
@@ -22,4 +23,3 @@ KtCallableReferenceExpression(72,80): 'obj::foo'
           ]
           callableId = /Foo.foo
       typeArgumentsMapping = {}
-      argumentMapping = {}

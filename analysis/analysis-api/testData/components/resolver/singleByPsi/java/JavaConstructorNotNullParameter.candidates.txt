@@ -1,16 +1,24 @@
 KtNameReferenceExpression(51,60): 'JavaClass'
   KaApplicableCallCandidateInfo:
     candidate = KaSimpleFunctionCall:
+      argumentMapping = {
+        "" -> (KaVariableSignature:
+          name = s
+          receiverType = null
+          returnType = @EnhancedNullability kotlin.String
+          symbol = s: @EnhancedNullability kotlin.String
+          callableId = null)
+      }
       isImplicitInvoke = false
       partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
         dispatchReceiver = null
         extensionReceiver = null
-        signature = KaFunctionLikeSignature:
+        signature = KaFunctionSignature:
           receiverType = null
           returnType = JavaClass
           symbol = <constructor>(s: @EnhancedNullability kotlin.String): JavaClass
           valueParameters = [
-            KaVariableLikeSignature:
+            KaVariableSignature:
               name = s
               receiverType = null
               returnType = @EnhancedNullability kotlin.String
@@ -19,12 +27,4 @@ KtNameReferenceExpression(51,60): 'JavaClass'
           ]
           callableId = null
       typeArgumentsMapping = {}
-      argumentMapping = {
-        "" -> (KaVariableLikeSignature:
-          name = s
-          receiverType = null
-          returnType = @EnhancedNullability kotlin.String
-          symbol = s: @EnhancedNullability kotlin.String
-          callableId = null)
-      }
     isInBestCandidates = true

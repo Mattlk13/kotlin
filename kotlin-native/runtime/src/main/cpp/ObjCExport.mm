@@ -228,13 +228,27 @@ extern "C" const TypeInfo* Kotlin_ObjCInterop_getTypeInfoForProtocol(Protocol* p
 
 static const TypeInfo* getOrCreateTypeInfo(Class clazz);
 
+extern "C" const TypeInfo* Kotlin_ObjCInterop_getTypeInfoForObjCClassPtr(Class* clazz) {
+  RuntimeAssert(clazz != nullptr, "Cannot be null");
+  return getOrCreateTypeInfo(*clazz);
+}
+
 extern "C" void Kotlin_ObjCExport_initializeClass(Class clazz) {
+  if (kotlin::mm::IsCurrentThreadRegistered()) {
+    // ObjC runtime might have taken a lock in Runnable context on the way here. Safe-points are unwelcome in the code below.
+    // We can't make it all the way in a Runnable state as well, because some of the operations below might take a while.
+    AssertThreadState(kotlin::ThreadState::kNative);
+  }
+
   const ObjCTypeAdapter* typeAdapter = findClassAdapter(clazz);
   if (typeAdapter == nullptr) {
     getOrCreateTypeInfo(clazz);
     return;
   }
 
+  // We aren't really sure we've checked all the cases when initialize is called, and guarded them with a switch to native.
+  // If panic asserts above are disabled, let's ensure the native state here,
+  // to avoid potentially more frequent deadlock cases.
   kotlin::NativeOrUnregisteredThreadGuard threadStateGuard(/* reentrant = */ true);
 
   const TypeInfo* typeInfo = typeAdapter->kotlinTypeInfo;
@@ -635,7 +649,7 @@ static const TypeInfo* createTypeInfo(
   TypeInfo* result = (TypeInfo*)std::calloc(1, sizeof(TypeInfo) + vtable.size() * sizeof(void*));
   result->typeInfo_ = result;
 
-  result->flags_ = TF_OBJC_DYNAMIC;
+  result->flags_ = TF_OBJC_DYNAMIC | TF_REFLECTION_SHOW_REL_NAME;
 
   result->superType_ = superType;
   if (fieldsInfo == nullptr) {
@@ -1002,6 +1016,18 @@ static Class createClass(const TypeInfo* typeInfo, Class superClass) {
   return result;
 }
 
+static void setClassEnsureInitialized(const TypeInfo* typeInfo, Class cls) {
+  RuntimeAssert(cls != nullptr, "");
+
+  // ObjC runtime calls +initialize under a global lock on the first access to an object.
+  // `[result self]` below will ensure ahead of time initialization
+  // we only have to make it happen in the native state
+  kotlin::NativeOrUnregisteredThreadGuard threadStateGuard(true);
+  [cls self];
+
+  typeInfo->writableInfo_->objCExport.objCClass = cls;
+}
+
 static Class getOrCreateClass(const TypeInfo* typeInfo) {
   Class result = typeInfo->writableInfo_->objCExport.objCClass;
   if (result != nullptr) {
@@ -1011,8 +1037,7 @@ static Class getOrCreateClass(const TypeInfo* typeInfo) {
   const ObjCTypeAdapter* typeAdapter = getTypeAdapter(typeInfo);
   if (typeAdapter != nullptr) {
     result = objc_getClass(typeAdapter->objCName);
-    RuntimeAssert(result != nullptr, "");
-    typeInfo->writableInfo_->objCExport.objCClass = result;
+    setClassEnsureInitialized(typeInfo, result);
   } else {
     Class superClass = getOrCreateClass(typeInfo->superType_);
 
@@ -1020,9 +1045,10 @@ static Class getOrCreateClass(const TypeInfo* typeInfo) {
 
     result = typeInfo->writableInfo_->objCExport.objCClass; // double-checking.
     if (result == nullptr) {
-      result = createClass(typeInfo, superClass);
-      RuntimeAssert(result != nullptr, "");
-      typeInfo->writableInfo_->objCExport.objCClass = result;
+        result = createClass(typeInfo, superClass);
+        // Don't have to be a release store –
+        // the operations above are synchronized and thus might not be reordered after this store.
+        setClassEnsureInitialized(typeInfo, result);
     }
   }
 
@@ -1057,6 +1083,11 @@ extern "C" ALWAYS_INLINE void* Kotlin_Interop_refToObjC(ObjHeader* obj) {
 extern "C" ALWAYS_INLINE OBJ_GETTER(Kotlin_Interop_refFromObjC, void* obj) {
   RuntimeAssert(false, "Unavailable operation");
   RETURN_OBJ(nullptr);
+}
+
+extern "C" ALWAYS_INLINE const TypeInfo* Kotlin_ObjCInterop_getTypeInfoForObjCClassPtr(Class* clazz) {
+  RuntimeAssert(false, "Unavailable operation");
+  return nullptr;
 }
 
 #endif // KONAN_OBJC_INTEROP

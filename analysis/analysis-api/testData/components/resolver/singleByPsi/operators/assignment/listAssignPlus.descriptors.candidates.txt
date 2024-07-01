@@ -1,6 +1,14 @@
 KtOperationReferenceExpression(54,56): '+='
   KaApplicableCallCandidateInfo:
     candidate = KaSimpleFunctionCall:
+      argumentMapping = {
+        1 -> (KaVariableSignature:
+          name = element
+          receiverType = null
+          returnType = kotlin.Int
+          symbol = element: T
+          callableId = null)
+      }
       isImplicitInvoke = false
       partiallyAppliedSymbol = KaPartiallyAppliedSymbol:
         dispatchReceiver = null
@@ -8,12 +16,12 @@ KtOperationReferenceExpression(54,56): '+='
           expression = l
           isSafeNavigation = false
           type = kotlin.collections.MutableList<kotlin.Int>
-        signature = KaFunctionLikeSignature:
+        signature = KaFunctionSignature:
           receiverType = kotlin.collections.MutableCollection<in kotlin.Int>
           returnType = kotlin.Unit
           symbol = kotlin/collections/plusAssign(<extension receiver>: kotlin.collections.MutableCollection<in T>, element: T): kotlin.Unit
           valueParameters = [
-            KaVariableLikeSignature:
+            KaVariableSignature:
               name = element
               receiverType = null
               returnType = kotlin.Int
@@ -23,13 +31,5 @@ KtOperationReferenceExpression(54,56): '+='
           callableId = kotlin/collections/plusAssign
       typeArgumentsMapping = {
         T -> (kotlin.Int)
-      }
-      argumentMapping = {
-        1 -> (KaVariableLikeSignature:
-          name = element
-          receiverType = null
-          returnType = kotlin.Int
-          symbol = element: T
-          callableId = null)
       }
     isInBestCandidates = true
